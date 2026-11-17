@@ -21,9 +21,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Generate Gradle Wrapper (Gradle 9.3.1)
+      - name: Generate Gradle Wrapper (Gradle 8.4)
         run: |
-          gradle wrapper --gradle-version 9.3.1
+          gradle wrapper --gradle-version 8.4
           chmod +x gradlew
 
       - name: Build APK with Gradle Wrapper
