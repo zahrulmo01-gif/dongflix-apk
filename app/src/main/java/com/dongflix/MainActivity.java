@@ -303,8 +303,8 @@ public class MainActivity extends AppCompatActivity {
 		if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.INVISIBLE);
 		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
 		
-		dongflix_req.startRequestNetwork(RequestNetworkController.GET, "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
-		
+		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
+
 		if (recyclerPopular != null) {
 			LinearLayoutManager layoutManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
 			recyclerPopular.setLayoutManager(layoutManager);
