@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -6,39 +7,89 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
+    <!-- Scrollable Content -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/main_scroll_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true"
-        android:clipToPadding="false">
+        android:clipToPadding="false"
+        android:paddingBottom="90dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Hero Section -->
+            <!-- 1. HERO SECTION -->
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="420dp">
+                
                 <ImageView
                     android:id="@+id/img_hero_banner"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:scaleType="centerCrop" />
+                    
                 <View
                     android:id="@+id/hero_shadow"
                     android:layout_width="match_parent"
                     android:layout_height="260dp"
                     android:layout_alignParentBottom="true" />
-                
+
+                <!-- Header Top Bar (Avatar & Search) -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="16dp"
+                    android:layout_alignParentTop="true">
+                    
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:layout_alignParentLeft="true">
+                        
+                        <ImageView
+                            android:id="@+id/img_user_avatar"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:src="@drawable/ic_profile"
+                            android:scaleType="centerCrop" />
+                            
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="10dp"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Welcome"
+                                android:textSize="11sp"
+                                android:textColor="#94A3B8" />
+                            <TextView
+                                android:id="@+id/text_username"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="R Z"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:textColor="#FFFFFF" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </RelativeLayout>
+
+                <!-- Hero Text & Button -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_alignParentBottom="true"
                     android:padding="16dp"
                     android:orientation="vertical">
+                    
                     <TextView
                         android:id="@+id/text_hero_title"
                         android:layout_width="match_parent"
@@ -48,6 +99,7 @@
                         android:textStyle="bold"
                         android:textColor="#FFFFFF"
                         android:maxLines="2" />
+                        
                     <TextView
                         android:id="@+id/text_hero_desc"
                         android:layout_width="match_parent"
@@ -60,82 +112,102 @@
                 </LinearLayout>
             </RelativeLayout>
 
-            <!-- Grid Section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                android:text="Baru Diupdate"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF" />
-
-            <GridView
-                android:id="@+id/gridview1"
+            <!-- 2. SECTION: BARU DIUPDATE (GRID) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="8dp"
-                android:numColumns="3"
-                android:horizontalSpacing="4dp"
-                android:verticalSpacing="8dp"
-                android:stretchMode="columnWidth"
-                android:nestedScrollingEnabled="false" />
+                android:orientation="vertical"
+                android:paddingHorizontal="12dp"
+                android:marginTop="16dp">
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Baru Diupdate"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginBottom="8dp" />
 
-            <!-- RecyclerView Section -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="16dp"
-                android:text="Populer Hari Ini"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF" />
+                <GridView
+                    android:id="@+id/gridview1"
+                    android:layout_width="match_parent"
+                    android:layout_height="350dp"
+                    android:numColumns="3"
+                    android:horizontalSpacing="6dp"
+                    android:verticalSpacing="8dp"
+                    android:stretchMode="columnWidth"
+                    android:nestedScrollingEnabled="false" />
+            </LinearLayout>
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recyclerPopular"
+            <!-- 3. SECTION: POPULER HARI INI (RECYCLERVIEW) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="100dp"
-                android:paddingHorizontal="8dp" />
+                android:orientation="vertical"
+                android:paddingHorizontal="12dp"
+                android:marginTop="16dp"
+                android:layout_marginBottom="24dp">
+                
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Populer Hari Ini"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginBottom="8dp" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerPopular"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false" />
+            </LinearLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <!-- Floating Navigation Bar -->
+    <!-- FLOATING NAVBAR MENGAPUNG (GLASSMORPHISM) -->
     <LinearLayout
         android:id="@+id/navbar"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="20dp"
+        android:layout_marginBottom="16dp"
         android:background="#111111"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:layout_alignParentBottom="true">
+        
         <ImageView
             android:id="@+id/img_home"
             android:layout_width="0dp"
             android:layout_height="22dp"
             android:layout_weight="1"
-            android:src="@android:drawable/ic_menu_compass" />
+            android:src="@drawable/ic_home"
+            android:scaleType="center" />
         <ImageView
             android:id="@+id/img_search"
             android:layout_width="0dp"
             android:layout_height="22dp"
             android:layout_weight="1"
-            android:src="@android:drawable/ic_menu_search" />
+            android:src="@drawable/ic_search"
+            android:scaleType="center" />
         <ImageView
             android:id="@+id/img_favorite"
             android:layout_width="0dp"
             android:layout_height="22dp"
             android:layout_weight="1"
-            android:src="@android:drawable/ic_menu_manage" />
+            android:src="@drawable/ic_favorite"
+            android:scaleType="center" />
         <ImageView
             android:id="@+id/img_profile"
             android:layout_width="0dp"
             android:layout_height="22dp"
             android:layout_weight="1"
-            android:src="@android:drawable/ic_menu_myplaces" />
+            android:src="@drawable/ic_profile"
+            android:scaleType="center" />
     </LinearLayout>
 
 </RelativeLayout>
