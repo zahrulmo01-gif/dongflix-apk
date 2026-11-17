@@ -34,7 +34,7 @@ import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
 	
-	private ActivityMainBinding binding;
+	// Tanpa View Binding, menggunakan findViewById murni
 	private String cover = "";
 	
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
@@ -44,11 +44,18 @@ public class MainActivity extends AppCompatActivity {
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
 	private Intent i = new Intent();
 	
+	// Deklarasi komponen layout utama
+	private GridView gridview1;
+	private RecyclerView recyclerPopular, listPopular;
+	private TextView textHeroTitle, textHeroDesc;
+	private ImageView imgHeroBanner, imgPlayIcon;
+	private LinearLayout btnHeroPlay, indicatorCapsule;
+	private View dot0, dot1, dot2;
+	
 	@Override
 	protected void onCreate(Bundle _savedInstanceState) {
 		super.onCreate(_savedInstanceState);
-		binding = ActivityMainBinding.inflate(getLayoutInflater());
-		setContentView(binding.getRoot());
+		setContentView(R.layout.activity_main); // Menggunakan layout XML standar
 		initialize(_savedInstanceState);
 		initializeLogic();
 	}
@@ -56,25 +63,40 @@ public class MainActivity extends AppCompatActivity {
 	private void initialize(Bundle _savedInstanceState) {
 		dongflix_req = new RequestNetwork(this);
 		
-		binding.gridview1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-			@Override
-			public void onItemClick(AdapterView<?> _param1, View _param2, int _param3, long _param4) {
-				final int _position = _param3;
-				if (listMap != null && _position < listMap.size()) {
-					HashMap<String, Object> selectedData = listMap.get(_position);
-					
-					String animeUrl = selectedData.containsKey("url") ? selectedData.get("url").toString() : "";
-					String animeTitle = selectedData.containsKey("title") ? selectedData.get("title").toString() : "";
-					String animeCover = selectedData.containsKey("image") ? selectedData.get("image").toString() : "";
-					
-					Intent intent = new Intent(MainActivity.this, DetailActivity.class);
-					intent.putExtra("url", animeUrl);
-					intent.putExtra("title", animeTitle);
-					intent.putExtra("image", animeCover);
-					startActivity(intent);
+		gridview1 = findViewById(R.id.gridview1);
+		recyclerPopular = findViewById(R.id.recyclerPopular);
+		listPopular = findViewById(R.id.listPopular);
+		textHeroTitle = findViewById(R.id.text_hero_title);
+		textHeroDesc = findViewById(R.id.text_hero_desc);
+		imgHeroBanner = findViewById(R.id.img_hero_banner);
+		btnHeroPlay = findViewById(R.id.btn_hero_play);
+		imgPlayIcon = findViewById(R.id.img_play_icon);
+		indicatorCapsule = findViewById(R.id.indicator_capsule);
+		dot0 = findViewById(R.id.dot_0);
+		dot1 = findViewById(R.id.dot_1);
+		dot2 = findViewById(R.id.dot_2);
+		
+		if (gridview1 != null) {
+			gridview1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+				@Override
+				public void onItemClick(AdapterView<?> _param1, View _param2, int _param3, long _param4) {
+					final int _position = _param3;
+					if (listMap != null && _position < listMap.size()) {
+						HashMap<String, Object> selectedData = listMap.get(_position);
+						
+						String animeUrl = selectedData.containsKey("url") ? selectedData.get("url").toString() : "";
+						String animeTitle = selectedData.containsKey("title") ? selectedData.get("title").toString() : "";
+						String animeCover = selectedData.containsKey("image") ? selectedData.get("image").toString() : "";
+						
+						Intent intent = new Intent(MainActivity.this, DetailActivity.class);
+						intent.putExtra("url", animeUrl);
+						intent.putExtra("title", animeTitle);
+						intent.putExtra("image", animeCover);
+						startActivity(intent);
+					}
 				}
-			}
-		});
+			});
+		}
 		
 		_dongflix_req_request_listener = new RequestNetwork.RequestListener() {
 			@Override
@@ -88,50 +110,52 @@ public class MainActivity extends AppCompatActivity {
 					listMap = new ArrayList<>(listMap.subList(0, 12));
 				}
 				
-				binding.gridview1.setAdapter(new Gridview1Adapter(listMap));
-				
-				binding.gridview1.post(new Runnable() {
-					@Override
-					public void run() {
-						android.widget.ListAdapter adapter = binding.gridview1.getAdapter();
-						if (adapter == null || adapter.getCount() == 0) return;
-						
-						android.view.View item = adapter.getView(0, null, binding.gridview1);
-						int columnWidth = binding.gridview1.getWidth() / 3;
-						int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(columnWidth, android.view.View.MeasureSpec.EXACTLY);
-						int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED);
-						
-						item.measure(widthSpec, heightSpec);
-						int itemHeight = item.getMeasuredHeight();
-						int totalRows = (int) Math.ceil((double) adapter.getCount() / 3.0);
-						
-						int verticalSpacing = 0;
-						if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN) {
-							verticalSpacing = binding.gridview1.getVerticalSpacing();
+				if (gridview1 != null) {
+					gridview1.setAdapter(new Gridview1Adapter(listMap));
+					
+					gridview1.post(new Runnable() {
+						@Override
+						public void run() {
+							android.widget.ListAdapter adapter = gridview1.getAdapter();
+							if (adapter == null || adapter.getCount() == 0) return;
+							
+							android.view.View item = adapter.getView(0, null, gridview1);
+							int columnWidth = gridview1.getWidth() / 3;
+							int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(columnWidth, android.view.View.MeasureSpec.EXACTLY);
+							int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED);
+							
+							item.measure(widthSpec, heightSpec);
+							int itemHeight = item.getMeasuredHeight();
+							int totalRows = (int) Math.ceil((double) adapter.getCount() / 3.0);
+							
+							int verticalSpacing = 0;
+							if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN) {
+								verticalSpacing = gridview1.getVerticalSpacing();
+							}
+							
+							android.view.ViewGroup.LayoutParams params = gridview1.getLayoutParams();
+							params.height = (itemHeight * totalRows) + (verticalSpacing * (totalRows - 1));
+							gridview1.setLayoutParams(params);
+							gridview1.requestLayout();
 						}
-						
-						android.view.ViewGroup.LayoutParams params = binding.gridview1.getLayoutParams();
-						params.height = (itemHeight * totalRows) + (verticalSpacing * (totalRows - 1));
-						binding.gridview1.setLayoutParams(params);
-						binding.gridview1.requestLayout();
-					}
-				});
+					});
+				}
 				
 				if (listMap != null && listMap.size() >= 3) {
-					binding.textHeroTitle.setBackgroundColor(Color.TRANSPARENT);
-					binding.textHeroDesc.setBackgroundColor(Color.TRANSPARENT);
-					binding.imgHeroBanner.setBackgroundColor(Color.TRANSPARENT);
+					if (textHeroTitle != null) textHeroTitle.setBackgroundColor(Color.TRANSPARENT);
+					if (textHeroDesc != null) textHeroDesc.setBackgroundColor(Color.TRANSPARENT);
+					if (imgHeroBanner != null) imgHeroBanner.setBackgroundColor(Color.TRANSPARENT);
 					
 					android.graphics.drawable.GradientDrawable playActiveBg = new android.graphics.drawable.GradientDrawable();
 					playActiveBg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
 					playActiveBg.setColor(Color.WHITE);
 					playActiveBg.setCornerRadius(100f);
 					
-					binding.btnHeroPlay.setBackground(playActiveBg);
-					binding.btnHeroPlay.setEnabled(true);
-					binding.imgPlayIcon.setVisibility(View.VISIBLE);
-					binding.textPlayLabel.setVisibility(View.VISIBLE);
-					binding.indicatorCapsule.setVisibility(View.VISIBLE);
+					if (btnHeroPlay != null) {
+						btnHeroPlay.setBackground(playActiveBg);
+						btnHeroPlay.setEnabled(true);
+					}
+					if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.VISIBLE);
 					
 					final float density = getResources().getDisplayMetrics().density;
 					final int activeWidth = (int) (16 * density);
@@ -170,35 +194,39 @@ public class MainActivity extends AppCompatActivity {
 								heroCover = heroCover.replace("http://", "https://");
 							}
 							
-							binding.textHeroTitle.setText(heroTitle);
-							binding.textHeroDesc.setText(heroSynopsis);
+							if (textHeroTitle != null) textHeroTitle.setText(heroTitle);
+							if (textHeroDesc != null) textHeroDesc.setText(heroSynopsis);
 							
-							Glide.with(getApplicationContext())
-							.load(Uri.parse(heroCover))
-							.centerCrop()
-							.placeholder(R.drawable.default_image)
-							.error(R.drawable.default_image)
-							.into(binding.imgHeroBanner);
+							if (imgHeroBanner != null) {
+								Glide.with(getApplicationContext())
+								.load(Uri.parse(heroCover))
+								.centerCrop()
+								.placeholder(R.drawable.default_image)
+								.error(R.drawable.default_image)
+								.into(imgHeroBanner);
+							}
 							
-							binding.btnHeroPlay.setOnClickListener(new View.OnClickListener() {
-								@Override
-								public void onClick(View v) {
-									Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(heroLink));
-									startActivity(intent);
-								}
-							});
+							if (btnHeroPlay != null) {
+								btnHeroPlay.setOnClickListener(new View.OnClickListener() {
+									@Override
+									public void onClick(View v) {
+										Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(heroLink));
+										startActivity(intent);
+									}
+								});
+							}
 							
-							View[] dots = {binding.dot0, binding.dot1, binding.dot2};
+							View[] dots = {dot0, dot1, dot2};
 							for (int i = 0; i < dots.length; i++) {
-								boolean isActive = (i == pos);
-								LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
-								
-								params.width = isActive ? activeWidth : inactiveWidth;
-								params.height = fixedHeight;
-								params.leftMargin = (i == 0) ? 0 : marginSpacing;
-								
-								dots[i].setLayoutParams(params);
-								dots[i].setBackground(isActive ? activeDotDrawable : inactiveDotDrawable);
+								if (dots[i] != null) {
+									boolean isActive = (i == pos);
+									LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
+									params.width = isActive ? activeWidth : inactiveWidth;
+									params.height = fixedHeight;
+									params.leftMargin = (i == 0) ? 0 : marginSpacing;
+									dots[i].setLayoutParams(params);
+									dots[i].setBackground(isActive ? activeDotDrawable : inactiveDotDrawable);
+								}
 							}
 							
 							heroCurrentIndex[0] = (pos + 1) % 3;
@@ -210,8 +238,8 @@ public class MainActivity extends AppCompatActivity {
 					heroHandler.post(heroRunnable);
 				}
 				
-				binding.recyclerPopular.setAdapter(new RecyclerPopularAdapter(listMap));
-				binding.listPopular.setAdapter(new ListPopularAdapter(listMap));
+				if (recyclerPopular != null) recyclerPopular.setAdapter(new RecyclerPopularAdapter(listMap));
+				if (listPopular != null) listPopular.setAdapter(new ListPopularAdapter(listMap));
 			}
 			
 			@Override
@@ -233,57 +261,64 @@ public class MainActivity extends AppCompatActivity {
 			dummyList.add(map);
 		}
 		
-		binding.gridview1.setAdapter(new Gridview1Adapter(dummyList));
+		if (gridview1 != null) {
+			gridview1.setAdapter(new Gridview1Adapter(dummyList));
+			gridview1.setOnTouchListener(new View.OnTouchListener() {
+				@Override
+				public boolean onTouch(View v, MotionEvent event) {
+					return event.getAction() == MotionEvent.ACTION_MOVE;
+				}
+			});
+			gridview1.post(new Runnable() {
+				@Override
+				public void run() {
+					setGridViewHeightBasedOnChildren(gridview1, 3);
+				}
+			});
+		}
 		
-		binding.gridview1.setOnTouchListener(new View.OnTouchListener() {
-			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				return event.getAction() == MotionEvent.ACTION_MOVE;
-			}
-		});
+		if (textHeroTitle != null) {
+			textHeroTitle.setText("");
+			textHeroTitle.setBackgroundColor(Color.parseColor("#111111"));
+		}
+		if (textHeroDesc != null) {
+			textHeroDesc.setText("");
+			textHeroDesc.setBackgroundColor(Color.parseColor("#111111"));
+		}
 		
-		binding.gridview1.post(new Runnable() {
-			@Override
-			public void run() {
-				setGridViewHeightBasedOnChildren(binding.gridview1, 3);
-			}
-		});
+		if (imgHeroBanner != null) {
+			imgHeroBanner.setImageResource(android.R.color.transparent);
+			imgHeroBanner.setBackgroundColor(Color.parseColor("#111111"));
+		}
 		
-		binding.textHeroTitle.setText("");
-		binding.textHeroDesc.setText("");
-		binding.textHeroTitle.setBackgroundColor(Color.parseColor("#111111"));
-		binding.textHeroDesc.setBackgroundColor(Color.parseColor("#111111"));
+		if (btnHeroPlay != null) {
+			btnHeroPlay.setEnabled(false);
+			android.graphics.drawable.GradientDrawable skeletonBtnBg = new android.graphics.drawable.GradientDrawable();
+			skeletonBtnBg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+			skeletonBtnBg.setColor(Color.parseColor("#111111"));
+			skeletonBtnBg.setCornerRadius(100f);
+			btnHeroPlay.setBackground(skeletonBtnBg);
+		}
 		
-		binding.imgHeroBanner.setImageResource(android.R.color.transparent);
-		binding.imgHeroBanner.setBackgroundColor(Color.parseColor("#111111"));
-		
-		binding.btnHeroPlay.setEnabled(false);
-		binding.indicatorCapsule.setVisibility(View.INVISIBLE);
-		
-		android.graphics.drawable.GradientDrawable skeletonBtnBg = new android.graphics.drawable.GradientDrawable();
-		skeletonBtnBg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-		skeletonBtnBg.setColor(Color.parseColor("#111111"));
-		skeletonBtnBg.setCornerRadius(100f);
-		
-		binding.btnHeroPlay.setBackground(skeletonBtnBg);
-		binding.btnHeroPlay.setEnabled(false);
-		binding.imgPlayIcon.setVisibility(View.GONE);
-		binding.textPlayLabel.setVisibility(View.INVISIBLE);
-		binding.indicatorCapsule.setVisibility(View.INVISIBLE);
+		if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.INVISIBLE);
+		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
 		
 		dongflix_req.startRequestNetwork(RequestNetworkController.GET, "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 		
-		androidx.recyclerview.widget.LinearLayoutManager layoutManager = 
-		new androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false);
-		binding.recyclerPopular.setLayoutManager(layoutManager);
-		
-		if (binding.recyclerPopular.getOnFlingListener() == null) {
-			androidx.recyclerview.widget.PagerSnapHelper snapHelper = new androidx.recyclerview.widget.PagerSnapHelper();
-			snapHelper.attachToRecyclerView(binding.recyclerPopular);
+		if (recyclerPopular != null) {
+			LinearLayoutManager layoutManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
+			recyclerPopular.setLayoutManager(layoutManager);
+			if (recyclerPopular.getOnFlingListener() == null) {
+				PagerSnapHelper snapHelper = new PagerSnapHelper();
+				snapHelper.attachToRecyclerView(recyclerPopular);
+			}
+			recyclerPopular.setAdapter(new RecyclerPopularAdapter(dummyList));
 		}
 		
-		binding.recyclerPopular.setAdapter(new RecyclerPopularAdapter(dummyList));
-		binding.listPopular.setNestedScrollingEnabled(false);
+		if (listPopular != null) {
+			listPopular.setLayoutManager(new LinearLayoutManager(this));
+			listPopular.setNestedScrollingEnabled(false);
+		}
 	}
 	
 	public void _UI() {
@@ -390,35 +425,50 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(ViewHolder _holder, final int _position) {
 			View _view = _holder.itemView;
-			ItemPopularDonghuaBinding bindingItem = ItemPopularDonghuaBinding.bind(_view);
+			TextView textPopularTitle = _view.findViewById(getResources().getIdentifier("text_popular_title", "id", getPackageName()));
+			TextView textPopularDesc = _view.findViewById(getResources().getIdentifier("text_popular_desc", "id", getPackageName()));
+			TextView textPopularGenre = _view.findViewById(getResources().getIdentifier("text_popular_genre", "id", getPackageName()));
+			TextView textPopularStatus = _view.findViewById(getResources().getIdentifier("text_popular_status", "id", getPackageName()));
+			ImageView imgPopularCover = _view.findViewById(getResources().getIdentifier("img_popular_cover", "id", getPackageName()));
+			View linear35 = _view.findViewById(getResources().getIdentifier("linear35", "id", getPackageName()));
 			
 			if (_data.get(_position).containsKey("is_loading")) {
-				bindingItem.textPopularTitle.setText("");
-				bindingItem.textPopularDesc.setText("");
-				bindingItem.textPopularGenre.setText("");
-				bindingItem.textPopularStatus.setText("                    ");
-				bindingItem.textPopularTitle.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)555, 0xFF111111));
-				bindingItem.textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)555, 0xFF111111));
-				bindingItem.textPopularDesc.setBackgroundColor(0xFF111111);
-				bindingItem.textPopularGenre.setBackgroundColor(0xFF111111);
-				bindingItem.imgPopularCover.setImageResource(android.R.color.transparent);
-				bindingItem.imgPopularCover.setBackgroundColor(Color.parseColor("#111111"));
+				if (textPopularTitle != null) {
+					textPopularTitle.setText("");
+					textPopularTitle.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)555, 0xFF111111));
+				}
+				if (textPopularDesc != null) textPopularDesc.setBackgroundColor(0xFF111111);
+				if (textPopularGenre != null) textPopularGenre.setBackgroundColor(0xFF111111);
+				if (textPopularStatus != null) {
+					textPopularStatus.setText("                    ");
+					textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)555, 0xFF111111));
+				}
+				if (imgPopularCover != null) {
+					imgPopularCover.setImageResource(android.R.color.transparent);
+					imgPopularCover.setBackgroundColor(Color.parseColor("#111111"));
+				}
 			} else {
-				bindingItem.textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
-				bindingItem.textPopularTitle.setText(_data.get(_position).get("title").toString());
-				bindingItem.textPopularDesc.setText(_data.get(_position).get("synopsis").toString());
-				bindingItem.textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
+				if (textPopularStatus != null) textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
+				if (textPopularTitle != null) textPopularTitle.setText(_data.get(_position).get("title").toString());
+				if (textPopularDesc != null) textPopularDesc.setText(_data.get(_position).get("synopsis").toString());
+				if (textPopularGenre != null) textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
 				
-				bindingItem.textPopularStatus.setText(_data.get(_position).get("episode").toString().concat(" / ".concat(_data.get(_position).get("status").toString())));
-				Glide.with(getApplicationContext()).load(Uri.parse(_data.get(_position).get("cover").toString())).into(bindingItem.imgPopularCover);
-				bindingItem.linear35.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View _view) {
-						i.setClass(getApplicationContext(), WatchActivity.class);
-						i.putExtra("slug", _data.get(_position).get("slug").toString());
-						startActivity(i);
-					}
-				});
+				if (textPopularStatus != null) {
+					textPopularStatus.setText(_data.get(_position).get("episode").toString().concat(" / ".concat(_data.get(_position).get("status").toString())));
+				}
+				if (imgPopularCover != null) {
+					Glide.with(getApplicationContext()).load(Uri.parse(_data.get(_position).get("cover").toString())).into(imgPopularCover);
+				}
+				if (linear35 != null) {
+					linear35.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View _view) {
+							i.setClass(getApplicationContext(), WatchActivity.class);
+							i.putExtra("slug", _data.get(_position).get("slug").toString());
+							startActivity(i);
+						}
+					});
+				}
 			}
 		}
 		
@@ -440,46 +490,50 @@ public class MainActivity extends AppCompatActivity {
 		
 		@Override
 		public View getView(final int _position, View _v, ViewGroup _container) {
-			CustomAnimeBinding bindingItem = CustomAnimeBinding.inflate(getLayoutInflater());
-			View _view = bindingItem.getRoot();
+			LayoutInflater inflater = getLayoutInflater();
+			View _view = inflater.inflate(R.layout.custom_anime, _container, false);
+			
+			TextView textTitle = _view.findViewById(R.id.text_title);
+			TextView textStatus = _view.findViewById(R.id.text_status);
+			TextView textEpisode = _view.findViewById(R.id.text_episode);
+			ImageView imgCover = _view.findViewById(R.id.img_cover);
+			View view2 = _view.findViewById(R.id.view2);
 			
 			HashMap<String, Object> item = _data.get(_position);
 			
 			if (item.containsKey("is_loading")) {
-				bindingItem.textTitle.setText("");
-				bindingItem.textStatus.setText("");
-				bindingItem.textEpisode.setText("");
-				
-				bindingItem.imgCover.clearAnimation();
-				_view.clearAnimation();
-				_view.setAlpha(1.0f);
-				
-				bindingItem.textTitle.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
-				bindingItem.textStatus.setBackgroundColor(Color.parseColor("#111111"));
-				bindingItem.textEpisode.setBackgroundColor(Color.parseColor("#111111"));
-				bindingItem.imgCover.setImageResource(android.R.color.transparent);
-				bindingItem.imgCover.setBackgroundColor(Color.parseColor("#111111"));
-				bindingItem.view2.setVisibility(View.GONE);
+				if (textTitle != null) {
+					textTitle.setText("");
+					textTitle.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
+				}
+				if (textStatus != null) textStatus.setBackgroundColor(Color.parseColor("#111111"));
+				if (textEpisode != null) textEpisode.setBackgroundColor(Color.parseColor("#111111"));
+				if (imgCover != null) {
+					imgCover.setImageResource(android.R.color.transparent);
+					imgCover.setBackgroundColor(Color.parseColor("#111111"));
+				}
+				if (view2 != null) view2.setVisibility(View.GONE);
 			} else {
-				bindingItem.imgCover.clearAnimation();
-				_view.clearAnimation();
-				_view.setAlpha(1.0f);
+				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
+				if (textTitle != null) textTitle.setBackgroundColor(Color.TRANSPARENT);
+				if (textEpisode != null) textEpisode.setBackgroundColor(Color.TRANSPARENT);
+				if (view2 != null) view2.setVisibility(View.VISIBLE);
 				
-				bindingItem.imgCover.setBackgroundColor(Color.TRANSPARENT);
-				bindingItem.textTitle.setBackgroundColor(Color.TRANSPARENT);
-				bindingItem.textEpisode.setBackgroundColor(Color.TRANSPARENT);
-				bindingItem.view2.setVisibility(View.VISIBLE);
-				bindingItem.textStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF3B82F6));
+				if (textStatus != null) {
+					textStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF3B82F6));
+				}
 				
-				android.graphics.drawable.GradientDrawable gradient = new android.graphics.drawable.GradientDrawable(
-					android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
-					new int[] { Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT }
-				);
-				bindingItem.view2.setBackground(gradient);
+				if (view2 != null) {
+					android.graphics.drawable.GradientDrawable gradient = new android.graphics.drawable.GradientDrawable(
+						android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
+						new int[] { Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT }
+					);
+					view2.setBackground(gradient);
+				}
 				
-				bindingItem.textTitle.setText(_data.get(_position).get("title").toString());
-				bindingItem.textStatus.setText(_data.get(_position).get("status").toString());
-				bindingItem.textEpisode.setText(_data.get(_position).get("episode").toString());
+				if (textTitle != null) textTitle.setText(_data.get(_position).get("title").toString());
+				if (textStatus != null) textStatus.setText(_data.get(_position).get("status").toString());
+				if (textEpisode != null) textEpisode.setText(_data.get(_position).get("episode").toString());
 				
 				String cover = _data.get(_position).get("cover") != null ? _data.get(_position).get("cover").toString().trim() : "";
 				if (cover.contains("i.ibb.co.com")) {
@@ -489,7 +543,9 @@ public class MainActivity extends AppCompatActivity {
 					cover = cover.replace("http://", "https://");
 				}
 				
-				Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(bindingItem.imgCover);
+				if (imgCover != null) {
+					Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imgCover);
+				}
 			}
 			return _view;
 		}
@@ -511,23 +567,34 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(ViewHolder _holder, final int _position) {
 			View _view = _holder.itemView;
-			ItemPopularDonghuaBinding bindingItem = ItemPopularDonghuaBinding.bind(_view);
+			TextView textPopularTitle = _view.findViewById(getResources().getIdentifier("text_popular_title", "id", getPackageName()));
+			TextView textPopularDesc = _view.findViewById(getResources().getIdentifier("text_popular_desc", "id", getPackageName()));
+			TextView textPopularGenre = _view.findViewById(getResources().getIdentifier("text_popular_genre", "id", getPackageName()));
+			TextView textPopularStatus = _view.findViewById(getResources().getIdentifier("text_popular_status", "id", getPackageName()));
+			ImageView imgPopularCover = _view.findViewById(getResources().getIdentifier("img_popular_cover", "id", getPackageName()));
+			View linear35 = _view.findViewById(getResources().getIdentifier("linear35", "id", getPackageName()));
 			
-			bindingItem.textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
-			bindingItem.textPopularTitle.setText(_data.get(_position).get("title").toString());
-			bindingItem.textPopularDesc.setText(_data.get(_position).get("synopsis").toString());
-			bindingItem.textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
+			if (textPopularStatus != null) textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
+			if (textPopularTitle != null) textPopularTitle.setText(_data.get(_position).get("title").toString());
+			if (textPopularDesc != null) textPopularDesc.setText(_data.get(_position).get("synopsis").toString());
+			if (textPopularGenre != null) textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
 			
-			bindingItem.textPopularStatus.setText(_data.get(_position).get("episode").toString().concat(" / ".concat(_data.get(_position).get("status").toString())));
-			Glide.with(getApplicationContext()).load(Uri.parse(_data.get(_position).get("cover").toString())).into(bindingItem.imgPopularCover);
-			bindingItem.linear35.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View _view) {
-					i.setClass(getApplicationContext(), WatchActivity.class);
-					i.putExtra("slug", _data.get(_position).get("slug").toString());
-					startActivity(i);
-				}
-			});
+			if (textPopularStatus != null) {
+				textPopularStatus.setText(_data.get(_position).get("episode").toString().concat(" / ".concat(_data.get(_position).get("status").toString())));
+			}
+			if (imgPopularCover != null) {
+				Glide.with(getApplicationContext()).load(Uri.parse(_data.get(_position).get("cover").toString())).into(imgPopularCover);
+			}
+			if (linear35 != null) {
+				linear35.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View _view) {
+						i.setClass(getApplicationContext(), WatchActivity.class);
+						i.putExtra("slug", _data.get(_position).get("slug").toString());
+						startActivity(i);
+					}
+				});
+			}
 		}
 		
 		@Override
