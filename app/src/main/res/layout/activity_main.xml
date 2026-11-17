@@ -1,211 +1,479 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#000000">
-
-    <!-- Scrollable Content -->
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/main_scroll_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true"
-        android:clipToPadding="false"
-        android:paddingBottom="90dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <!-- 1. HERO SECTION -->
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="420dp">
-                
-                <ImageView
-                    android:id="@+id/img_hero_banner"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop" />
-                    
-                <View
-                    android:id="@+id/hero_shadow"
-                    android:layout_width="match_parent"
-                    android:layout_height="260dp"
-                    android:layout_alignParentBottom="true" />
-
-                <!-- Header Top Bar -->
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:padding="16dp"
-                    android:layout_alignParentTop="true">
-                    
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:layout_alignParentLeft="true">
-                        
-                        <ImageView
-                            android:id="@+id/img_user_avatar"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:src="@drawable/ic_profile"
-                            android:scaleType="centerCrop" />
-                            
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginLeft="10dp"
-                            android:orientation="vertical">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Welcome"
-                                android:textSize="11sp"
-                                android:textColor="#94A3B8" />
-                            <TextView
-                                android:id="@+id/text_username"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="R Z"
-                                android:textSize="14sp"
-                                android:textStyle="bold"
-                                android:textColor="#FFFFFF" />
-                        </LinearLayout>
-                    </LinearLayout>
-                </RelativeLayout>
-
-                <!-- Hero Text & Button -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentBottom="true"
-                    android:padding="16dp"
-                    android:orientation="vertical">
-                    
-                    <TextView
-                        android:id="@+id/text_hero_title"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Loading..."
-                        android:textSize="22sp"
-                        android:textStyle="bold"
-                        android:textColor="#FFFFFF"
-                        android:maxLines="2" />
-                        
-                    <TextView
-                        android:id="@+id/text_hero_desc"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Memuat episode donghua terbaru..."
-                        android:textSize="12sp"
-                        android:textColor="#CBD5E1"
-                        android:maxLines="2" />
-                </LinearLayout>
-            </RelativeLayout>
-
-            <!-- 2. SECTION: BARU DIUPDATE (GRID) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="12dp">
-                
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Baru Diupdate"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#FFFFFF"
-                    android:layout_marginBottom="8dp" />
-
-                <GridView
-                    android:id="@+id/gridview1"
-                    android:layout_width="match_parent"
-                    android:layout_height="350dp"
-                    android:numColumns="3"
-                    android:horizontalSpacing="6dp"
-                    android:verticalSpacing="8dp"
-                    android:stretchMode="columnWidth"
-                    android:nestedScrollingEnabled="false" />
-            </LinearLayout>
-
-            <!-- 3. SECTION: POPULER HARI INI (RECYCLERVIEW) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="12dp"
-                android:layout_marginBottom="24dp">
-                
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Populer Hari Ini"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#FFFFFF"
-                    android:layout_marginBottom="8dp" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recyclerPopular"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:nestedScrollingEnabled="false" />
-            </LinearLayout>
-
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
-
-    <!-- FLOATING NAVBAR MENGAPUNG -->
-    <LinearLayout
-        android:id="@+id/navbar"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="16dp"
-        android:background="#111111"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:layout_alignParentBottom="true">
-        
-        <ImageView
-            android:id="@+id/img_home"
-            android:layout_width="0dp"
-            android:layout_height="22dp"
-            android:layout_weight="1"
-            android:src="@drawable/ic_home"
-            android:scaleType="center" />
-        <ImageView
-            android:id="@+id/img_search"
-            android:layout_width="0dp"
-            android:layout_height="22dp"
-            android:layout_weight="1"
-            android:src="@drawable/ic_search"
-            android:scaleType="center" />
-        <ImageView
-            android:id="@+id/img_favorite"
-            android:layout_width="0dp"
-            android:layout_height="22dp"
-            android:layout_weight="1"
-            android:src="@drawable/ic_favorite"
-            android:scaleType="center" />
-        <ImageView
-            android:id="@+id/img_profile"
-            android:layout_width="0dp"
-            android:layout_height="22dp"
-            android:layout_weight="1"
-            android:src="@drawable/ic_profile"
-            android:scaleType="center" />
-    </LinearLayout>
-
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:app="http://schemas.android.com/apk/res-auto"
+	xmlns:tools="http://schemas.android.com/tools"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:background="#000000">
+	<androidx.core.widget.NestedScrollView
+		android:id="@+id/main_scroll_view"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:fillViewport="true"
+		android:clipToPadding="false">
+		<LinearLayout
+			android:id="@+id/linear81"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:orientation="vertical">
+			<RelativeLayout
+				android:id="@+id/hero_container"
+				android:layout_width="match_parent"
+				android:layout_height="420dp">
+				<ImageView
+					android:id="@+id/img_hero_banner"
+					android:layout_width="match_parent"
+					android:layout_height="match_parent"
+					android:src="@drawable/default_image"
+					android:scaleType="centerCrop" />
+				<View
+					android:id="@+id/hero_shadow"
+					android:layout_width="match_parent"
+					android:layout_height="260dp"
+					android:layout_alignParentBottom="true" />
+				<View
+					android:id="@+id/header_shadow"
+					android:layout_width="match_parent"
+					android:layout_height="135dp"
+					android:layout_alignParentTop="true" />
+				<RelativeLayout
+					android:id="@+id/relativelayout69"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingTop="12dp"
+					android:paddingRight="16dp"
+					android:paddingBottom="12dp"
+					android:layout_alignParentTop="true">
+					<LinearLayout
+						android:id="@+id/header_left"
+						android:layout_width="wrap_content"
+						android:layout_height="48dp"
+						android:gravity="center_vertical"
+						android:orientation="horizontal"
+						android:layout_alignParentTop="true"
+						android:layout_alignParentLeft="true">
+						<ImageView
+							android:id="@+id/img_user_avatar"
+							android:layout_width="46dp"
+							android:layout_height="46dp"
+							android:src="@drawable/ic_profile"
+							android:scaleType="centerCrop" />
+						<LinearLayout
+							android:id="@+id/linear40"
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_marginLeft="12dp"
+							android:orientation="vertical">
+							<TextView
+								android:id="@+id/textview62"
+								android:layout_width="wrap_content"
+								android:layout_height="wrap_content"
+								android:text="Welcome"
+								android:textSize="12sp"
+								android:textColor="#94A3B8" />
+							<TextView
+								android:id="@+id/text_username"
+								android:layout_width="wrap_content"
+								android:layout_height="wrap_content"
+								android:text="R Z"
+								android:textSize="15sp"
+								android:textStyle="bold"
+								android:textColor="#FFFFFF" />
+						</LinearLayout>
+					</LinearLayout>
+					<LinearLayout
+						android:id="@+id/linear82"
+						android:layout_width="wrap_content"
+						android:layout_height="48dp"
+						android:gravity="center_vertical"
+						android:orientation="horizontal"
+						android:layout_alignParentRight="true"
+						android:layout_alignParentTop="true">
+						<ImageView
+							android:id="@+id/btn_top_search"
+							android:layout_width="38dp"
+							android:layout_height="38dp"
+							android:padding="8dp"
+							android:src="@drawable/ic_search"
+							android:scaleType="center" />
+						<ImageView
+							android:id="@+id/btn_top_notif"
+							android:layout_width="38dp"
+							android:layout_height="38dp"
+							android:layout_marginLeft="10dp"
+							android:padding="8dp"
+							android:src="@drawable/ic_favorite"
+							android:scaleType="center" />
+					</LinearLayout>
+				</RelativeLayout>
+				<RelativeLayout
+					android:id="@+id/relativelayout70"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp"
+					android:paddingBottom="16dp"
+					android:layout_alignParentBottom="true">
+					<LinearLayout
+						android:id="@+id/layout_hero_text"
+						android:layout_width="match_parent"
+						android:layout_height="wrap_content"
+						android:orientation="vertical">
+						<TextView
+							android:id="@+id/text_hero_title"
+							android:layout_width="match_parent"
+							android:layout_height="wrap_content"
+							android:text="Loading..."
+							android:textSize="22sp"
+							android:textStyle="bold"
+							android:textColor="#FFFFFF"
+							android:maxLines="2"
+							android:ellipsize="end" />
+						<TextView
+							android:id="@+id/text_hero_desc"
+							android:layout_width="match_parent"
+							android:layout_height="wrap_content"
+							android:layout_marginTop="4dp"
+							android:text="Memuat episode donghua terbaru..."
+							android:textSize="12sp"
+							android:textColor="#CBD5E1"
+							android:maxLines="2"
+							android:ellipsize="end" />
+					</LinearLayout>
+					<RelativeLayout
+						android:id="@+id/relativelayout71"
+						android:layout_width="match_parent"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="14dp"
+						android:layout_below="@id/layout_hero_text">
+						<LinearLayout
+							android:id="@+id/btn_hero_play"
+							android:layout_width="wrap_content"
+							android:layout_height="42dp"
+							android:paddingLeft="22dp"
+							android:paddingRight="22dp"
+							android:gravity="center_horizontal|center_vertical"
+							android:orientation="horizontal"
+							android:layout_alignParentLeft="true">
+							<ImageView
+								android:id="@+id/img_play_icon"
+								android:layout_width="16dp"
+								android:layout_height="16dp"
+								android:src="@drawable/ic_play"
+								android:scaleType="center" />
+							<TextView
+								android:id="@+id/text_play_label"
+								android:layout_width="wrap_content"
+								android:layout_height="wrap_content"
+								android:layout_marginLeft="8dp"
+								android:text="Menonton"
+								android:textSize="14sp"
+								android:textStyle="bold"
+								android:textColor="#0F172A" />
+						</LinearLayout>
+						<LinearLayout
+							android:id="@+id/indicator_capsule"
+							android:layout_width="wrap_content"
+							android:layout_height="30dp"
+							android:paddingLeft="10dp"
+							android:paddingRight="10dp"
+							android:gravity="center_vertical"
+							android:orientation="horizontal"
+							android:layout_alignParentRight="true"
+							android:layout_centerVertical="true">
+							<View
+								android:id="@+id/dot_0"
+								android:layout_width="16dp"
+								android:layout_height="5dp"
+								android:background="#FFFFFF" />
+							<View
+								android:id="@+id/dot_1"
+								android:layout_width="5dp"
+								android:layout_height="5dp"
+								android:layout_marginLeft="5dp"
+								android:background="#FFFFFF" />
+							<View
+								android:id="@+id/dot_2"
+								android:layout_width="5dp"
+								android:layout_height="5dp"
+								android:layout_marginLeft="5dp"
+								android:background="#FFFFFF" />
+						</LinearLayout>
+					</RelativeLayout>
+				</RelativeLayout>
+			</RelativeLayout>
+			<RelativeLayout
+				android:id="@+id/layout_section_popular"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="18dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="8dp">
+				<TextView
+					android:id="@+id/text_title_popular"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Populer Hari Ini"
+					android:textSize="18sp"
+					android:textStyle="bold"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerPopular"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:paddingStart="8dp"
+				android:paddingEnd="60dp"
+				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+				tools:listitem="@layout/item_popular_donghua" />
+			<RelativeLayout
+				android:id="@+id/relativelayout72"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="14dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="8dp">
+				<TextView
+					android:id="@+id/textview77"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Baru Diupdate"
+					android:textSize="18sp"
+					android:textStyle="bold"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+				<TextView
+					android:id="@+id/text_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textStyle="bold"
+					android:textColor="#3B82F6"
+					android:layout_alignParentRight="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+			<GridView
+				android:id="@+id/gridview1"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:paddingLeft="8dp"
+				android:paddingRight="8dp"
+				android:paddingBottom="8dp"
+				android:numColumns="3"
+				android:horizontalSpacing="4dp"
+				android:verticalSpacing="8dp"
+				android:stretchMode="columnWidth"
+				android:nestedScrollingEnabled="false"
+				tools:listitem="@layout/custom_anime" />
+			<RelativeLayout
+				android:id="@+id/layout_populary"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="18dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="8dp">
+				<TextView
+					android:id="@+id/text_popular"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Populer"
+					android:textSize="18sp"
+					android:textStyle="bold"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/listPopular"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="100dp"
+				android:paddingLeft="8dp"
+				android:paddingRight="8dp"
+				android:paddingBottom="8dp"
+				android:clipChildren="false"
+				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+				tools:listitem="@layout/item_popular_donghua" />
+		</LinearLayout>
+	</androidx.core.widget.NestedScrollView>
+	<LinearLayout
+		android:id="@+id/layout_search"
+		android:layout_width="match_parent"
+		android:layout_height="0dp"
+		android:padding="16dp"
+		android:orientation="vertical"
+		android:visibility="gone">
+		<TextView
+			android:id="@+id/textview63"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_marginTop="36dp"
+			android:text="Cari Donghua"
+			android:textSize="22sp"
+			android:textStyle="bold"
+			android:textColor="#FFFFFF" />
+		<EditText
+			android:id="@+id/input_search"
+			android:layout_width="match_parent"
+			android:layout_height="48dp"
+			android:layout_marginTop="14dp"
+			android:paddingLeft="16dp"
+			android:paddingRight="16dp"
+			android:background="#1E293B"
+			android:textSize="14sp"
+			android:textColor="#FFFFFF"
+			android:hint="Ketik judul donghua..."
+			android:textColorHint="#64748B"
+			android:singleLine="true" />
+		<GridView
+			android:id="@+id/grid_search_result"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			android:layout_marginTop="16dp"
+			android:numColumns="3"
+			android:horizontalSpacing="8dp"
+			android:verticalSpacing="8dp"
+			android:stretchMode="columnWidth" />
+	</LinearLayout>
+	<LinearLayout
+		android:id="@+id/layout_favorite"
+		android:layout_width="match_parent"
+		android:layout_height="0dp"
+		android:padding="16dp"
+		android:orientation="vertical"
+		android:visibility="gone">
+		<TextView
+			android:id="@+id/textview64"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_marginTop="36dp"
+			android:text="Favorit Saya"
+			android:textSize="22sp"
+			android:textStyle="bold"
+			android:textColor="#FFFFFF" />
+		<ListView
+			android:id="@+id/list_favorite"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			android:layout_marginTop="16dp"
+			android:dividerHeight="10dp"
+			android:choiceMode="none"
+			android:divider="@null" />
+	</LinearLayout>
+	<LinearLayout
+		android:id="@+id/layout_profile"
+		android:layout_width="match_parent"
+		android:layout_height="0dp"
+		android:padding="20dp"
+		android:gravity="center_horizontal"
+		android:orientation="vertical"
+		android:visibility="gone">
+		<View
+			android:id="@+id/view41"
+			android:layout_width="1dp"
+			android:layout_height="36dp" />
+		<ImageView
+			android:id="@+id/imageview12"
+			android:layout_width="90dp"
+			android:layout_height="90dp"
+			android:padding="20dp"
+			android:background="#1E293B"
+			android:src="@drawable/ic_profile"
+			android:scaleType="center" />
+		<TextView
+			android:id="@+id/textview65"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_marginTop="14dp"
+			android:text="DongFlix VIP Member"
+			android:textSize="20sp"
+			android:textStyle="bold"
+			android:textColor="#FFFFFF" />
+		<TextView
+			android:id="@+id/textview66"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_marginTop="4dp"
+			android:text="v1.0.0 Pro Edition"
+			android:textSize="13sp"
+			android:textColor="#3B82F6" />
+		<LinearLayout
+			android:id="@+id/linear42"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:layout_marginTop="30dp"
+			android:padding="16dp"
+			android:background="#1E293B"
+			android:orientation="vertical">
+			<TextView
+				android:id="@+id/textview67"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="Status Langganan"
+				android:textSize="12sp"
+				android:textColor="#94A3B8" />
+			<TextView
+				android:id="@+id/textview68"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="4dp"
+				android:text="Aktif Seumur Hidup"
+				android:textSize="15sp"
+				android:textStyle="bold"
+				android:textColor="#FFFFFF" />
+		</LinearLayout>
+	</LinearLayout>
+	<LinearLayout
+		android:id="@+id/navbar"
+		android:layout_width="match_parent"
+		android:layout_height="56dp"
+		android:layout_marginLeft="24dp"
+		android:layout_marginRight="24dp"
+		android:layout_marginBottom="20dp"
+		android:gravity="center_vertical"
+		android:orientation="horizontal"
+		android:layout_alignParentBottom="true">
+		<ImageView
+			android:id="@+id/img_home"
+			android:layout_width="0dp"
+			android:layout_height="22dp"
+			android:src="@drawable/ic_home"
+			android:scaleType="center"
+			android:layout_weight="1" />
+		<ImageView
+			android:id="@+id/img_search"
+			android:layout_width="0dp"
+			android:layout_height="22dp"
+			android:src="@drawable/ic_search"
+			android:scaleType="center"
+			android:layout_weight="1" />
+		<ImageView
+			android:id="@+id/img_favorite"
+			android:layout_width="0dp"
+			android:layout_height="22dp"
+			android:src="@drawable/ic_favorite"
+			android:scaleType="center"
+			android:layout_weight="1" />
+		<ImageView
+			android:id="@+id/img_profile"
+			android:layout_width="0dp"
+			android:layout_height="22dp"
+			android:src="@drawable/ic_profile"
+			android:scaleType="center"
+			android:layout_weight="1" />
+	</LinearLayout>
 </RelativeLayout>
