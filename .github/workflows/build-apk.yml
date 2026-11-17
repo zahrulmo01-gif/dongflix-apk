@@ -25,7 +25,7 @@ jobs:
         run: chmod +x gradlew
         continue-on-error: true
 
-      - name: Build APK with Gradle
+      - name: Build Debug APK with Gradle
         run: ./gradlew assembleDebug
 
       - name: Upload APK Artifact
