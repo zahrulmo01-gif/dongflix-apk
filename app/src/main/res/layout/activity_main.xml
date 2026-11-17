@@ -38,7 +38,7 @@
                     android:layout_height="260dp"
                     android:layout_alignParentBottom="true" />
 
-                <!-- Header Top Bar (Avatar & Search) -->
+                <!-- Header Top Bar -->
                 <RelativeLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -117,8 +117,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingHorizontal="12dp"
-                android:marginTop="16dp">
+                android:paddingHorizontal="12dp">
                 
                 <TextView
                     android:layout_width="wrap_content"
@@ -146,7 +145,6 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingHorizontal="12dp"
-                android:marginTop="16dp"
                 android:layout_marginBottom="24dp">
                 
                 <TextView
@@ -168,7 +166,7 @@
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <!-- FLOATING NAVBAR MENGAPUNG (GLASSMORPHISM) -->
+    <!-- FLOATING NAVBAR MENGAPUNG -->
     <LinearLayout
         android:id="@+id/navbar"
         android:layout_width="match_parent"
