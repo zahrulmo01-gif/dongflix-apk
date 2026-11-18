@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -40,6 +41,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -83,6 +90,7 @@ public class WatchActivity extends AppCompatActivity {
 	private RequestNetwork.RequestListener _req_watch_request_listener;
 
 	private TextureView playerTextureView;
+	private WebView fallbackWebView;
 	private FrameLayout layoutPlayer;
 	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls;
 	private ImageView btnBack, btnCast, btnLock, btnSettings, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
@@ -131,6 +139,7 @@ public class WatchActivity extends AppCompatActivity {
 	public ArrayList<String> qualityUrls = new ArrayList<>();
 
 	public String dmSessionCookie = "";
+	private boolean isWebViewFallbackActive = false;
 
 	@Override
 	protected void onCreate(Bundle _savedInstanceState) {
@@ -401,7 +410,6 @@ public class WatchActivity extends AppCompatActivity {
 			btnUnlockScreen.setBackground(lockBg);
 		}
 
-		// Hapus background tombol Episode di fullscreen
 		if (btnFullscreenEpisodes != null) {
 			btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 		}
@@ -514,9 +522,6 @@ public class WatchActivity extends AppCompatActivity {
 		updateEpisodeNavButtons();
 	}
 
-	// ========================================================
-	// ADAPTIVE SHEET: SIDE SHEET KANAN (FULLSCREEN) & BOTTOM SHEET (PORTRAIT)
-	// ========================================================
 	private boolean isLandscapeOrFullscreen() {
 		return isFullscreen || getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
 	}
@@ -1243,6 +1248,14 @@ public class WatchActivity extends AppCompatActivity {
 			mediaPlayer = null;
 		}
 
+		if (fallbackWebView != null) {
+			try {
+				fallbackWebView.stopLoading();
+				fallbackWebView.destroy();
+			} catch (Exception ignored) {}
+			fallbackWebView = null;
+		}
+
 		if (playerSurface != null) {
 			playerSurface.release();
 			playerSurface = null;
@@ -1260,6 +1273,17 @@ public class WatchActivity extends AppCompatActivity {
 			if (btnPlay != null) {
 				btnPlay.setImageResource(R.drawable.ic_play1);
 			}
+		}
+		if (fallbackWebView != null && isWebViewFallbackActive) {
+			fallbackWebView.onPause();
+		}
+	}
+
+	@Override
+	public void onResume() {
+		super.onResume();
+		if (fallbackWebView != null && isWebViewFallbackActive) {
+			fallbackWebView.onResume();
 		}
 	}
 
@@ -1544,8 +1568,112 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
+	private void hideFallbackWebView() {
+		isWebViewFallbackActive = false;
+		if (fallbackWebView != null) {
+			try {
+				fallbackWebView.stopLoading();
+				fallbackWebView.loadUrl("about:blank");
+				fallbackWebView.setVisibility(View.GONE);
+			} catch (Exception ignored) {}
+		}
+		if (playerTextureView != null) {
+			playerTextureView.setVisibility(View.VISIBLE);
+		}
+	}
+
+	// ========================================================
+	// FALLBACK WEBVIEW INTERCEPTOR (JIKA SERVER PROTEKSI JS / IFRAME)
+	// ========================================================
+	private void playViaWebViewInterceptor(final String embedUrl) {
+		runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					if (mediaPlayer != null) {
+						try { mediaPlayer.stop(); mediaPlayer.reset(); mediaPlayer.release(); } catch (Exception ignored) {}
+						mediaPlayer = null;
+					}
+
+					if (fallbackWebView == null && layoutPlayer != null) {
+						fallbackWebView = new WebView(WatchActivity.this);
+						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+							ViewGroup.LayoutParams.MATCH_PARENT,
+							ViewGroup.LayoutParams.MATCH_PARENT
+						);
+						fallbackWebView.setLayoutParams(lp);
+						fallbackWebView.setBackgroundColor(Color.BLACK);
+						layoutPlayer.addView(fallbackWebView, 0);
+					}
+
+					if (fallbackWebView != null) {
+						WebSettings ws = fallbackWebView.getSettings();
+						ws.setJavaScriptEnabled(true);
+						ws.setDomStorageEnabled(true);
+						ws.setMediaPlaybackRequiresUserGesture(false);
+						ws.setAllowFileAccess(true);
+						ws.setUserAgentString("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+
+						fallbackWebView.setWebChromeClient(new WebChromeClient());
+						fallbackWebView.setWebViewClient(new WebViewClient() {
+							@Override
+							public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+								if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request != null && request.getUrl() != null) {
+									final String reqUrl = request.getUrl().toString();
+									String low = reqUrl.toLowerCase();
+									// Jika WebView menangkap URL video m3u8 / mp4 asli di belakang layar, ambil dan putar di native MediaPlayer!
+									if ((low.contains(".m3u8") || low.contains(".mp4")) && !low.contains("ads") && !low.contains("analytics") && !low.contains("tracker")) {
+										runOnUiThread(new Runnable() {
+											@Override
+											public void run() {
+												if (isWebViewFallbackActive) {
+													hideFallbackWebView();
+													qualityNames.clear();
+													qualityUrls.clear();
+													qualityNames.add("Auto");
+													qualityUrls.add(reqUrl);
+													isAutoQualityMode = true;
+													selectedQualityIndex = 0;
+													updateQualityBadgeText();
+													playVideoUrl(reqUrl, 0);
+												}
+											}
+										});
+									}
+								}
+								return super.shouldInterceptRequest(view, request);
+							}
+
+							@Override
+							public void onPageFinished(WebView view, String url) {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								if (btnPlay != null) {
+									btnPlay.setEnabled(true);
+									btnPlay.setAlpha(1.0f);
+								}
+							}
+						});
+
+						isWebViewFallbackActive = true;
+						if (playerTextureView != null) playerTextureView.setVisibility(View.GONE);
+						fallbackWebView.setVisibility(View.VISIBLE);
+						if (playerControlsOverlay != null) playerControlsOverlay.bringToFront();
+
+						Map<String, String> extraHeaders = new HashMap<>();
+						extraHeaders.put("Referer", "https://anichin.cafe/");
+						fallbackWebView.loadUrl(embedUrl, extraHeaders);
+					}
+				} catch (Exception e) {
+					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+				}
+			}
+		});
+	}
+
 	public void playVideoUrl(final String rawUrl, final int targetSeek) {
 		if (rawUrl == null || rawUrl.trim().isEmpty()) return;
+
+		hideFallbackWebView();
 
 		String normalized = rawUrl.trim();
 		if (normalized.startsWith("Https://")) {
@@ -1711,6 +1839,12 @@ public class WatchActivity extends AppCompatActivity {
 							if (playerHandler != null && autoDowngradeRunnable != null) {
 								playerHandler.removeCallbacks(autoDowngradeRunnable);
 							}
+							// Jika link IPFS gateway pertama gagal, coba gateway alternatif dweb.link
+							if (cleanUrl.contains("ipfs.io/ipfs/")) {
+								String altIpfs = cleanUrl.replace("https://ipfs.io/ipfs/", "https://dweb.link/ipfs/");
+								playVideoUrl(altIpfs, savedSeekPosition);
+								return true;
+							}
 							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
@@ -1736,12 +1870,13 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// FULLSCREEN: FIX SECTION ATAS TERPOTONG & TANPA BG EPISODE
+	// FULLSCREEN: FIX SECTION ATAS & SAMPING TERPOTONG TOTAL
 	// ========================================================
 	public void toggleFullscreen() {
 		final Window window = getWindow();
 		final View decorView = window.getDecorView();
 		final View scrollContent = findViewById(R.id.vscroll16);
+		final View dividerLine = findViewById(R.id.view139);
 		final FrameLayout playContainer = findViewById(R.id.frame_layout5);
 		final View rootContainer = (layoutPlayer != null && layoutPlayer.getParent() instanceof View) ? (View) layoutPlayer.getParent() : null;
 		final float density = getResources().getDisplayMetrics().density;
@@ -1761,6 +1896,7 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			window.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 
 			decorView.setSystemUiVisibility(
 				View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -1772,6 +1908,7 @@ public class WatchActivity extends AppCompatActivity {
 			);
 
 			if (scrollContent != null) scrollContent.setVisibility(View.GONE);
+			if (dividerLine != null) dividerLine.setVisibility(View.GONE);
 
 			if (layoutPlayer != null) {
 				ViewGroup.LayoutParams lp = layoutPlayer.getLayoutParams();
@@ -1782,7 +1919,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			if (textPlayerTitle != null && textJudul != null) {
 				textPlayerTitle.setText(textJudul.getText().toString());
-				textPlayerTitle.setTextSize(17f);
+				textPlayerTitle.setTextSize(16f);
 				textPlayerTitle.setVisibility(View.VISIBLE);
 			}
 
@@ -1791,19 +1928,19 @@ public class WatchActivity extends AppCompatActivity {
 				btnFullscreenEpisodes.setVisibility(View.VISIBLE);
 			}
 
-			int sideMarginFull = (int) (32 * density);
+			int sideMarginFull = (int) (40 * density);
 			if (btnPrevEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
-				lp.width = (int) (42 * density);
-				lp.height = (int) (42 * density);
+				lp.width = (int) (40 * density);
+				lp.height = (int) (40 * density);
 				lp.setMargins(sideMarginFull, 0, 0, 0);
 				btnPrevEpisode.setLayoutParams(lp);
 			}
 
 			if (btnNextEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnNextEpisode.getLayoutParams();
-				lp.width = (int) (42 * density);
-				lp.height = (int) (42 * density);
+				lp.width = (int) (40 * density);
+				lp.height = (int) (40 * density);
 				lp.setMargins(0, 0, sideMarginFull, 0);
 				btnNextEpisode.setLayoutParams(lp);
 			}
@@ -1811,61 +1948,62 @@ public class WatchActivity extends AppCompatActivity {
 			int gapCenterFull = (int) (36 * density);
 			if (btnRewind != null) {
 				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnRewind.getLayoutParams();
-				lp.width = (int) (46 * density);
-				lp.height = (int) (46 * density);
+				lp.width = (int) (44 * density);
+				lp.height = (int) (44 * density);
 				btnRewind.setLayoutParams(lp);
 			}
 
 			if (playContainer != null) {
 				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) playContainer.getLayoutParams();
-				lp.width = (int) (82 * density);
-				lp.height = (int) (82 * density);
+				lp.width = (int) (78 * density);
+				lp.height = (int) (78 * density);
 				lp.setMargins(gapCenterFull, 0, gapCenterFull, 0);
 				playContainer.setLayoutParams(lp);
 			}
 
 			if (playerLoading != null) {
 				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
-				lp.width = (int) (82 * density);
-				lp.height = (int) (82 * density);
+				lp.width = (int) (78 * density);
+				lp.height = (int) (78 * density);
 				playerLoading.setLayoutParams(lp);
 			}
 
 			if (btnPlay != null) {
 				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
-				lp.width = (int) (68 * density);
-				lp.height = (int) (68 * density);
+				lp.width = (int) (64 * density);
+				lp.height = (int) (64 * density);
 				btnPlay.setLayoutParams(lp);
-				int padPlay = (int) (18 * density);
+				int padPlay = (int) (16 * density);
 				btnPlay.setPadding(padPlay, padPlay, padPlay, padPlay);
 			}
 
 			if (btnForward != null) {
 				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnForward.getLayoutParams();
-				lp.width = (int) (46 * density);
-				lp.height = (int) (46 * density);
+				lp.width = (int) (44 * density);
+				lp.height = (int) (44 * density);
 				btnForward.setLayoutParams(lp);
 			}
 
 			if (btnBack != null) {
 				ViewGroup.LayoutParams lp = btnBack.getLayoutParams();
-				lp.width = (int) (32 * density);
-				lp.height = (int) (32 * density);
+				lp.width = (int) (30 * density);
+				lp.height = (int) (30 * density);
 				btnBack.setLayoutParams(lp);
 			}
 			if (btnFullscreen != null) {
 				btnFullscreen.setImageResource(R.drawable.ic_fullscreen_exit);
 				ViewGroup.LayoutParams lp = btnFullscreen.getLayoutParams();
-				lp.width = (int) (28 * density);
-				lp.height = (int) (28 * density);
+				lp.width = (int) (26 * density);
+				lp.height = (int) (26 * density);
 				btnFullscreen.setLayoutParams(lp);
 			}
-			if (btnQuality != null) btnQuality.setTextSize(15f);
-			if (textTime != null) textTime.setTextSize(14f);
+			if (btnQuality != null) btnQuality.setTextSize(14f);
+			if (textTime != null) textTime.setTextSize(13.5f);
 
-			int padHoriz = (int) (36 * density);
-			int padTop = (int) (24 * density);
-			int padBottom = (int) (16 * density);
+			// Safe-area padding ekstra di kiri-kanan (44dp) dan atas (22dp) agar bebas dari bezel & poni kamera
+			int padHoriz = (int) (44 * density);
+			int padTop = (int) (22 * density);
+			int padBottom = (int) (14 * density);
 			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, 0);
 			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
 
@@ -1897,6 +2035,7 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			if (scrollContent != null) scrollContent.setVisibility(View.VISIBLE);
+			if (dividerLine != null) dividerLine.setVisibility(View.VISIBLE);
 			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
 			if (btnFullscreenEpisodes != null) btnFullscreenEpisodes.setVisibility(View.GONE);
 
@@ -2484,6 +2623,8 @@ public class WatchActivity extends AppCompatActivity {
 			conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 			conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8");
 			conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9,id;q=0.8");
+			conn.setRequestProperty("Sec-Fetch-Dest", "iframe");
+			conn.setRequestProperty("Sec-Fetch-Mode", "navigate");
 			if (referer != null && !referer.isEmpty()) {
 				conn.setRequestProperty("Referer", referer);
 			}
@@ -2553,7 +2694,6 @@ public class WatchActivity extends AppCompatActivity {
 		return sb.toString();
 	}
 
-	// Unpacker untuk skrip embed yang di-pack dengan eval(function(p,a,c,k,e,d)...)
 	private String unpackDeanEdwards(String html) {
 		try {
 			Pattern p = Pattern.compile("eval\\(function\\(p,a,c,k,e,[dr]\\)\\{.*?\\}\\('(.*?)',(\\d+),(\\d+),'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL);
@@ -2561,7 +2701,6 @@ public class WatchActivity extends AppCompatActivity {
 			if (m.find()) {
 				String payload = m.group(1);
 				int radix = Integer.parseInt(m.group(2));
-				int count = Integer.parseInt(m.group(3));
 				String[] symtab = m.group(4).split("\\|");
 
 				Pattern wordPat = Pattern.compile("\\b\\w+\\b");
@@ -2584,7 +2723,7 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// EKSTRAKTOR STREAM MULTI-SERVER (BEDAH MENDALAM)
+	// EKSTRAKTOR STREAM MULTI-SERVER + WEBVIEW FALLBACK OTOMATIS
 	// ========================================================
 	public void extractStream(final String server, final String targetUrl) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
@@ -2679,32 +2818,24 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
-									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Gagal parsing video OK.ru", Toast.LENGTH_SHORT).show();
+									playViaWebViewInterceptor(finalTargetUrl);
 								}
 							}
 						});
-					} catch (final Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal memuat OK.ru", Toast.LENGTH_SHORT).show();
-							}
-						});
+					} catch (Exception e) {
+						playViaWebViewInterceptor(finalTargetUrl);
 					}
 				}
 			}).start();
 
 		} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly")) {
-			// ==================== 2. DAILYMOTION (WORKER ?id=... & DIRECT) ====================
+			// ==================== 2. DAILYMOTION (AMBIL ?id=... DARI WORKER / URL) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
 						String dailyId = "";
 						Uri parsedUri = Uri.parse(finalTargetUrl);
-						// Prioritaskan ambil ?id= langsung (sesuai URL worker https://dongflix-dailymotion.zahrulmo01.workers.dev/?id=...)
 						if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
 							dailyId = parsedUri.getQueryParameter("id");
 						} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
@@ -2724,7 +2855,8 @@ public class WatchActivity extends AppCompatActivity {
 							throw new Exception("ID Dailymotion kosong");
 						}
 
-						String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + dailyId.trim() + "?embedder=https%3A%2F%2Fwww.dailymotion.com%2F&app=com.dailymotion.neon";
+						final String cleanDmId = dailyId.trim();
+						String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + cleanDmId + "?embedder=https%3A%2F%2Fwww.dailymotion.com%2F&app=com.dailymotion.neon";
 						String resBody = fetchHttpString(dmApiUrl, "https://www.dailymotion.com/", true);
 
 						final ArrayList<String> dmNames = new ArrayList<>();
@@ -2734,21 +2866,30 @@ public class WatchActivity extends AppCompatActivity {
 							JSONObject metaObj = new JSONObject(resBody);
 							if (metaObj.has("qualities")) {
 								JSONObject qualities = metaObj.getJSONObject("qualities");
-								String[] checkKeys = new String[]{"auto", "1080", "720", "480", "380", "240"};
+								String[] checkKeys = new String[]{"1080", "720", "480", "380", "240", "auto"};
 
 								for (String qKey : checkKeys) {
 									if (qualities.has(qKey)) {
 										JSONArray qArr = qualities.optJSONArray(qKey);
 										if (qArr != null) {
+											String chosenUrl = "";
+											// Prioritaskan MP4 progresif agar tidak putus di MediaPlayer Android
 											for (int idx = 0; idx < qArr.length(); idx++) {
 												JSONObject itemQ = qArr.getJSONObject(idx);
-												String streamUrl = itemQ.optString("url");
-												if (!streamUrl.isEmpty()) {
-													String label = qKey.equalsIgnoreCase("auto") ? "Auto" : qKey + "P";
-													dmNames.add(label);
-													dmUrls.add(streamUrl);
+												String mime = itemQ.optString("type", "");
+												String u = itemQ.optString("url", "");
+												if (!u.isEmpty() && mime.contains("mp4")) {
+													chosenUrl = u;
 													break;
 												}
+											}
+											if (chosenUrl.isEmpty() && qArr.length() > 0) {
+												chosenUrl = qArr.getJSONObject(0).optString("url", "");
+											}
+											if (!chosenUrl.isEmpty()) {
+												String label = qKey.equalsIgnoreCase("auto") ? "Auto" : qKey + "P";
+												dmNames.add(label);
+												dmUrls.add(chosenUrl);
 											}
 										}
 									}
@@ -2771,39 +2912,31 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
-									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Video Dailymotion tidak tersedia", Toast.LENGTH_SHORT).show();
+									// Fallback langsung ke Geo Dailymotion Embed Player jika API blocked
+									playViaWebViewInterceptor("https://geo.dailymotion.com/player.html?video=" + cleanDmId);
 								}
 							}
 						});
 					} catch (Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal memuat Dailymotion", Toast.LENGTH_SHORT).show();
-							}
-						});
+						playViaWebViewInterceptor(finalTargetUrl);
 					}
 				}
 			}).start();
 
 		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
-			// ==================== 3. D.TUBE (HIVE RPC API + IPFS GATEWAY) ====================
+			// ==================== 3. D.TUBE (HIVE RPC API + MULTI GATEWAY IPFS) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
 						String streamFound = "";
 
-						// Pola 1: Hash IPFS langsung (?v=Qm... atau /v/Qm...)
 						Pattern pDirectQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
 						Matcher mDirectQm = pDirectQm.matcher(finalTargetUrl);
 						if (mDirectQm.find()) {
-							streamFound = "https://ipfs.io/ipfs/" + mDirectQm.group(1);
+							streamFound = "https://dweb.link/ipfs/" + mDirectQm.group(1);
 						}
 
-						// Pola 2: URL berbentuk https://emb.d.tube/#!/v/author/permlink atau https://d.tube/#!/v/author/permlink
 						if (streamFound.isEmpty() && finalTargetUrl.contains("/v/")) {
 							String afterV = finalTargetUrl.substring(finalTargetUrl.indexOf("/v/") + 3).split("[?#]")[0];
 							String[] parts = afterV.split("/");
@@ -2828,7 +2961,7 @@ public class WatchActivity extends AppCompatActivity {
 														JSONObject vidObj = ipfsObj.getJSONObject("vid");
 														String hash = vidObj.optString("720", vidObj.optString("480", vidObj.optString("src", "")));
 														if (!hash.isEmpty()) {
-															streamFound = "https://ipfs.io/ipfs/" + hash;
+															streamFound = "https://dweb.link/ipfs/" + hash;
 														}
 													}
 												}
@@ -2839,12 +2972,11 @@ public class WatchActivity extends AppCompatActivity {
 							}
 						}
 
-						// Pola 3: Fallback scraping halaman HTML jika bukan hash fragment
 						if (streamFound.isEmpty()) {
 							String html = fetchHttpString(finalTargetUrl, "https://emb.d.tube/", false);
 							Matcher mQm = pDirectQm.matcher(html);
 							if (mQm.find()) {
-								streamFound = "https://ipfs.io/ipfs/" + mQm.group(1);
+								streamFound = "https://dweb.link/ipfs/" + mQm.group(1);
 							}
 						}
 
@@ -2863,25 +2995,18 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalDtubeUrl, 0);
 								} else {
-									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Stream D.Tube tidak ditemukan", Toast.LENGTH_SHORT).show();
+									playViaWebViewInterceptor(finalTargetUrl);
 								}
 							}
 						});
 					} catch (Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal memuat server D.Tube", Toast.LENGTH_SHORT).show();
-							}
-						});
+						playViaWebViewInterceptor(finalTargetUrl);
 					}
 				}
 			}).start();
 
 		} else if (serverKey.contains("rumble") || lowerUrl.contains("rumble.com")) {
-			// ==================== 4. RUMBLE (API EMBEDJS STRUKTUR BARU & LAMA) ====================
+			// ==================== 4. RUMBLE ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -2913,7 +3038,6 @@ public class WatchActivity extends AppCompatActivity {
 								JSONObject uaObj = rootObj.getJSONObject("ua");
 								String[] resKeys = new String[]{"1080", "720", "480", "360", "240"};
 
-								// Struktur A: ua.mp4["720"].url
 								if (uaObj.has("mp4")) {
 									JSONObject mp4Obj = uaObj.getJSONObject("mp4");
 									for (String rk : resKeys) {
@@ -2927,7 +3051,6 @@ public class WatchActivity extends AppCompatActivity {
 									}
 								}
 
-								// Struktur B: ua["720"].url langsung di bawah ua
 								if (rUrls.isEmpty()) {
 									for (String rk : resKeys) {
 										if (uaObj.has(rk)) {
@@ -2943,7 +3066,6 @@ public class WatchActivity extends AppCompatActivity {
 									}
 								}
 
-								// Struktur C: HLS fallback
 								if (rUrls.isEmpty() && uaObj.has("hls")) {
 									JSONObject hlsObj = uaObj.getJSONObject("hls");
 									if (hlsObj.has("auto")) {
@@ -2982,25 +3104,18 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
-									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Rumble diblokir ISP (aktifkan Private DNS)", Toast.LENGTH_SHORT).show();
+									playViaWebViewInterceptor(finalTargetUrl);
 								}
 							}
 						});
 					} catch (Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Koneksi Rumble gagal", Toast.LENGTH_SHORT).show();
-							}
-						});
+						playViaWebViewInterceptor(finalTargetUrl);
 					}
 				}
 			}).start();
 
 		} else if (serverKey.contains("odysee") || lowerUrl.contains("odysee.com") || lowerUrl.contains("odycdn.com")) {
-			// ==================== 5. ODYSEE (HTML JSON-LD + LBRY API) ====================
+			// ==================== 5. ODYSEE ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -3034,7 +3149,6 @@ public class WatchActivity extends AppCompatActivity {
 							}
 						}
 
-						// Fallback LBRY API jika masih kosong
 						if (streamOdysee.isEmpty() && finalTargetUrl.contains("/embed/")) {
 							String afterEmbed = finalTargetUrl.substring(finalTargetUrl.indexOf("/embed/") + 7).split("[?#]")[0];
 							String lbryUri = "lbry://" + afterEmbed.replace("/", "#");
@@ -3061,25 +3175,18 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalOdyUrl, 0);
 								} else {
-									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Stream Odysee tidak ditemukan", Toast.LENGTH_SHORT).show();
+									playViaWebViewInterceptor(finalTargetUrl);
 								}
 							}
 						});
 					} catch (Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal memproses server Odysee", Toast.LENGTH_SHORT).show();
-							}
-						});
+						playViaWebViewInterceptor(finalTargetUrl);
 					}
 				}
 			}).start();
 
 		} else {
-			// ==================== 6. SERVER EMBED / PACKED JS / DIRECT MP4 / M3U8 ====================
+			// ==================== 6. SERVER EMBED / PACKED JS / WEBVIEW FALLBACK ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -3153,19 +3260,13 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalGenericUrl, 0);
 								} else {
-									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Server " + server + " terproteksi Cloudflare/captcha", Toast.LENGTH_SHORT).show();
+									// Jika terproteksi JS/Cloudflare, langsung jalankan di WebView Interceptor
+									playViaWebViewInterceptor(finalTargetUrl);
 								}
 							}
 						});
 					} catch (Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Server gagal dimuat", Toast.LENGTH_SHORT).show();
-							}
-						});
+						playViaWebViewInterceptor(finalTargetUrl);
 					}
 				}
 			}).start();
