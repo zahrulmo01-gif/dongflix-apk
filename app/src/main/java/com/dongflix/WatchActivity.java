@@ -61,12 +61,12 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -401,7 +401,7 @@ public class WatchActivity extends AppCompatActivity {
 			btnUnlockScreen.setBackground(lockBg);
 		}
 
-		// Tombol Episode di layar penuh TANPA background (transparan polos)
+		// Hapus background tombol Episode di fullscreen
 		if (btnFullscreenEpisodes != null) {
 			btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 		}
@@ -1603,6 +1603,7 @@ public class WatchActivity extends AppCompatActivity {
 						headers.put("Referer", "https://ok.ru/");
 					} else if (cleanUrl.contains("dailymotion") || cleanUrl.contains("dmcdn")) {
 						headers.put("Referer", "https://www.dailymotion.com/");
+						headers.put("Origin", "https://www.dailymotion.com");
 						if (dmSessionCookie != null && !dmSessionCookie.isEmpty()) {
 							headers.put("Cookie", dmSessionCookie);
 						}
@@ -1716,7 +1717,7 @@ public class WatchActivity extends AppCompatActivity {
 								btnPlay.setAlpha(1.0f);
 								btnPlay.setImageResource(R.drawable.ic_play1);
 							}
-							Toast.makeText(WatchActivity.this, "Gagal memutar video, coba ganti server lain", Toast.LENGTH_SHORT).show();
+							Toast.makeText(WatchActivity.this, "Gagal memutar stream, coba server lain", Toast.LENGTH_SHORT).show();
 							return true;
 						}
 					});
@@ -1735,7 +1736,7 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// FULLSCREEN: PERBAIKI SECTION ATAS TERPOTONG & TANPA BG EPISODE
+	// FULLSCREEN: FIX SECTION ATAS TERPOTONG & TANPA BG EPISODE
 	// ========================================================
 	public void toggleFullscreen() {
 		final Window window = getWindow();
@@ -1862,7 +1863,6 @@ public class WatchActivity extends AppCompatActivity {
 			if (btnQuality != null) btnQuality.setTextSize(15f);
 			if (textTime != null) textTime.setTextSize(14f);
 
-			// Beri jarak aman di atas (24dp) & samping (36dp) supaya section atas tidak pernah terpotong bezel/cutout
 			int padHoriz = (int) (36 * density);
 			int padTop = (int) (24 * density);
 			int padBottom = (int) (16 * density);
@@ -2468,13 +2468,13 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// HELPER HTTP REQUEST DENGAN FOLLOW REDIRECT & USER-AGENT
+	// HELPER HTTP GET & POST + JS PACKER UNPACKER
 	// ========================================================
 	private String fetchHttpString(String targetUrl, String referer, boolean saveDmCookie) throws Exception {
 		String currentUrl = targetUrl;
 		HttpURLConnection conn = null;
 
-		for (int redirectCount = 0; redirectCount < 5; redirectCount++) {
+		for (int redirectCount = 0; redirectCount < 6; redirectCount++) {
 			URL url = new URL(currentUrl);
 			conn = (HttpURLConnection) url.openConnection();
 			conn.setRequestMethod("GET");
@@ -2527,8 +2527,64 @@ public class WatchActivity extends AppCompatActivity {
 		return sb.toString();
 	}
 
+	private String postJsonHttp(String apiUrl, String jsonPayload) throws Exception {
+		URL url = new URL(apiUrl);
+		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+		conn.setRequestMethod("POST");
+		conn.setConnectTimeout(10000);
+		conn.setReadTimeout(10000);
+		conn.setDoOutput(true);
+		conn.setRequestProperty("Content-Type", "application/json");
+		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+
+		OutputStream os = conn.getOutputStream();
+		os.write(jsonPayload.getBytes("UTF-8"));
+		os.flush();
+		os.close();
+
+		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+		StringBuilder sb = new StringBuilder();
+		String line;
+		while ((line = reader.readLine()) != null) {
+			sb.append(line);
+		}
+		reader.close();
+		conn.disconnect();
+		return sb.toString();
+	}
+
+	// Unpacker untuk skrip embed yang di-pack dengan eval(function(p,a,c,k,e,d)...)
+	private String unpackDeanEdwards(String html) {
+		try {
+			Pattern p = Pattern.compile("eval\\(function\\(p,a,c,k,e,[dr]\\)\\{.*?\\}\\('(.*?)',(\\d+),(\\d+),'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL);
+			Matcher m = p.matcher(html);
+			if (m.find()) {
+				String payload = m.group(1);
+				int radix = Integer.parseInt(m.group(2));
+				int count = Integer.parseInt(m.group(3));
+				String[] symtab = m.group(4).split("\\|");
+
+				Pattern wordPat = Pattern.compile("\\b\\w+\\b");
+				Matcher wm = wordPat.matcher(payload);
+				StringBuffer sb = new StringBuffer();
+				while (wm.find()) {
+					String word = wm.group();
+					try {
+						int idx = Integer.parseInt(word, radix);
+						if (idx >= 0 && idx < symtab.length && !symtab[idx].isEmpty()) {
+							wm.appendReplacement(sb, Matcher.quoteReplacement(symtab[idx]));
+						}
+					} catch (Exception ignored) {}
+				}
+				wm.appendTail(sb);
+				return sb.toString();
+			}
+		} catch (Exception ignored) {}
+		return "";
+	}
+
 	// ========================================================
-	// EKSTRAKTOR STREAM MULTI-SERVER (OK.RU, DAILYMOTION, DTUBE, RUMBLE, ODYSEE, DLL)
+	// EKSTRAKTOR STREAM MULTI-SERVER (BEDAH MENDALAM)
 	// ========================================================
 	public void extractStream(final String server, final String targetUrl) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
@@ -2641,16 +2697,18 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly")) {
-			// ==================== 2. DAILYMOTION ====================
+			// ==================== 2. DAILYMOTION (WORKER ?id=... & DIRECT) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
 						String dailyId = "";
-						if (finalTargetUrl.contains("video=")) {
-							dailyId = Uri.parse(finalTargetUrl).getQueryParameter("video");
-						} else if (finalTargetUrl.contains("id=")) {
-							dailyId = Uri.parse(finalTargetUrl).getQueryParameter("id");
+						Uri parsedUri = Uri.parse(finalTargetUrl);
+						// Prioritaskan ambil ?id= langsung (sesuai URL worker https://dongflix-dailymotion.zahrulmo01.workers.dev/?id=...)
+						if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
+							dailyId = parsedUri.getQueryParameter("id");
+						} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
+							dailyId = parsedUri.getQueryParameter("video");
 						} else if (finalTargetUrl.contains("/video/")) {
 							String[] parts = finalTargetUrl.split("/video/");
 							if (parts.length > 1) dailyId = parts[1].split("[?&#_]")[0];
@@ -2682,7 +2740,6 @@ public class WatchActivity extends AppCompatActivity {
 									if (qualities.has(qKey)) {
 										JSONArray qArr = qualities.optJSONArray(qKey);
 										if (qArr != null) {
-											// Utamakan format mp4/m3u8 yang didukung MediaPlayer
 											for (int idx = 0; idx < qArr.length(); idx++) {
 												JSONObject itemQ = qArr.getJSONObject(idx);
 												String streamUrl = itemQ.optString("url");
@@ -2732,44 +2789,62 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
-			// ==================== 3. D.TUBE ====================
+			// ==================== 3. D.TUBE (HIVE RPC API + IPFS GATEWAY) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
-						String videoHash = "";
-						if (finalTargetUrl.contains("?v=")) {
-							videoHash = Uri.parse(finalTargetUrl).getQueryParameter("v");
-						} else if (finalTargetUrl.contains("/v/")) {
-							String[] parts = finalTargetUrl.split("/v/");
-							if (parts.length > 1) videoHash = parts[1].split("[/?#]")[0];
-						} else if (finalTargetUrl.contains("#!/v/")) {
-							String[] parts = finalTargetUrl.split("#!/v/");
-							if (parts.length > 1) {
-								String[] segs = parts[1].split("/");
-								videoHash = segs[segs.length - 1];
-							}
-						} else {
-							String cleanPath = finalTargetUrl.split("\\?")[0];
-							videoHash = cleanPath.substring(cleanPath.lastIndexOf('/') + 1);
+						String streamFound = "";
+
+						// Pola 1: Hash IPFS langsung (?v=Qm... atau /v/Qm...)
+						Pattern pDirectQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
+						Matcher mDirectQm = pDirectQm.matcher(finalTargetUrl);
+						if (mDirectQm.find()) {
+							streamFound = "https://ipfs.io/ipfs/" + mDirectQm.group(1);
 						}
 
-						String streamFound = "";
-						if (videoHash != null && videoHash.trim().startsWith("Qm")) {
-							streamFound = "https://ipfs.io/ipfs/" + videoHash.trim();
-						} else {
-							// Jika link D.Tube berupa user/permlink, scrape halaman embed untuk ambil hash IPFS / MP4
-							String html = fetchHttpString(finalTargetUrl, "https://emb.d.tube/", false);
-							Pattern pIpfs = Pattern.compile("(https?://[^\"'\\s]+/ipfs/Qm[a-zA-Z0-9]{44}[^\"'\\s]*)");
-							Matcher mIpfs = pIpfs.matcher(html);
-							if (mIpfs.find()) {
-								streamFound = mIpfs.group(1);
-							} else {
-								Pattern pQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
-								Matcher mQm = pQm.matcher(html);
-								if (mQm.find()) {
-									streamFound = "https://ipfs.io/ipfs/" + mQm.group(1);
+						// Pola 2: URL berbentuk https://emb.d.tube/#!/v/author/permlink atau https://d.tube/#!/v/author/permlink
+						if (streamFound.isEmpty() && finalTargetUrl.contains("/v/")) {
+							String afterV = finalTargetUrl.substring(finalTargetUrl.indexOf("/v/") + 3).split("[?#]")[0];
+							String[] parts = afterV.split("/");
+							if (parts.length >= 2) {
+								String author = parts[0].trim();
+								String permlink = parts[1].trim();
+								String rpcBody = "{\"jsonrpc\":\"2.0\",\"method\":\"condenser_api.get_content\",\"params\":[\"" + author + "\",\"" + permlink + "\"],\"id\":1}";
+								String rpcRes = postJsonHttp("https://api.hive.blog", rpcBody);
+								JSONObject rpcJson = new JSONObject(rpcRes);
+								if (rpcJson.has("result")) {
+									JSONObject resObj = rpcJson.getJSONObject("result");
+									String metaStr = resObj.optString("json_metadata", "");
+									if (!metaStr.isEmpty()) {
+										JSONObject metaJson = new JSONObject(metaStr);
+										if (metaJson.has("video")) {
+											JSONObject videoObj = metaJson.getJSONObject("video");
+											if (videoObj.has("files")) {
+												JSONObject filesObj = videoObj.getJSONObject("files");
+												if (filesObj.has("ipfs")) {
+													JSONObject ipfsObj = filesObj.getJSONObject("ipfs");
+													if (ipfsObj.has("vid")) {
+														JSONObject vidObj = ipfsObj.getJSONObject("vid");
+														String hash = vidObj.optString("720", vidObj.optString("480", vidObj.optString("src", "")));
+														if (!hash.isEmpty()) {
+															streamFound = "https://ipfs.io/ipfs/" + hash;
+														}
+													}
+												}
+											}
+										}
+									}
 								}
+							}
+						}
+
+						// Pola 3: Fallback scraping halaman HTML jika bukan hash fragment
+						if (streamFound.isEmpty()) {
+							String html = fetchHttpString(finalTargetUrl, "https://emb.d.tube/", false);
+							Matcher mQm = pDirectQm.matcher(html);
+							if (mQm.find()) {
+								streamFound = "https://ipfs.io/ipfs/" + mQm.group(1);
 							}
 						}
 
@@ -2806,7 +2881,7 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("rumble") || lowerUrl.contains("rumble.com")) {
-			// ==================== 4. RUMBLE (API EMBEDJS + FALLBACK HTML) ====================
+			// ==================== 4. RUMBLE (API EMBEDJS STRUKTUR BARU & LAMA) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -2836,13 +2911,14 @@ public class WatchActivity extends AppCompatActivity {
 
 							if (rootObj.has("ua")) {
 								JSONObject uaObj = rootObj.getJSONObject("ua");
+								String[] resKeys = new String[]{"1080", "720", "480", "360", "240"};
+
+								// Struktur A: ua.mp4["720"].url
 								if (uaObj.has("mp4")) {
 									JSONObject mp4Obj = uaObj.getJSONObject("mp4");
-									String[] resKeys = new String[]{"1080", "720", "480", "360", "240"};
 									for (String rk : resKeys) {
 										if (mp4Obj.has(rk)) {
-											JSONObject resItem = mp4Obj.getJSONObject(rk);
-											String u = resItem.optString("url");
+											String u = mp4Obj.getJSONObject(rk).optString("url");
 											if (!u.isEmpty()) {
 												rNames.add(rk + "P");
 												rUrls.add(u);
@@ -2850,6 +2926,24 @@ public class WatchActivity extends AppCompatActivity {
 										}
 									}
 								}
+
+								// Struktur B: ua["720"].url langsung di bawah ua
+								if (rUrls.isEmpty()) {
+									for (String rk : resKeys) {
+										if (uaObj.has(rk)) {
+											JSONObject resObj = uaObj.optJSONObject(rk);
+											if (resObj != null) {
+												String u = resObj.optString("url");
+												if (!u.isEmpty()) {
+													rNames.add(rk + "P");
+													rUrls.add(u);
+												}
+											}
+										}
+									}
+								}
+
+								// Struktur C: HLS fallback
 								if (rUrls.isEmpty() && uaObj.has("hls")) {
 									JSONObject hlsObj = uaObj.getJSONObject("hls");
 									if (hlsObj.has("auto")) {
@@ -2863,7 +2957,6 @@ public class WatchActivity extends AppCompatActivity {
 							}
 						}
 
-						// Fallback jika format embedId berbeda
 						if (rUrls.isEmpty()) {
 							String html = fetchHttpString(finalTargetUrl, "https://rumble.com/", false);
 							Pattern pMp4 = Pattern.compile("(https?://[a-zA-Z0-9.-]+\\.rumble\\.com/[^\"'\\s]+\\.mp4)");
@@ -2890,7 +2983,7 @@ public class WatchActivity extends AppCompatActivity {
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Gagal memuat Rumble (coba aktifkan Private DNS)", Toast.LENGTH_SHORT).show();
+									Toast.makeText(WatchActivity.this, "Rumble diblokir ISP (aktifkan Private DNS)", Toast.LENGTH_SHORT).show();
 								}
 							}
 						});
@@ -2907,7 +3000,7 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("odysee") || lowerUrl.contains("odysee.com") || lowerUrl.contains("odycdn.com")) {
-			// ==================== 5. ODYSEE ====================
+			// ==================== 5. ODYSEE (HTML JSON-LD + LBRY API) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -2938,6 +3031,18 @@ public class WatchActivity extends AppCompatActivity {
 								if (mMedia.find()) {
 									streamOdysee = mMedia.group(1).replace("\\/", "/");
 								}
+							}
+						}
+
+						// Fallback LBRY API jika masih kosong
+						if (streamOdysee.isEmpty() && finalTargetUrl.contains("/embed/")) {
+							String afterEmbed = finalTargetUrl.substring(finalTargetUrl.indexOf("/embed/") + 7).split("[?#]")[0];
+							String lbryUri = "lbry://" + afterEmbed.replace("/", "#");
+							String lbryReq = "{\"method\":\"get\",\"params\":{\"uri\":\"" + lbryUri + "\"}}";
+							String lbryRes = postJsonHttp("https://api.na-backend.odysee.com/api/v1/proxy", lbryReq);
+							JSONObject lbryJson = new JSONObject(lbryRes);
+							if (lbryJson.has("result")) {
+								streamOdysee = lbryJson.getJSONObject("result").optString("streaming_url", "");
 							}
 						}
 
@@ -2974,7 +3079,7 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else {
-			// ==================== 6. SERVER EMBED / DIRECT MP4 / M3U8 LAINNYA ====================
+			// ==================== 6. SERVER EMBED / PACKED JS / DIRECT MP4 / M3U8 ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -2998,34 +3103,35 @@ public class WatchActivity extends AppCompatActivity {
 						}
 
 						String html = fetchHttpString(finalTargetUrl, finalTargetUrl, false);
+						String unpacked = unpackDeanEdwards(html);
+						String combinedSource = html + "\n" + unpacked;
 						String streamFound = "";
 
-						// Cari tag <source src="..."> atau <video src="...">
 						Pattern pSource = Pattern.compile("<(?:source|video)[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-						Matcher mSource = pSource.matcher(html);
+						Matcher mSource = pSource.matcher(combinedSource);
 						if (mSource.find()) {
 							streamFound = mSource.group(1).replace("&amp;", "&");
 						}
 
-						// Jika belum ketemu, cari pola URL .m3u8 atau .mp4 di dalam JavaScript halaman
 						if (streamFound.isEmpty()) {
 							Pattern pMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE);
-							Matcher mMedia = pMedia.matcher(html);
+							Matcher mMedia = pMedia.matcher(combinedSource);
 							if (mMedia.find()) {
 								streamFound = mMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
 							}
 						}
 
-						// Jika halaman punya iframe kedua di dalamnya, ikuti 1 tingkat lagi
 						if (streamFound.isEmpty()) {
 							Pattern pIframe = Pattern.compile("<iframe[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-							Matcher mIframe = pIframe.matcher(html);
+							Matcher mIframe = pIframe.matcher(combinedSource);
 							if (mIframe.find()) {
 								String innerUrl = mIframe.group(1).replace("&amp;", "&");
 								currentStreamReferer = innerUrl;
 								String innerHtml = fetchHttpString(innerUrl, finalTargetUrl, false);
+								String innerUnpacked = unpackDeanEdwards(innerHtml);
+								String innerCombined = innerHtml + "\n" + innerUnpacked;
 								Pattern pInnerMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE);
-								Matcher mInnerMedia = pInnerMedia.matcher(innerHtml);
+								Matcher mInnerMedia = pInnerMedia.matcher(innerCombined);
 								if (mInnerMedia.find()) {
 									streamFound = mInnerMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
 								}
@@ -3048,7 +3154,7 @@ public class WatchActivity extends AppCompatActivity {
 									playVideoUrl(finalGenericUrl, 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Server " + server + " belum mendukung direct stream", Toast.LENGTH_SHORT).show();
+									Toast.makeText(WatchActivity.this, "Server " + server + " terproteksi Cloudflare/captcha", Toast.LENGTH_SHORT).show();
 								}
 							}
 						});
