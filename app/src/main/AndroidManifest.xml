@@ -22,8 +22,12 @@
         </activity>
 
         <activity android:name=".DetailActivity" />
-        <activity android:name=".WatchActivity" />
         <activity android:name=".CatalogActivity" android:exported="false" />
+<activity
+    android:name=".WatchActivity"
+    android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+    android:exported="false" />
+
 
         
     </application>
