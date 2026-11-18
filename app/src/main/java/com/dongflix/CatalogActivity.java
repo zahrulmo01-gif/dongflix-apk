@@ -145,7 +145,7 @@ public class CatalogActivity extends AppCompatActivity {
         float density = getResources().getDisplayMetrics().density;
 
         int itemHeightPx = (int) (222 * density);
-        int verticalSpacingPx = (int) (12 * density);
+        int verticalSpacingPx = (int) (16 * density);
 
         ViewGroup.LayoutParams params = gridView.getLayoutParams();
         params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + (int) (20 * density);
