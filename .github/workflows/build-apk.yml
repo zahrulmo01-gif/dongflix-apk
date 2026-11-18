@@ -19,10 +19,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      # Simpan & ambil otomatis keystore yang sama untuk setiap build
       - name: Cache Dongflix Keystore
         id: cache-keystore
         uses: actions/cache@v4
@@ -30,7 +26,6 @@ jobs:
           path: app/dongflix.jks
           key: dongflix-signing-keystore-v1
 
-      # Hanya berjalan 1x saat build pertama kali (jika file belum ada di cache)
       - name: Auto-Generate Keystore (First Time Only)
         if: steps.cache-keystore.outputs.cache-hit != 'true'
         run: |
