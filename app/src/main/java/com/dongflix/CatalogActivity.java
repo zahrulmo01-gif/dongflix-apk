@@ -144,11 +144,11 @@ public class CatalogActivity extends AppCompatActivity {
         int rows = (int) Math.ceil((double) items / columns);
         float density = getResources().getDisplayMetrics().density;
 
-        int itemHeightPx = (int) (211 * density);
+        int itemHeightPx = (int) (222 * density);
         int verticalSpacingPx = (int) (12 * density);
 
         ViewGroup.LayoutParams params = gridView.getLayoutParams();
-        params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + (int) (16 * density);
+        params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + (int) (20 * density);
         gridView.setLayoutParams(params);
         gridView.requestLayout();
     }
