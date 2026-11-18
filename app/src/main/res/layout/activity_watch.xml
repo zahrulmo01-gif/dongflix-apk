@@ -5,7 +5,7 @@
 	xmlns:tools="http://schemas.android.com/tools"
 	android:layout_width="match_parent"
 	android:layout_height="match_parent"
-	android:background="#000000"
+	android:background="#0D0D10"
 	android:fitsSystemWindows="true"
 	android:orientation="vertical">
 
@@ -162,7 +162,7 @@
 						android:layout_width="76dp"
 						android:layout_height="76dp"
 						android:indeterminate="true"
-						android:indeterminateTint="#3B82F6"
+						android:indeterminateTint="#FFFFFF"
 						android:layout_gravity="center"
 						android:visibility="gone" />
 
@@ -268,13 +268,13 @@
 		android:id="@+id/view139"
 		android:layout_width="match_parent"
 		android:layout_height="1dp"
-		android:background="#141824" />
+		android:background="#1A1A22" />
 
 	<androidx.core.widget.NestedScrollView
 		android:id="@+id/vscroll16"
 		android:layout_width="match_parent"
 		android:layout_height="0dp"
-		android:background="#000000"
+		android:background="#0D0D10"
 		android:layout_weight="1"
 		android:overScrollMode="never">
 
@@ -283,118 +283,127 @@
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:paddingLeft="16dp"
-			android:paddingTop="20dp"
+			android:paddingTop="18dp"
 			android:paddingRight="16dp"
 			android:paddingBottom="36dp"
 			android:orientation="vertical">
 
+			<!-- Header Judul & Metadata Ala YouTube (Klik untuk Detail) -->
 			<LinearLayout
-				android:id="@+id/linear141"
+				android:id="@+id/layoutHeaderDetail"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:orientation="horizontal">
+				android:orientation="vertical">
 
-				<androidx.cardview.widget.CardView
-					android:id="@+id/cardview1"
-					android:layout_width="70dp"
-					android:layout_height="70dp"
-					app:cardBackgroundColor="#0A0D14"
-					app:cardCornerRadius="35dp"
-					app:cardElevation="0dp">
-
-					<ImageView
-						android:id="@+id/imagePoster"
-						android:layout_width="match_parent"
-						android:layout_height="match_parent"
-						android:src="@drawable/default_image"
-						android:scaleType="centerCrop" />
-				</androidx.cardview.widget.CardView>
-
-				<LinearLayout
-					android:id="@+id/linear142"
+				<TextView
+					android:id="@+id/textJudul"
 					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
-					android:layout_marginLeft="16dp"
-					android:orientation="vertical">
+					android:text="Memuat Judul..."
+					android:textSize="19sp"
+					android:textStyle="bold"
+					android:textColor="#FFFFFF"
+					android:ellipsize="end"
+					android:maxLines="2" />
+
+				<LinearLayout
+					android:id="@+id/linear143"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="8dp"
+					android:gravity="center_vertical"
+					android:orientation="horizontal">
 
 					<TextView
-						android:id="@+id/textJudul"
-						android:layout_width="match_parent"
-						android:layout_height="wrap_content"
-						android:text="Memuat Judul..."
-						android:textSize="17sp"
-						android:textStyle="bold"
-						android:textColor="#FFFFFF"
-						android:ellipsize="end"
-						android:maxLines="2" />
-
-					<LinearLayout
-						android:id="@+id/linear143"
+						android:id="@+id/textRating"
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
-						android:layout_marginTop="10dp"
+						android:text="Donghua"
+						android:textSize="12sp"
+						android:textStyle="bold"
+						android:textColor="#A1A1AA" />
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginLeft="6dp"
+						android:layout_marginRight="6dp"
+						android:text="•"
+						android:textSize="12sp"
+						android:textColor="#71717A" />
+
+					<TextView
+						android:id="@+id/textYear"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:text="2026"
+						android:textSize="12sp"
+						android:textColor="#A1A1AA" />
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginLeft="6dp"
+						android:layout_marginRight="6dp"
+						android:text="•"
+						android:textSize="12sp"
+						android:textColor="#71717A" />
+
+					<TextView
+						android:id="@+id/textGenre"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:paddingLeft="8dp"
+						android:paddingTop="3dp"
+						android:paddingRight="8dp"
+						android:paddingBottom="3dp"
+						android:text="Action"
+						android:textSize="11sp"
+						android:textStyle="bold"
+						android:textColor="#FFFFFF" />
+
+					<LinearLayout
+						android:id="@+id/btnOpenDetail"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginLeft="8dp"
+						android:paddingLeft="6dp"
+						android:paddingTop="3dp"
+						android:paddingRight="6dp"
+						android:paddingBottom="3dp"
 						android:gravity="center_vertical"
 						android:orientation="horizontal">
 
 						<TextView
-							android:id="@+id/textRating"
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
-							android:paddingLeft="8dp"
-							android:paddingTop="4dp"
-							android:paddingRight="8dp"
-							android:paddingBottom="4dp"
-							android:text="Donghua"
-							android:textSize="11sp"
+							android:text="Detail"
+							android:textSize="12sp"
 							android:textStyle="bold"
-							android:textColor="#FFC107" />
+							android:textColor="#FFFFFF" />
 
-						<TextView
-							android:id="@+id/textYear"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="8dp"
-							android:paddingLeft="8dp"
-							android:paddingTop="4dp"
-							android:paddingRight="8dp"
-							android:paddingBottom="4dp"
-							android:text="2026"
-							android:textSize="11sp"
-							android:textColor="#94A3B8" />
-
-						<TextView
-							android:id="@+id/textGenre"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="8dp"
-							android:paddingLeft="8dp"
-							android:paddingTop="4dp"
-							android:paddingRight="8dp"
-							android:paddingBottom="4dp"
-							android:text="Action"
-							android:textSize="11sp"
-							android:textColor="#94A3B8" />
+						<ImageView
+							android:layout_width="14dp"
+							android:layout_height="14dp"
+							android:layout_marginLeft="2dp"
+							android:src="@drawable/ic_chevron_right" />
 					</LinearLayout>
-
-					<TextView
-						android:id="@+id/textSinopsis"
-						android:layout_width="match_parent"
-						android:layout_height="wrap_content"
-						android:layout_marginTop="12dp"
-						android:text="Memuat sinopsis..."
-						android:textSize="12sp"
-						android:textColor="#858B9E"
-						android:ellipsize="end"
-						android:lineSpacingExtra="3dp"
-						android:maxLines="4" />
 				</LinearLayout>
+
+				<!-- Sinopsis disembunyikan dari layar utama, tampil di Bottom Sheet Detail -->
+				<TextView
+					android:id="@+id/textSinopsis"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:visibility="gone" />
 			</LinearLayout>
 
+			<!-- Bar Tombol Pill Monokrom Putih -->
 			<HorizontalScrollView
 				android:id="@+id/scrollActionButtons"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="18dp"
+				android:layout_marginTop="16dp"
 				android:scrollbars="none"
 				android:overScrollMode="never">
 
@@ -407,11 +416,9 @@
 					<LinearLayout
 						android:id="@+id/btnActionServer"
 						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
+						android:layout_height="38dp"
 						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
 						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
 						android:gravity="center_vertical"
 						android:orientation="horizontal">
 
@@ -435,12 +442,10 @@
 					<LinearLayout
 						android:id="@+id/btnActionDownload"
 						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
+						android:layout_height="38dp"
 						android:layout_marginLeft="10dp"
 						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
 						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
 						android:gravity="center_vertical"
 						android:orientation="horizontal">
 
@@ -455,7 +460,7 @@
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
 							android:layout_marginLeft="8dp"
-							android:text="Download"
+							android:text="Unduh"
 							android:textSize="13sp"
 							android:textStyle="bold"
 							android:textColor="#FFFFFF" />
@@ -464,12 +469,10 @@
 					<LinearLayout
 						android:id="@+id/btnActionShare"
 						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
+						android:layout_height="38dp"
 						android:layout_marginLeft="10dp"
 						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
 						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
 						android:gravity="center_vertical"
 						android:orientation="horizontal">
 
@@ -484,7 +487,7 @@
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
 							android:layout_marginLeft="8dp"
-							android:text="Share"
+							android:text="Bagikan"
 							android:textSize="13sp"
 							android:textStyle="bold"
 							android:textColor="#FFFFFF" />
@@ -493,12 +496,10 @@
 					<LinearLayout
 						android:id="@+id/btnActionReport"
 						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
+						android:layout_height="38dp"
 						android:layout_marginLeft="10dp"
 						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
 						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
 						android:gravity="center_vertical"
 						android:orientation="horizontal">
 
@@ -513,7 +514,7 @@
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
 							android:layout_marginLeft="8dp"
-							android:text="Report"
+							android:text="Laporkan"
 							android:textSize="13sp"
 							android:textStyle="bold"
 							android:textColor="#FFFFFF" />
@@ -521,38 +522,81 @@
 				</LinearLayout>
 			</HorizontalScrollView>
 
+			<!-- Header Episode List dengan Filter Terbaru/Terlama & Lihat Semua -->
 			<LinearLayout
 				android:id="@+id/linear144"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="20dp"
+				android:layout_marginTop="22dp"
+				android:gravity="center_vertical"
 				android:orientation="horizontal">
 
 				<TextView
 					android:id="@+id/textview83"
 					android:layout_width="0dp"
 					android:layout_height="wrap_content"
-					android:text="Episode List"
+					android:text="Semua Episode"
 					android:textSize="16sp"
 					android:textStyle="bold"
 					android:textColor="#FFFFFF"
 					android:layout_weight="1" />
 
-				<TextView
-					android:id="@+id/textview85"
+				<LinearLayout
+					android:id="@+id/btnSortEpisodes"
 					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:text="Lihat Semua"
-					android:textSize="14sp"
-					android:textStyle="bold"
-					android:textColor="#3B82F6" />
+					android:layout_height="30dp"
+					android:layout_marginRight="10dp"
+					android:paddingLeft="10dp"
+					android:paddingRight="10dp"
+					android:gravity="center_vertical"
+					android:orientation="horizontal">
+
+					<ImageView
+						android:layout_width="13dp"
+						android:layout_height="13dp"
+						android:src="@drawable/ic_sort" />
+
+					<TextView
+						android:id="@+id/textSortEpisodes"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginLeft="5dp"
+						android:text="Terbaru"
+						android:textSize="12sp"
+						android:textStyle="bold"
+						android:textColor="#FFFFFF" />
+				</LinearLayout>
+
+				<LinearLayout
+					android:id="@+id/btnSeeAllContainer"
+					android:layout_width="wrap_content"
+					android:layout_height="30dp"
+					android:gravity="center_vertical"
+					android:orientation="horizontal">
+
+					<TextView
+						android:id="@+id/textview85"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:text="Lihat Semua"
+						android:textSize="12sp"
+						android:textStyle="bold"
+						android:textColor="#A1A1AA" />
+
+					<ImageView
+						android:layout_width="14dp"
+						android:layout_height="14dp"
+						android:layout_marginLeft="2dp"
+						android:src="@drawable/ic_chevron_right"
+						app:tint="#A1A1AA" />
+				</LinearLayout>
 			</LinearLayout>
 
 			<androidx.recyclerview.widget.RecyclerView
 				android:id="@+id/recyclerEpisode"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="14dp"
+				android:layout_marginTop="12dp"
 				android:clipToPadding="false"
 				android:overScrollMode="never"
 				tools:listitem="@layout/eps_list" />
@@ -561,7 +605,7 @@
 				android:id="@+id/textview84"
 				android:layout_width="wrap_content"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="28dp"
+				android:layout_marginTop="26dp"
 				android:text="Rekomendasi Serupa"
 				android:textSize="16sp"
 				android:textStyle="bold"
@@ -571,7 +615,7 @@
 				android:id="@+id/recyclerRekomendasi"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="14dp"
+				android:layout_marginTop="12dp"
 				android:nestedScrollingEnabled="false"
 				android:overScrollMode="never" />
 		</LinearLayout>
