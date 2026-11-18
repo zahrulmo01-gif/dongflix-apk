@@ -24,7 +24,8 @@ import java.util.HashMap;
 public class CatalogActivity extends AppCompatActivity {
 
     private GridView gridCatalog;
-    private TextView btnLoadMore, btnBack;
+    private TextView btnLoadMore;
+    private View btnBack;
 
     private RequestNetwork req;
     private RequestNetwork.RequestListener reqListener;
@@ -138,19 +139,36 @@ public class CatalogActivity extends AppCompatActivity {
         }
     }
 
-    private void adjustGridHeight(GridView gridView, int columns) {
-        if (gridView.getAdapter() == null) return;
-        int items = gridView.getAdapter().getCount();
-        int rows = (int) Math.ceil((double) items / columns);
-        float density = getResources().getDisplayMetrics().density;
+    private void adjustGridHeight(final GridView gridView, final int columns) {
+        gridView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (gridView.getAdapter() == null || gridView.getAdapter().getCount() == 0) return;
 
-        int itemHeightPx = (int) (222 * density);
-        int verticalSpacingPx = (int) (16 * density);
+                int items = gridView.getAdapter().getCount();
+                int rows = (int) Math.ceil((double) items / columns);
+                float density = getResources().getDisplayMetrics().density;
 
-        ViewGroup.LayoutParams params = gridView.getLayoutParams();
-        params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + (int) (20 * density);
-        gridView.setLayoutParams(params);
-        gridView.requestLayout();
+                int horizontalSpacingPx = (int) (12 * density);
+                int verticalSpacingPx = (int) (16 * density);
+                int paddingHorizontal = gridView.getPaddingLeft() + gridView.getPaddingRight();
+
+                int availableWidth = gridView.getWidth() - paddingHorizontal - (horizontalSpacingPx * (columns - 1));
+                int columnWidth = availableWidth / columns;
+
+                View itemView = gridView.getAdapter().getView(0, null, gridView);
+                itemView.measure(
+                    View.MeasureSpec.makeMeasureSpec(columnWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                );
+
+                int exactItemHeight = itemView.getMeasuredHeight();
+                ViewGroup.LayoutParams params = gridView.getLayoutParams();
+                params.height = (exactItemHeight * rows) + (verticalSpacingPx * Math.max(0, rows - 1));
+                gridView.setLayoutParams(params);
+                gridView.requestLayout();
+            }
+        });
     }
 
     public class CatalogAdapter extends BaseAdapter {
