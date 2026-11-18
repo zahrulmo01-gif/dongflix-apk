@@ -66,7 +66,9 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.regex.Matcher;
@@ -110,6 +112,7 @@ public class WatchActivity extends AppCompatActivity {
 	public Runnable autoDowngradeRunnable;
 	public boolean areControlsVisible = true;
 	public String currentPlayingUrl = "";
+	public String currentStreamReferer = "";
 	public boolean isFullscreen = false;
 	public int savedSeekPosition = 0;
 
@@ -398,11 +401,9 @@ public class WatchActivity extends AppCompatActivity {
 			btnUnlockScreen.setBackground(lockBg);
 		}
 
+		// Tombol Episode di layar penuh TANPA background (transparan polos)
 		if (btnFullscreenEpisodes != null) {
-			GradientDrawable fsEpBg = new GradientDrawable();
-			fsEpBg.setCornerRadius(100f);
-			fsEpBg.setColor(0x801E212B);
-			btnFullscreenEpisodes.setBackground(fsEpBg);
+			btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 		}
 
 		TextView[] badges = {textRating, textYear, textGenre};
@@ -643,9 +644,6 @@ public class WatchActivity extends AppCompatActivity {
 		return header;
 	}
 
-	// ========================================================
-	// DIALOG: PENGATURAN PEMUTARAN
-	// ========================================================
 	public void showSettingsBottomSheet() {
 		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
@@ -716,9 +714,6 @@ public class WatchActivity extends AppCompatActivity {
 		dialogHolder[0] = createAdaptiveSheetDialog(root);
 	}
 
-	// ========================================================
-	// DIALOG: SINOPSIS & DETAIL
-	// ========================================================
 	public void showDetailBottomSheet() {
 		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
@@ -869,9 +864,6 @@ public class WatchActivity extends AppCompatActivity {
 		dialogHolder[0] = createAdaptiveSheetDialog(root);
 	}
 
-	// ========================================================
-	// DIALOG OPSI BERSIH (KUALITAS, KECEPATAN, SERVER)
-	// ========================================================
 	private void showCleanOptionBottomSheet(String title, ArrayList<String> optionTitles, int activeIdx, final OnSheetItemClickListener listener) {
 		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
@@ -975,9 +967,6 @@ public class WatchActivity extends AppCompatActivity {
 		void onItemClick(int index);
 	}
 
-	// ========================================================
-	// DIALOG: SEMUA EPISODE
-	// ========================================================
 	public void showAllEpisodesBottomSheet() {
 		if (episodeList == null || episodeList.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
@@ -1608,7 +1597,7 @@ public class WatchActivity extends AppCompatActivity {
 					}
 
 					Map<String, String> headers = new HashMap<>();
-					headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+					headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
 					if (cleanUrl.contains("ok.ru") || cleanUrl.contains("odnoklassniki")) {
 						headers.put("Referer", "https://ok.ru/");
@@ -1617,6 +1606,12 @@ public class WatchActivity extends AppCompatActivity {
 						if (dmSessionCookie != null && !dmSessionCookie.isEmpty()) {
 							headers.put("Cookie", dmSessionCookie);
 						}
+					} else if (cleanUrl.contains("rumble")) {
+						headers.put("Referer", "https://rumble.com/");
+					} else if (cleanUrl.contains("odysee") || cleanUrl.contains("odycdn")) {
+						headers.put("Referer", "https://odysee.com/");
+					} else if (currentStreamReferer != null && !currentStreamReferer.isEmpty()) {
+						headers.put("Referer", currentStreamReferer);
 					}
 
 					headers.put("Accept", "*/*");
@@ -1721,6 +1716,7 @@ public class WatchActivity extends AppCompatActivity {
 								btnPlay.setAlpha(1.0f);
 								btnPlay.setImageResource(R.drawable.ic_play1);
 							}
+							Toast.makeText(WatchActivity.this, "Gagal memutar video, coba ganti server lain", Toast.LENGTH_SHORT).show();
 							return true;
 						}
 					});
@@ -1738,15 +1734,24 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
+	// ========================================================
+	// FULLSCREEN: PERBAIKI SECTION ATAS TERPOTONG & TANPA BG EPISODE
+	// ========================================================
 	public void toggleFullscreen() {
 		final Window window = getWindow();
 		final View decorView = window.getDecorView();
 		final View scrollContent = findViewById(R.id.vscroll16);
 		final FrameLayout playContainer = findViewById(R.id.frame_layout5);
+		final View rootContainer = (layoutPlayer != null && layoutPlayer.getParent() instanceof View) ? (View) layoutPlayer.getParent() : null;
 		final float density = getResources().getDisplayMetrics().density;
 
 		if (!isFullscreen) {
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+
+			if (rootContainer != null) {
+				rootContainer.setFitsSystemWindows(false);
+				rootContainer.setPadding(0, 0, 0, 0);
+			}
 
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 				WindowManager.LayoutParams lp = window.getAttributes();
@@ -1755,7 +1760,6 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-			window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 
 			decorView.setSystemUiVisibility(
 				View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -1782,6 +1786,7 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			if (btnFullscreenEpisodes != null) {
+				btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 				btnFullscreenEpisodes.setVisibility(View.VISIBLE);
 			}
 
@@ -1857,15 +1862,21 @@ public class WatchActivity extends AppCompatActivity {
 			if (btnQuality != null) btnQuality.setTextSize(15f);
 			if (textTime != null) textTime.setTextSize(14f);
 
-			int padHoriz = (int) (32 * density);
-			int padTop = (int) (18 * density);
-			int padBottom = (int) (14 * density);
+			// Beri jarak aman di atas (24dp) & samping (36dp) supaya section atas tidak pernah terpotong bezel/cutout
+			int padHoriz = (int) (36 * density);
+			int padTop = (int) (24 * density);
+			int padBottom = (int) (16 * density);
 			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, 0);
 			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
 
 			isFullscreen = true;
 		} else {
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
+			if (rootContainer != null) {
+				rootContainer.setFitsSystemWindows(true);
+				rootContainer.requestFitSystemWindows();
+			}
 
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 				WindowManager.LayoutParams lp = window.getAttributes();
@@ -2456,6 +2467,69 @@ public class WatchActivity extends AppCompatActivity {
 		updateEpisodeNavButtons();
 	}
 
+	// ========================================================
+	// HELPER HTTP REQUEST DENGAN FOLLOW REDIRECT & USER-AGENT
+	// ========================================================
+	private String fetchHttpString(String targetUrl, String referer, boolean saveDmCookie) throws Exception {
+		String currentUrl = targetUrl;
+		HttpURLConnection conn = null;
+
+		for (int redirectCount = 0; redirectCount < 5; redirectCount++) {
+			URL url = new URL(currentUrl);
+			conn = (HttpURLConnection) url.openConnection();
+			conn.setRequestMethod("GET");
+			conn.setConnectTimeout(10000);
+			conn.setReadTimeout(10000);
+			conn.setInstanceFollowRedirects(false);
+			conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+			conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8");
+			conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9,id;q=0.8");
+			if (referer != null && !referer.isEmpty()) {
+				conn.setRequestProperty("Referer", referer);
+			}
+
+			if (saveDmCookie) {
+				Map<String, List<String>> headerFields = conn.getHeaderFields();
+				List<String> cookiesHeader = headerFields.get("Set-Cookie");
+				if (cookiesHeader != null && !cookiesHeader.isEmpty()) {
+					StringBuilder cookieSb = new StringBuilder();
+					for (String c : cookiesHeader) {
+						String mainPart = c.split(";")[0];
+						if (cookieSb.length() > 0) cookieSb.append("; ");
+						cookieSb.append(mainPart);
+					}
+					dmSessionCookie = cookieSb.toString();
+				}
+			}
+
+			int code = conn.getResponseCode();
+			if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_SEE_OTHER || code == 307 || code == 308) {
+				String loc = conn.getHeaderField("Location");
+				conn.disconnect();
+				if (loc == null || loc.isEmpty()) break;
+				if (loc.startsWith("//")) loc = "https:" + loc;
+				else if (loc.startsWith("/")) loc = url.getProtocol() + "://" + url.getHost() + loc;
+				currentUrl = loc;
+				continue;
+			}
+			break;
+		}
+
+		if (conn == null) return "";
+		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+		StringBuilder sb = new StringBuilder();
+		String line;
+		while ((line = reader.readLine()) != null) {
+			sb.append(line).append("\n");
+		}
+		reader.close();
+		conn.disconnect();
+		return sb.toString();
+	}
+
+	// ========================================================
+	// EKSTRAKTOR STREAM MULTI-SERVER (OK.RU, DAILYMOTION, DTUBE, RUMBLE, ODYSEE, DLL)
+	// ========================================================
 	public void extractStream(final String server, final String targetUrl) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
 
@@ -2467,38 +2541,24 @@ public class WatchActivity extends AppCompatActivity {
 		}
 		final String finalTargetUrl = cleanUrl;
 		final String serverKey = (server != null) ? server.trim().toLowerCase() : "";
+		final String lowerUrl = finalTargetUrl.toLowerCase();
+		currentStreamReferer = finalTargetUrl;
 
-		if (serverKey.contains("ok") || serverKey.contains("odnoklassniki")) {
+		if (serverKey.contains("ok") || serverKey.contains("odnoklassniki") || lowerUrl.contains("ok.ru")) {
+			// ==================== 1. OK.RU ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
-					HttpURLConnection conn = null;
-					BufferedReader reader = null;
 					try {
-						URL url = new URL(finalTargetUrl);
-						conn = (HttpURLConnection) url.openConnection();
-						conn.setRequestMethod("GET");
-						conn.setConnectTimeout(8000);
-						conn.setReadTimeout(8000);
-						conn.setInstanceFollowRedirects(true);
-						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-						conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-						conn.setRequestProperty("Referer", "https://ok.ru/");
-
-						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-						String line;
+						String html = fetchHttpString(finalTargetUrl, "https://ok.ru/", false);
 						String foundOptions = "";
-
-						while ((line = reader.readLine()) != null) {
-							int idx = line.indexOf("data-options=");
-							if (idx != -1) {
-								int qStart = idx + 13;
-								char quote = line.charAt(qStart);
-								int qEnd = line.indexOf(quote, qStart + 1);
-								if (qEnd != -1) {
-									foundOptions = line.substring(qStart + 1, qEnd);
-									break;
-								}
+						int idx = html.indexOf("data-options=");
+						if (idx != -1) {
+							int qStart = idx + 13;
+							char quote = html.charAt(qStart);
+							int qEnd = html.indexOf(quote, qStart + 1);
+							if (qEnd != -1) {
+								foundOptions = html.substring(qStart + 1, qEnd);
 							}
 						}
 
@@ -2568,65 +2628,49 @@ public class WatchActivity extends AppCompatActivity {
 								}
 							}
 						});
-
 					} catch (final Exception e) {
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
 								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								String err = (e != null && e.getMessage() != null) ? e.getMessage() : "Koneksi terputus";
-								Toast.makeText(WatchActivity.this, "Error OK.ru: " + err, Toast.LENGTH_SHORT).show();
+								Toast.makeText(WatchActivity.this, "Gagal memuat OK.ru", Toast.LENGTH_SHORT).show();
 							}
 						});
-					} finally {
-						try {
-							if (reader != null) reader.close();
-							if (conn != null) conn.disconnect();
-						} catch (Exception ignored) {}
 					}
 				}
 			}).start();
-		} else if (serverKey.contains("daily") || serverKey.contains("dailymotion")) {
+
+		} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly")) {
+			// ==================== 2. DAILYMOTION ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
-					HttpURLConnection conn = null;
-					BufferedReader reader = null;
 					try {
 						String dailyId = "";
-						if (finalTargetUrl.contains("id=")) {
-							Uri uri = Uri.parse(finalTargetUrl);
-							dailyId = uri.getQueryParameter("id");
+						if (finalTargetUrl.contains("video=")) {
+							dailyId = Uri.parse(finalTargetUrl).getQueryParameter("video");
+						} else if (finalTargetUrl.contains("id=")) {
+							dailyId = Uri.parse(finalTargetUrl).getQueryParameter("id");
 						} else if (finalTargetUrl.contains("/video/")) {
 							String[] parts = finalTargetUrl.split("/video/");
-							if (parts.length > 1) dailyId = parts[1].split("\\?")[0];
+							if (parts.length > 1) dailyId = parts[1].split("[?&#_]")[0];
+						} else if (finalTargetUrl.contains("dai.ly/")) {
+							String[] parts = finalTargetUrl.split("dai.ly/");
+							if (parts.length > 1) dailyId = parts[1].split("[?&#]")[0];
 						} else {
 							String cPath = finalTargetUrl.split("\\?")[0];
 							dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
 						}
 
 						if (dailyId == null || dailyId.trim().isEmpty()) {
-							throw new Exception("ID tidak ditemukan");
+							throw new Exception("ID Dailymotion kosong");
 						}
 
-						String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + dailyId.trim();
-						URL url = new URL(dmApiUrl);
-						conn = (HttpURLConnection) url.openConnection();
-						conn.setRequestMethod("GET");
-						conn.setConnectTimeout(6000);
-						conn.setReadTimeout(6000);
-						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
-						conn.setRequestProperty("Referer", "https://www.dailymotion.com/");
-						conn.setRequestProperty("Origin", "https://www.dailymotion.com");
-
-						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-						StringBuilder sb = new StringBuilder();
-						String line;
-						while ((line = reader.readLine()) != null) sb.append(line);
+						String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + dailyId.trim() + "?embedder=https%3A%2F%2Fwww.dailymotion.com%2F&app=com.dailymotion.neon";
+						String resBody = fetchHttpString(dmApiUrl, "https://www.dailymotion.com/", true);
 
 						final ArrayList<String> dmNames = new ArrayList<>();
 						final ArrayList<String> dmUrls = new ArrayList<>();
-						String resBody = sb.toString();
 
 						if (!resBody.isEmpty()) {
 							JSONObject metaObj = new JSONObject(resBody);
@@ -2637,12 +2681,17 @@ public class WatchActivity extends AppCompatActivity {
 								for (String qKey : checkKeys) {
 									if (qualities.has(qKey)) {
 										JSONArray qArr = qualities.optJSONArray(qKey);
-										if (qArr != null && qArr.length() > 0) {
-											String streamUrl = qArr.getJSONObject(0).optString("url");
-											if (!streamUrl.isEmpty()) {
-												String label = qKey.equalsIgnoreCase("auto") ? "Auto" : qKey + "P";
-												dmNames.add(label);
-												dmUrls.add(streamUrl);
+										if (qArr != null) {
+											// Utamakan format mp4/m3u8 yang didukung MediaPlayer
+											for (int idx = 0; idx < qArr.length(); idx++) {
+												JSONObject itemQ = qArr.getJSONObject(idx);
+												String streamUrl = itemQ.optString("url");
+												if (!streamUrl.isEmpty()) {
+													String label = qKey.equalsIgnoreCase("auto") ? "Auto" : qKey + "P";
+													dmNames.add(label);
+													dmUrls.add(streamUrl);
+													break;
+												}
 											}
 										}
 									}
@@ -2666,158 +2715,207 @@ public class WatchActivity extends AppCompatActivity {
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Stream Dailymotion tidak tersedia", Toast.LENGTH_SHORT).show();
+									Toast.makeText(WatchActivity.this, "Video Dailymotion tidak tersedia", Toast.LENGTH_SHORT).show();
 								}
 							}
 						});
-
-					} catch (final Exception e) {
+					} catch (Exception e) {
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
 								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal memproses Dailymotion", Toast.LENGTH_SHORT).show();
+								Toast.makeText(WatchActivity.this, "Gagal memuat Dailymotion", Toast.LENGTH_SHORT).show();
 							}
 						});
-					} finally {
-						try {
-							if (reader != null) reader.close();
-							if (conn != null) conn.disconnect();
-						} catch (Exception ignored) {}
 					}
 				}
 			}).start();
-		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube")) {
+
+		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
+			// ==================== 3. D.TUBE ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
 						String videoHash = "";
 						if (finalTargetUrl.contains("?v=")) {
-							Uri uri = Uri.parse(finalTargetUrl);
-							videoHash = uri.getQueryParameter("v");
+							videoHash = Uri.parse(finalTargetUrl).getQueryParameter("v");
 						} else if (finalTargetUrl.contains("/v/")) {
 							String[] parts = finalTargetUrl.split("/v/");
 							if (parts.length > 1) videoHash = parts[1].split("[/?#]")[0];
+						} else if (finalTargetUrl.contains("#!/v/")) {
+							String[] parts = finalTargetUrl.split("#!/v/");
+							if (parts.length > 1) {
+								String[] segs = parts[1].split("/");
+								videoHash = segs[segs.length - 1];
+							}
 						} else {
 							String cleanPath = finalTargetUrl.split("\\?")[0];
 							videoHash = cleanPath.substring(cleanPath.lastIndexOf('/') + 1);
 						}
 
-						if (videoHash == null || videoHash.trim().isEmpty()) {
-							throw new Exception("Hash D-Tube tidak ditemukan");
-						}
-
-						final String directDtubeUrl = "https://ipfs.io/ipfs/" + videoHash.trim();
-
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								qualityNames.clear();
-								qualityUrls.clear();
-								qualityNames.add("Default");
-								qualityUrls.add(directDtubeUrl);
-								isAutoQualityMode = true;
-								selectedQualityIndex = 0;
-								updateQualityBadgeText();
-
-								playVideoUrl(directDtubeUrl, 0);
-							}
-						});
-					} catch (Exception e) {
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal memuat server D-Tube", Toast.LENGTH_SHORT).show();
-							}
-						});
-					}
-				}
-			}).start();
-		} else if (serverKey.contains("rumble")) {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					HttpURLConnection conn = null;
-					BufferedReader reader = null;
-					try {
-						URL url = new URL(finalTargetUrl);
-						conn = (HttpURLConnection) url.openConnection();
-						conn.setRequestMethod("GET");
-						conn.setConnectTimeout(6000);
-						conn.setReadTimeout(6000);
-						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
-
-						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-						StringBuilder sb = new StringBuilder();
-						String line;
-						String streamUrl = "";
-
-						while ((line = reader.readLine()) != null) {
-							sb.append(line);
-							if (line.contains(".mp4") && line.contains("https://")) {
-								Pattern p = Pattern.compile("\"url\":\\s*\"(https:[^\"\\s]+?\\.mp4)\"");
-								Matcher m = p.matcher(line);
-								if (m.find()) {
-									streamUrl = m.group(1).replace("\\/", "/");
-									break;
+						String streamFound = "";
+						if (videoHash != null && videoHash.trim().startsWith("Qm")) {
+							streamFound = "https://ipfs.io/ipfs/" + videoHash.trim();
+						} else {
+							// Jika link D.Tube berupa user/permlink, scrape halaman embed untuk ambil hash IPFS / MP4
+							String html = fetchHttpString(finalTargetUrl, "https://emb.d.tube/", false);
+							Pattern pIpfs = Pattern.compile("(https?://[^\"'\\s]+/ipfs/Qm[a-zA-Z0-9]{44}[^\"'\\s]*)");
+							Matcher mIpfs = pIpfs.matcher(html);
+							if (mIpfs.find()) {
+								streamFound = mIpfs.group(1);
+							} else {
+								Pattern pQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
+								Matcher mQm = pQm.matcher(html);
+								if (mQm.find()) {
+									streamFound = "https://ipfs.io/ipfs/" + mQm.group(1);
 								}
 							}
 						}
 
-						if (streamUrl.isEmpty()) {
-							Pattern p2 = Pattern.compile("(https?://[a-zA-Z0-9.-]+\\.rumble\\.com/[^\"'\\s]+\\.mp4)");
-							Matcher m2 = p2.matcher(sb.toString());
-							if (m2.find()) {
-								streamUrl = m2.group(1);
-							}
-						}
-
-						final String finalRumbleUrl = streamUrl;
+						final String finalDtubeUrl = streamFound;
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
-								if (!finalRumbleUrl.isEmpty()) {
+								if (!finalDtubeUrl.isEmpty()) {
 									qualityNames.clear();
 									qualityUrls.clear();
 									qualityNames.add("Default");
-									qualityUrls.add(finalRumbleUrl);
+									qualityUrls.add(finalDtubeUrl);
 									isAutoQualityMode = true;
 									selectedQualityIndex = 0;
 									updateQualityBadgeText();
 
-									playVideoUrl(finalRumbleUrl, 0);
+									playVideoUrl(finalDtubeUrl, 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Rumble membutuhkan Private DNS", Toast.LENGTH_SHORT).show();
+									Toast.makeText(WatchActivity.this, "Stream D.Tube tidak ditemukan", Toast.LENGTH_SHORT).show();
 								}
 							}
 						});
-
 					} catch (Exception e) {
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
 								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								Toast.makeText(WatchActivity.this, "Gagal koneksi Rumble", Toast.LENGTH_SHORT).show();
+								Toast.makeText(WatchActivity.this, "Gagal memuat server D.Tube", Toast.LENGTH_SHORT).show();
 							}
 						});
-					} finally {
-						try {
-							if (reader != null) reader.close();
-							if (conn != null) conn.disconnect();
-						} catch (Exception ignored) {}
 					}
 				}
 			}).start();
-		} else if (serverKey.contains("odysee")) {
+
+		} else if (serverKey.contains("rumble") || lowerUrl.contains("rumble.com")) {
+			// ==================== 4. RUMBLE (API EMBEDJS + FALLBACK HTML) ====================
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						String embedId = "";
+						if (finalTargetUrl.contains("/embed/")) {
+							String[] parts = finalTargetUrl.split("/embed/");
+							if (parts.length > 1) embedId = parts[1].split("[/?#]")[0];
+						}
+
+						final ArrayList<String> rNames = new ArrayList<>();
+						final ArrayList<String> rUrls = new ArrayList<>();
+
+						if (embedId.isEmpty()) {
+							String pageHtml = fetchHttpString(finalTargetUrl, "https://rumble.com/", false);
+							Pattern pEmbed = Pattern.compile("rumble\\.com/embed/([a-zA-Z0-9]+)");
+							Matcher mEmbed = pEmbed.matcher(pageHtml);
+							if (mEmbed.find()) {
+								embedId = mEmbed.group(1);
+							}
+						}
+
+						if (!embedId.isEmpty()) {
+							String apiUrl = "https://rumble.com/embedJS/u3/?request=video&ver=2&v=" + embedId;
+							String jsonStr = fetchHttpString(apiUrl, "https://rumble.com/", false);
+							JSONObject rootObj = new JSONObject(jsonStr);
+
+							if (rootObj.has("ua")) {
+								JSONObject uaObj = rootObj.getJSONObject("ua");
+								if (uaObj.has("mp4")) {
+									JSONObject mp4Obj = uaObj.getJSONObject("mp4");
+									String[] resKeys = new String[]{"1080", "720", "480", "360", "240"};
+									for (String rk : resKeys) {
+										if (mp4Obj.has(rk)) {
+											JSONObject resItem = mp4Obj.getJSONObject(rk);
+											String u = resItem.optString("url");
+											if (!u.isEmpty()) {
+												rNames.add(rk + "P");
+												rUrls.add(u);
+											}
+										}
+									}
+								}
+								if (rUrls.isEmpty() && uaObj.has("hls")) {
+									JSONObject hlsObj = uaObj.getJSONObject("hls");
+									if (hlsObj.has("auto")) {
+										String u = hlsObj.getJSONObject("auto").optString("url");
+										if (!u.isEmpty()) {
+											rNames.add("Auto");
+											rUrls.add(u);
+										}
+									}
+								}
+							}
+						}
+
+						// Fallback jika format embedId berbeda
+						if (rUrls.isEmpty()) {
+							String html = fetchHttpString(finalTargetUrl, "https://rumble.com/", false);
+							Pattern pMp4 = Pattern.compile("(https?://[a-zA-Z0-9.-]+\\.rumble\\.com/[^\"'\\s]+\\.mp4)");
+							Matcher mMp4 = pMp4.matcher(html);
+							if (mMp4.find()) {
+								rNames.add("Default");
+								rUrls.add(mMp4.group(1));
+							}
+						}
+
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (!rUrls.isEmpty()) {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.addAll(rNames);
+									qualityUrls.addAll(rUrls);
+
+									isAutoQualityMode = true;
+									selectedQualityIndex = getRecommendedQualityIndex();
+									updateQualityBadgeText();
+
+									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
+								} else {
+									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+									Toast.makeText(WatchActivity.this, "Gagal memuat Rumble (coba aktifkan Private DNS)", Toast.LENGTH_SHORT).show();
+								}
+							}
+						});
+					} catch (Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								Toast.makeText(WatchActivity.this, "Koneksi Rumble gagal", Toast.LENGTH_SHORT).show();
+							}
+						});
+					}
+				}
+			}).start();
+
+		} else if (serverKey.contains("odysee") || lowerUrl.contains("odysee.com") || lowerUrl.contains("odycdn.com")) {
+			// ==================== 5. ODYSEE ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
 					try {
 						String streamOdysee = "";
-						if (finalTargetUrl.contains("signature=")) {
+						if (finalTargetUrl.contains("odycdn.com") && (finalTargetUrl.contains(".mp4") || finalTargetUrl.contains(".m3u8") || finalTargetUrl.contains("/streams/"))) {
+							streamOdysee = finalTargetUrl;
+						} else if (finalTargetUrl.contains("signature=")) {
 							Uri uri = Uri.parse(finalTargetUrl);
 							String sig = uri.getQueryParameter("signature");
 							String sigTs = uri.getQueryParameter("signature_ts");
@@ -2829,22 +2927,38 @@ public class WatchActivity extends AppCompatActivity {
 						}
 
 						if (streamOdysee.isEmpty()) {
-							streamOdysee = finalTargetUrl;
+							String html = fetchHttpString(finalTargetUrl, "https://odysee.com/", false);
+							Pattern pOdy = Pattern.compile("(https?://player\\.odycdn\\.com/api/v4/streams/[^\"'\\s]+)");
+							Matcher mOdy = pOdy.matcher(html);
+							if (mOdy.find()) {
+								streamOdysee = mOdy.group(1).replace("\\/", "/");
+							} else {
+								Pattern pMedia = Pattern.compile("(https?://[^\"'\\s]+\\.(?:mp4|m3u8)[^\"'\\s]*)");
+								Matcher mMedia = pMedia.matcher(html);
+								if (mMedia.find()) {
+									streamOdysee = mMedia.group(1).replace("\\/", "/");
+								}
+							}
 						}
 
 						final String finalOdyUrl = streamOdysee;
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
-								qualityNames.clear();
-								qualityUrls.clear();
-								qualityNames.add("Default");
-								qualityUrls.add(finalOdyUrl);
-								isAutoQualityMode = true;
-								selectedQualityIndex = 0;
-								updateQualityBadgeText();
+								if (!finalOdyUrl.isEmpty()) {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.add("Default");
+									qualityUrls.add(finalOdyUrl);
+									isAutoQualityMode = true;
+									selectedQualityIndex = 0;
+									updateQualityBadgeText();
 
-								playVideoUrl(finalOdyUrl, 0);
+									playVideoUrl(finalOdyUrl, 0);
+								} else {
+									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+									Toast.makeText(WatchActivity.this, "Stream Odysee tidak ditemukan", Toast.LENGTH_SHORT).show();
+								}
 							}
 						});
 					} catch (Exception e) {
@@ -2858,15 +2972,14 @@ public class WatchActivity extends AppCompatActivity {
 					}
 				}
 			}).start();
+
 		} else {
+			// ==================== 6. SERVER EMBED / DIRECT MP4 / M3U8 LAINNYA ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
-					HttpURLConnection conn = null;
-					BufferedReader reader = null;
 					try {
-						String lowerTarget = finalTargetUrl.toLowerCase();
-						if (lowerTarget.contains(".mp4") || lowerTarget.contains(".m3u8")) {
+						if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m3u8")) {
 							new Handler(Looper.getMainLooper()).post(new Runnable() {
 								@Override
 								public void run() {
@@ -2884,24 +2997,37 @@ public class WatchActivity extends AppCompatActivity {
 							return;
 						}
 
-						URL url = new URL(finalTargetUrl);
-						conn = (HttpURLConnection) url.openConnection();
-						conn.setRequestMethod("GET");
-						conn.setConnectTimeout(5000);
-						conn.setReadTimeout(5000);
-						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
-
-						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-						String line;
+						String html = fetchHttpString(finalTargetUrl, finalTargetUrl, false);
 						String streamFound = "";
 
-						while ((line = reader.readLine()) != null) {
-							if (line.contains(".m3u8") || line.contains(".mp4")) {
-								Pattern p = Pattern.compile("(https?://[^\"'\\s]+\\.(?:m3u8|mp4)[^\"'\\s]*)");
-								Matcher m = p.matcher(line);
-								if (m.find()) {
-									streamFound = m.group(1).replace("\\/", "/");
-									break;
+						// Cari tag <source src="..."> atau <video src="...">
+						Pattern pSource = Pattern.compile("<(?:source|video)[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+						Matcher mSource = pSource.matcher(html);
+						if (mSource.find()) {
+							streamFound = mSource.group(1).replace("&amp;", "&");
+						}
+
+						// Jika belum ketemu, cari pola URL .m3u8 atau .mp4 di dalam JavaScript halaman
+						if (streamFound.isEmpty()) {
+							Pattern pMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE);
+							Matcher mMedia = pMedia.matcher(html);
+							if (mMedia.find()) {
+								streamFound = mMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
+							}
+						}
+
+						// Jika halaman punya iframe kedua di dalamnya, ikuti 1 tingkat lagi
+						if (streamFound.isEmpty()) {
+							Pattern pIframe = Pattern.compile("<iframe[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+							Matcher mIframe = pIframe.matcher(html);
+							if (mIframe.find()) {
+								String innerUrl = mIframe.group(1).replace("&amp;", "&");
+								currentStreamReferer = innerUrl;
+								String innerHtml = fetchHttpString(innerUrl, finalTargetUrl, false);
+								Pattern pInnerMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE);
+								Matcher mInnerMedia = pInnerMedia.matcher(innerHtml);
+								if (mInnerMedia.find()) {
+									streamFound = mInnerMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
 								}
 							}
 						}
@@ -2922,11 +3048,10 @@ public class WatchActivity extends AppCompatActivity {
 									playVideoUrl(finalGenericUrl, 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-									Toast.makeText(WatchActivity.this, "Server " + serverKey + " terproteksi captcha/iklan", Toast.LENGTH_SHORT).show();
+									Toast.makeText(WatchActivity.this, "Server " + server + " belum mendukung direct stream", Toast.LENGTH_SHORT).show();
 								}
 							}
 						});
-
 					} catch (Exception e) {
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
@@ -2935,11 +3060,6 @@ public class WatchActivity extends AppCompatActivity {
 								Toast.makeText(WatchActivity.this, "Server gagal dimuat", Toast.LENGTH_SHORT).show();
 							}
 						});
-					} finally {
-						try {
-							if (reader != null) reader.close();
-							if (conn != null) conn.disconnect();
-						} catch (Exception ignored) {}
 					}
 				}
 			}).start();
