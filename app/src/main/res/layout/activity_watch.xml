@@ -18,7 +18,88 @@
 		<android.view.TextureView
 			android:id="@+id/playerTextureView"
 			android:layout_width="match_parent"
-			android:layout_height="match_parent" />
+			android:layout_height="match_parent"
+			android:layout_gravity="center" />
+
+		<!-- ANIMASI SEEK ALA YOUTUBE (KIRI & KANAN) -->
+		<LinearLayout
+			android:id="@+id/animSeekLeft"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_gravity="center_vertical|left"
+			android:layout_marginLeft="44dp"
+			android:paddingLeft="14dp"
+			android:paddingTop="8dp"
+			android:paddingRight="14dp"
+			android:paddingBottom="8dp"
+			android:gravity="center"
+			android:orientation="vertical"
+			android:alpha="0"
+			android:visibility="gone">
+
+			<TextView
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="« 10 detik"
+				android:textSize="13sp"
+				android:textStyle="bold"
+				android:textColor="#FFFFFF" />
+		</LinearLayout>
+
+		<LinearLayout
+			android:id="@+id/animSeekRight"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_gravity="center_vertical|right"
+			android:layout_marginRight="44dp"
+			android:paddingLeft="14dp"
+			android:paddingTop="8dp"
+			android:paddingRight="14dp"
+			android:paddingBottom="8dp"
+			android:gravity="center"
+			android:orientation="vertical"
+			android:alpha="0"
+			android:visibility="gone">
+
+			<TextView
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="10 detik »"
+				android:textSize="13sp"
+				android:textStyle="bold"
+				android:textColor="#FFFFFF" />
+		</LinearLayout>
+
+		<!-- TOMBOL UNLOCK SAAT LAYAR TERKUNCI -->
+		<LinearLayout
+			android:id="@+id/btnUnlockScreen"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_gravity="top|right"
+			android:layout_marginTop="16dp"
+			android:layout_marginRight="20dp"
+			android:paddingLeft="14dp"
+			android:paddingTop="8dp"
+			android:paddingRight="14dp"
+			android:paddingBottom="8dp"
+			android:gravity="center_vertical"
+			android:orientation="horizontal"
+			android:visibility="gone">
+
+			<ImageView
+				android:layout_width="18dp"
+				android:layout_height="18dp"
+				android:src="@drawable/ic_lock" />
+
+			<TextView
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:layout_marginLeft="6dp"
+				android:text="Terkunci"
+				android:textSize="12sp"
+				android:textStyle="bold"
+				android:textColor="#FFFFFF" />
+		</LinearLayout>
 
 		<RelativeLayout
 			android:id="@+id/playerControlsOverlay"
@@ -42,13 +123,14 @@
 				android:focusable="false"
 				android:layout_alignParentBottom="true" />
 
+			<!-- TOP BAR: BACK, JUDUL (FULLSCREEN), CAST, LOCK, FILL, SETTINGS -->
 			<RelativeLayout
 				android:id="@+id/topBar"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:paddingLeft="16dp"
-				android:paddingTop="12dp"
-				android:paddingRight="16dp"
+				android:paddingLeft="14dp"
+				android:paddingTop="10dp"
+				android:paddingRight="14dp"
 				android:layout_alignParentTop="true">
 
 				<ImageView
@@ -65,8 +147,8 @@
 					android:id="@+id/textPlayerTitle"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:layout_marginLeft="14dp"
-					android:layout_marginRight="14dp"
+					android:layout_marginLeft="12dp"
+					android:layout_marginRight="12dp"
 					android:text="Judul Donghua"
 					android:textSize="15sp"
 					android:textStyle="bold"
@@ -106,75 +188,117 @@
 							android:id="@+id/textview4"
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
-							android:layout_marginLeft="5dp"
+							android:layout_marginLeft="4dp"
 							android:text="Fill"
-							android:textSize="14sp"
+							android:textSize="13sp"
 							android:textStyle="bold"
 							android:textColor="#FFFFFF" />
 					</LinearLayout>
 
-					<TextView
-						android:id="@+id/btnSpeed"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:padding="4dp"
-						android:text="1x"
-						android:textSize="14sp"
-						android:textStyle="bold"
-						android:textColor="#FFFFFF" />
+					<ImageView
+						android:id="@+id/btnCast"
+						android:layout_width="26dp"
+						android:layout_height="26dp"
+						android:layout_marginRight="10dp"
+						android:padding="3dp"
+						android:src="@drawable/ic_cast"
+						android:scaleType="centerInside" />
+
+					<ImageView
+						android:id="@+id/btnLock"
+						android:layout_width="26dp"
+						android:layout_height="26dp"
+						android:layout_marginRight="10dp"
+						android:padding="3dp"
+						android:src="@drawable/ic_lock"
+						android:scaleType="centerInside" />
+
+					<ImageView
+						android:id="@+id/btnSettings"
+						android:layout_width="26dp"
+						android:layout_height="26dp"
+						android:padding="3dp"
+						android:src="@drawable/ic_settings"
+						android:scaleType="centerInside" />
 				</LinearLayout>
 			</RelativeLayout>
 
-			<!-- TOMBOL PREV DI PINGGIR KIRI LAYAR -->
+			<!-- PREV & NEXT DI PALING PINGGIR LAYAR -->
 			<ImageView
 				android:id="@+id/btnPrevEpisode"
-				android:layout_width="36dp"
-				android:layout_height="36dp"
-				android:layout_marginLeft="16dp"
-				android:padding="5dp"
+				android:layout_width="32dp"
+				android:layout_height="32dp"
+				android:layout_marginLeft="12dp"
+				android:padding="4dp"
 				android:src="@drawable/ic_prev"
 				android:scaleType="fitCenter"
 				android:layout_alignParentLeft="true"
 				android:layout_centerVertical="true" />
 
-			<!-- TOMBOL PLAY/PAUSE & LOADING DI TENGAH LAYAR -->
-			<FrameLayout
-				android:id="@+id/frame_layout5"
-				android:layout_width="68dp"
-				android:layout_height="68dp"
+			<!-- CENTER CONTROLS: REWIND, PLAY/PAUSE, FORWARD -->
+			<LinearLayout
+				android:id="@+id/centerControls"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:gravity="center"
+				android:orientation="horizontal"
 				android:layout_centerInParent="true">
 
-				<ProgressBar
-					android:id="@+id/playerLoading"
-					android:layout_width="68dp"
-					android:layout_height="68dp"
-					android:indeterminate="true"
-					android:indeterminateTint="#3B82F6"
-					android:layout_gravity="center"
-					android:visibility="gone" />
+				<ImageView
+					android:id="@+id/btnRewind"
+					android:layout_width="36dp"
+					android:layout_height="36dp"
+					android:padding="5dp"
+					android:src="@drawable/ic_rewind"
+					android:scaleType="fitCenter" />
+
+				<FrameLayout
+					android:id="@+id/frame_layout5"
+					android:layout_width="64dp"
+					android:layout_height="64dp"
+					android:layout_marginLeft="22dp"
+					android:layout_marginRight="22dp">
+
+					<ProgressBar
+						android:id="@+id/playerLoading"
+						android:layout_width="64dp"
+						android:layout_height="64dp"
+						android:indeterminate="true"
+						android:indeterminateTint="#3B82F6"
+						android:layout_gravity="center"
+						android:visibility="gone" />
+
+					<ImageView
+						android:id="@+id/btnPlay"
+						android:layout_width="54dp"
+						android:layout_height="54dp"
+						android:padding="14dp"
+						android:src="@drawable/ic_play1"
+						android:scaleType="fitCenter"
+						android:layout_gravity="center" />
+				</FrameLayout>
 
 				<ImageView
-					android:id="@+id/btnPlay"
-					android:layout_width="56dp"
-					android:layout_height="56dp"
-					android:padding="15dp"
-					android:src="@drawable/ic_play1"
-					android:scaleType="fitCenter"
-					android:layout_gravity="center" />
-			</FrameLayout>
+					android:id="@+id/btnForward"
+					android:layout_width="36dp"
+					android:layout_height="36dp"
+					android:padding="5dp"
+					android:src="@drawable/ic_forward"
+					android:scaleType="fitCenter" />
+			</LinearLayout>
 
-			<!-- TOMBOL NEXT DI PINGGIR KANAN LAYAR -->
 			<ImageView
 				android:id="@+id/btnNextEpisode"
-				android:layout_width="36dp"
-				android:layout_height="36dp"
-				android:layout_marginRight="16dp"
-				android:padding="5dp"
+				android:layout_width="32dp"
+				android:layout_height="32dp"
+				android:layout_marginRight="12dp"
+				android:padding="4dp"
 				android:src="@drawable/ic_next"
 				android:scaleType="fitCenter"
 				android:layout_alignParentRight="true"
 				android:layout_centerVertical="true" />
 
+			<!-- BOTTOM CONTROLS: WAKTU, EPISODE (FULLSCREEN), RESOLUSI, FULLSCREEN -->
 			<LinearLayout
 				android:id="@+id/bottomControls"
 				android:layout_width="match_parent"
@@ -188,8 +312,8 @@
 					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
 					android:layout_marginBottom="4dp"
-					android:paddingLeft="16dp"
-					android:paddingRight="16dp">
+					android:paddingLeft="14dp"
+					android:paddingRight="14dp">
 
 					<TextView
 						android:id="@+id/textTime"
@@ -212,12 +336,27 @@
 						android:layout_centerVertical="true">
 
 						<TextView
+							android:id="@+id/btnFullscreenEpisodes"
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_marginRight="12dp"
+							android:paddingLeft="10dp"
+							android:paddingTop="4dp"
+							android:paddingRight="10dp"
+							android:paddingBottom="4dp"
+							android:text="Episode"
+							android:textSize="13sp"
+							android:textStyle="bold"
+							android:textColor="#FFFFFF"
+							android:visibility="gone" />
+
+						<TextView
 							android:id="@+id/btnQuality"
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
 							android:padding="4dp"
 							android:text="Auto"
-							android:textSize="14sp"
+							android:textSize="13sp"
 							android:textStyle="bold"
 							android:textColor="#FFFFFF" />
 
@@ -269,7 +408,6 @@
 			android:paddingBottom="36dp"
 			android:orientation="vertical">
 
-			<!-- HEADER INFO DONGHUA + TOMBOL DETAIL ALA YOUTUBE -->
 			<LinearLayout
 				android:id="@+id/btnOpenDetail"
 				android:layout_width="match_parent"
@@ -373,7 +511,6 @@
 					android:scaleType="centerInside" />
 			</LinearLayout>
 
-			<!-- BAR TOMBOL AKSI -->
 			<HorizontalScrollView
 				android:id="@+id/scrollActionButtons"
 				android:layout_width="match_parent"
@@ -505,7 +642,6 @@
 				</LinearLayout>
 			</HorizontalScrollView>
 
-			<!-- HEADER EPISODE LIST + SORT (TERBARU / TERLAMA) + LIHAT SEMUA -->
 			<LinearLayout
 				android:id="@+id/linear144"
 				android:layout_width="match_parent"
