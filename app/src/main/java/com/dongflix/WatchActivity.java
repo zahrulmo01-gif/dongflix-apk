@@ -1,5 +1,6 @@
 package com.dongflix;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -380,7 +381,6 @@ public class WatchActivity extends AppCompatActivity {
 		);
 		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
 
-		// Pill animasi seek kiri & kanan
 		View[] seekPills = {animSeekLeft, animSeekRight};
 		for (View pill : seekPills) {
 			if (pill != null) {
@@ -391,7 +391,6 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		}
 
-		// Pill tombol Unlock saat terkunci
 		if (btnUnlockScreen != null) {
 			GradientDrawable lockBg = new GradientDrawable();
 			lockBg.setCornerRadius(100f);
@@ -399,7 +398,6 @@ public class WatchActivity extends AppCompatActivity {
 			btnUnlockScreen.setBackground(lockBg);
 		}
 
-		// Pill tombol Episode saat Fullscreen
 		if (btnFullscreenEpisodes != null) {
 			GradientDrawable fsEpBg = new GradientDrawable();
 			fsEpBg.setCornerRadius(100f);
@@ -516,9 +514,95 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// HELPER: HEADER BOTTOM SHEET DENGAN TOMBOL TUTUP BULAT (✕)
+	// ADAPTIVE SHEET: SIDE SHEET KANAN (FULLSCREEN) & BOTTOM SHEET (PORTRAIT)
 	// ========================================================
-	private LinearLayout buildSheetHeader(String titleText, final BottomSheetDialog sheetDialog) {
+	private boolean isLandscapeOrFullscreen() {
+		return isFullscreen || getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+	}
+
+	private Dialog createAdaptiveSheetDialog(View contentView) {
+		float d = getResources().getDisplayMetrics().density;
+
+		if (isLandscapeOrFullscreen()) {
+			final Dialog sideDialog = new Dialog(this, android.R.style.Theme_Translucent_NoTitleBar_Fullscreen);
+			sideDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+			GradientDrawable panelBg = new GradientDrawable();
+			panelBg.setColor(Color.parseColor("#14161D"));
+			panelBg.setCornerRadii(new float[]{18 * d, 18 * d, 0, 0, 0, 0, 18 * d, 18 * d});
+			contentView.setBackground(panelBg);
+
+			if (contentView instanceof ViewGroup && ((ViewGroup) contentView).getChildCount() > 0) {
+				View firstChild = ((ViewGroup) contentView).getChildAt(0);
+				if (!(firstChild instanceof LinearLayout)) {
+					firstChild.setVisibility(View.GONE);
+				}
+			}
+			contentView.setPadding((int)(22 * d), (int)(20 * d), (int)(22 * d), (int)(20 * d));
+
+			sideDialog.setContentView(contentView);
+			sideDialog.setCanceledOnTouchOutside(true);
+
+			Window window = sideDialog.getWindow();
+			if (window != null) {
+				window.setLayout((int)(340 * d), ViewGroup.LayoutParams.MATCH_PARENT);
+				window.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+				window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+				window.setDimAmount(0.45f);
+				window.getDecorView().setSystemUiVisibility(
+					View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+					| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+					| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+					| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+					| View.SYSTEM_UI_FLAG_FULLSCREEN
+					| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+				);
+			}
+
+			sideDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+				@Override
+				public void onDismiss(DialogInterface dialog) {
+					if (isFullscreen) {
+						getWindow().getDecorView().setSystemUiVisibility(
+							View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+							| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+							| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+							| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+							| View.SYSTEM_UI_FLAG_FULLSCREEN
+							| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+						);
+					}
+				}
+			});
+
+			sideDialog.show();
+			return sideDialog;
+		} else {
+			final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+			sheetDialog.setContentView(contentView);
+			sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
+				@Override
+				public void onShow(DialogInterface dialog) {
+					BottomSheetDialog dialogObj = (BottomSheetDialog) dialog;
+					FrameLayout bottomSheet = dialogObj.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+					if (bottomSheet != null) {
+						bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+						bottomSheet.setBackgroundTintList(null);
+						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+							bottomSheet.setElevation(0f);
+						}
+						BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+						behavior.setSkipCollapsed(true);
+						behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+					}
+				}
+			});
+			sheetDialog.show();
+			return sheetDialog;
+		}
+	}
+
+	private LinearLayout buildAdaptiveHeader(String titleText, final Dialog[] holderDialog) {
 		float d = getResources().getDisplayMetrics().density;
 
 		LinearLayout header = new LinearLayout(this);
@@ -551,7 +635,7 @@ public class WatchActivity extends AppCompatActivity {
 		btnClose.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				sheetDialog.dismiss();
+				if (holderDialog[0] != null) holderDialog[0].dismiss();
 			}
 		});
 		header.addView(btnClose);
@@ -560,66 +644,10 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// HELPER: ATTACH & PERBAIKI BOTTOM SHEET SAAT FULLSCREEN
-	// ========================================================
-	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
-		sheetDialog.setContentView(contentView);
-		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
-			@Override
-			public void onShow(DialogInterface dialog) {
-				BottomSheetDialog d = (BottomSheetDialog) dialog;
-				FrameLayout bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
-				if (bottomSheet != null) {
-					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
-					bottomSheet.setBackgroundTintList(null);
-					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-						bottomSheet.setElevation(0f);
-					}
-
-					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
-					behavior.setSkipCollapsed(true);
-					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-
-					int orientation = getResources().getConfiguration().orientation;
-					if (isFullscreen || orientation == Configuration.ORIENTATION_LANDSCAPE) {
-						float density = getResources().getDisplayMetrics().density;
-						ViewGroup.LayoutParams lp = bottomSheet.getLayoutParams();
-						lp.width = (int) (460 * density);
-						if (lp instanceof FrameLayout.LayoutParams) {
-							((FrameLayout.LayoutParams) lp).gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-						} else if (lp instanceof androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) {
-							((androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) lp).gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-						}
-						bottomSheet.setLayoutParams(lp);
-					}
-				}
-			}
-		});
-
-		sheetDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-			@Override
-			public void onDismiss(DialogInterface dialog) {
-				if (isFullscreen) {
-					getWindow().getDecorView().setSystemUiVisibility(
-						View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-						| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-						| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-						| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-						| View.SYSTEM_UI_FLAG_FULLSCREEN
-						| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-					);
-				}
-			}
-		});
-
-		sheetDialog.show();
-	}
-
-	// ========================================================
-	// BOTTOM SHEET: SETTINGS (KUALITAS, KECEPATAN, SERVER)
+	// DIALOG: PENGATURAN PEMUTARAN
 	// ========================================================
 	public void showSettingsBottomSheet() {
-		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
 
 		LinearLayout root = new LinearLayout(this);
@@ -642,13 +670,13 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		root.addView(buildSheetHeader("Pengaturan Pemutar", sheetDialog));
+		root.addView(buildAdaptiveHeader("Pengaturan Pemutaran", dialogHolder));
 
 		String currentQualityLabel = (btnQuality != null) ? btnQuality.getText().toString() : "Auto";
-		String currentSpeedLabel = (Math.abs(currentPlaybackSpeed - 1.0f) < 0.01f) ? "Normal (1x)" : currentPlaybackSpeed + "x";
+		String currentSpeedLabel = (Math.abs(currentPlaybackSpeed - 1.0f) < 0.01f) ? "Normal" : currentPlaybackSpeed + "x";
 		String currentServerLabel = (textActionServer != null) ? textActionServer.getText().toString() : "Default";
 
-		String[] menuTitles = new String[]{"Kualitas Video", "Kecepatan Putar", "Server Streaming"};
+		String[] menuTitles = new String[]{"Kualitas", "Kecepatan Putar", "Server Streaming"};
 		String[] menuValues = new String[]{currentQualityLabel, currentSpeedLabel, currentServerLabel};
 
 		for (int i = 0; i < menuTitles.length; i++) {
@@ -656,16 +684,7 @@ public class WatchActivity extends AppCompatActivity {
 			LinearLayout row = new LinearLayout(this);
 			row.setOrientation(LinearLayout.HORIZONTAL);
 			row.setGravity(Gravity.CENTER_VERTICAL);
-			row.setPadding((int)(16 * d), (int)(15 * d), (int)(16 * d), (int)(15 * d));
-
-			LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-			rLp.bottomMargin = (int)(10 * d);
-			row.setLayoutParams(rLp);
-
-			GradientDrawable rBg = new GradientDrawable();
-			rBg.setCornerRadius(12 * d);
-			rBg.setColor(Color.parseColor("#1E212B"));
-			row.setBackground(rBg);
+			row.setPadding((int)(4 * d), (int)(16 * d), (int)(4 * d), (int)(16 * d));
 
 			TextView tvLeft = new TextView(this);
 			tvLeft.setText(menuTitles[i]);
@@ -676,15 +695,15 @@ public class WatchActivity extends AppCompatActivity {
 			row.addView(tvLeft);
 
 			TextView tvRight = new TextView(this);
-			tvRight.setText(menuValues[i] + "  ›");
-			tvRight.setTextColor(Color.parseColor("#9CA3AF"));
-			tvRight.setTextSize(13.5f);
+			tvRight.setText(menuValues[i] + "  >");
+			tvRight.setTextColor(Color.parseColor("#D1D5DB"));
+			tvRight.setTextSize(14f);
 			row.addView(tvRight);
 
 			row.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					sheetDialog.dismiss();
+					if (dialogHolder[0] != null) dialogHolder[0].dismiss();
 					if (idx == 0) showQualityDialog();
 					else if (idx == 1) showSpeedDialog();
 					else if (idx == 2) showServerDialog();
@@ -694,14 +713,14 @@ public class WatchActivity extends AppCompatActivity {
 			root.addView(row);
 		}
 
-		attachTransparentSheetContainer(sheetDialog, root);
+		dialogHolder[0] = createAdaptiveSheetDialog(root);
 	}
 
 	// ========================================================
-	// BOTTOM SHEET: SINOPSIS & DETAIL
+	// DIALOG: SINOPSIS & DETAIL
 	// ========================================================
 	public void showDetailBottomSheet() {
-		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
 
 		LinearLayout root = new LinearLayout(this);
@@ -724,7 +743,7 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		root.addView(buildSheetHeader("Sinopsis", sheetDialog));
+		root.addView(buildAdaptiveHeader("Sinopsis", dialogHolder));
 
 		ScrollView scrollView = new ScrollView(this);
 		scrollView.setVerticalScrollBarEnabled(false);
@@ -847,14 +866,14 @@ public class WatchActivity extends AppCompatActivity {
 		content.addView(tvSinopsisBody);
 
 		root.addView(scrollView);
-		attachTransparentSheetContainer(sheetDialog, root);
+		dialogHolder[0] = createAdaptiveSheetDialog(root);
 	}
 
 	// ========================================================
-	// BOTTOM SHEET BERSIH (KUALITAS, KECEPATAN, SERVER)
+	// DIALOG OPSI BERSIH (KUALITAS, KECEPATAN, SERVER)
 	// ========================================================
 	private void showCleanOptionBottomSheet(String title, ArrayList<String> optionTitles, int activeIdx, final OnSheetItemClickListener listener) {
-		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
 
 		LinearLayout root = new LinearLayout(this);
@@ -877,7 +896,7 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		root.addView(buildSheetHeader(title, sheetDialog));
+		root.addView(buildAdaptiveHeader(title, dialogHolder));
 
 		ScrollView scrollView = new ScrollView(this);
 		scrollView.setVerticalScrollBarEnabled(false);
@@ -940,7 +959,7 @@ public class WatchActivity extends AppCompatActivity {
 			itemRow.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					sheetDialog.dismiss();
+					if (dialogHolder[0] != null) dialogHolder[0].dismiss();
 					listener.onItemClick(index);
 				}
 			});
@@ -949,20 +968,23 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		root.addView(scrollView);
-		attachTransparentSheetContainer(sheetDialog, root);
+		dialogHolder[0] = createAdaptiveSheetDialog(root);
 	}
 
 	private interface OnSheetItemClickListener {
 		void onItemClick(int index);
 	}
 
+	// ========================================================
+	// DIALOG: SEMUA EPISODE
+	// ========================================================
 	public void showAllEpisodesBottomSheet() {
 		if (episodeList == null || episodeList.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
-		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		final Dialog[] dialogHolder = new Dialog[1];
 		float d = getResources().getDisplayMetrics().density;
 
 		LinearLayout root = new LinearLayout(this);
@@ -985,7 +1007,7 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		root.addView(buildSheetHeader("Semua Episode (" + episodeList.size() + ")", sheetDialog));
+		root.addView(buildAdaptiveHeader("Semua Episode (" + episodeList.size() + ")", dialogHolder));
 
 		ScrollView scrollView = new ScrollView(this);
 		scrollView.setVerticalScrollBarEnabled(false);
@@ -994,7 +1016,7 @@ public class WatchActivity extends AppCompatActivity {
 		gridContainer.setOrientation(LinearLayout.VERTICAL);
 		scrollView.addView(gridContainer);
 
-		int columns = 5;
+		int columns = isLandscapeOrFullscreen() ? 4 : 5;
 		int total = episodeList.size();
 		int rows = (int) Math.ceil((double) total / columns);
 
@@ -1010,7 +1032,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			for (int c = 0; c < columns; c++) {
 				final int epIdx = (r * columns) + c;
-				LinearLayout.LayoutParams cellLp = new LinearLayout.LayoutParams(0, (int)(48 * d), 1f);
+				LinearLayout.LayoutParams cellLp = new LinearLayout.LayoutParams(0, (int)(46 * d), 1f);
 				if (c < columns - 1) cellLp.rightMargin = (int)(8 * d);
 
 				if (epIdx < total) {
@@ -1041,7 +1063,7 @@ public class WatchActivity extends AppCompatActivity {
 					cellBtn.setOnClickListener(new View.OnClickListener() {
 						@Override
 						public void onClick(View v) {
-							sheetDialog.dismiss();
+							if (dialogHolder[0] != null) dialogHolder[0].dismiss();
 							if (currentEpisodeIndex != epIdx || mediaPlayer == null || !mediaPlayer.isPlaying()) {
 								playEpisodeByIndex(epIdx);
 							}
@@ -1059,7 +1081,7 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		root.addView(scrollView);
-		attachTransparentSheetContainer(sheetDialog, root);
+		dialogHolder[0] = createAdaptiveSheetDialog(root);
 	}
 
 	public void showServerDialog() {
