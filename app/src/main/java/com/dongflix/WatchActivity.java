@@ -26,6 +26,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -45,6 +46,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -83,15 +85,14 @@ public class WatchActivity extends AppCompatActivity {
 	private SeekBar playerSeekBar;
 	private RecyclerView recyclerEpisode, recyclerRekomendasi;
 
-	// Detail data untuk Bottom Sheet ala YouTube
 	private String detailTitle = "";
 	private String detailSynopsis = "";
-	private String detailStatus = "Donghua";
+	private String detailStatus = "Ongoing";
 	private String detailYear = "2026";
+	private String detailFirstGenre = "-";
 	private String detailAllGenres = "-";
 	private String detailCover = "";
 
-	// State Sort Episode (true = Terbaru di depan, false = Terlama / Ep 1 di depan)
 	private boolean isNewestFirst = true;
 
 	public MediaPlayer mediaPlayer;
@@ -182,7 +183,6 @@ public class WatchActivity extends AppCompatActivity {
 				if (_tag.equals("slug")) {
 					eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
 					if (eps != null && !eps.isEmpty()) {
-						// API default urut dari lama ke baru -> reverse agar terbaru di depan
 						Collections.reverse(eps);
 						isNewestFirst = true;
 						if (textSortEpisodes != null) textSortEpisodes.setText("Terbaru");
@@ -221,8 +221,8 @@ public class WatchActivity extends AppCompatActivity {
 											.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
 											.replaceAll("[^\\x20-\\x7E\\n]", "")
 											.trim();
-									detailStatus = obj.optString("status", "Donghua");
-									if (detailStatus.isEmpty()) detailStatus = "Donghua";
+									detailStatus = obj.optString("status", "Ongoing");
+									if (detailStatus.isEmpty()) detailStatus = "Ongoing";
 
 									detailCover = obj.optString("cover").trim();
 									if (detailCover.contains("i.ibb.co.com")) {
@@ -233,17 +233,17 @@ public class WatchActivity extends AppCompatActivity {
 									}
 									String released = obj.optString("released");
 
-									String firstGenre = "-";
+									detailFirstGenre = "-";
 									StringBuilder allGenresSb = new StringBuilder();
 									JSONArray genresArray = obj.optJSONArray("genres");
 									if (genresArray != null && genresArray.length() > 0) {
-										firstGenre = genresArray.optString(0);
+										detailFirstGenre = genresArray.optString(0);
 										for (int g = 0; g < genresArray.length(); g++) {
 											if (g > 0) allGenresSb.append(", ");
 											allGenresSb.append(genresArray.optString(g));
 										}
 									}
-									detailAllGenres = allGenresSb.length() > 0 ? allGenresSb.toString() : firstGenre;
+									detailAllGenres = allGenresSb.length() > 0 ? allGenresSb.toString() : detailFirstGenre;
 
 									if (released.length() >= 4) {
 										detailYear = released.substring(released.length() - 4);
@@ -252,7 +252,7 @@ public class WatchActivity extends AppCompatActivity {
 									if (textJudul != null) textJudul.setText(detailTitle);
 									if (textRating != null) textRating.setText(detailStatus);
 									if (textYear != null) textYear.setText(detailYear);
-									if (textGenre != null) textGenre.setText(firstGenre);
+									if (textGenre != null) textGenre.setText(detailFirstGenre);
 
 									if (imagePoster != null && !detailCover.isEmpty()) {
 										Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(imagePoster);
@@ -261,7 +261,6 @@ public class WatchActivity extends AppCompatActivity {
 								}
 							}
 
-							// Muat Rekomendasi Serupa (6 donghua)
 							ArrayList<HashMap<String, Object>> allList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
 							if (allList != null && recyclerRekomendasi != null) {
 								ArrayList<HashMap<String, Object>> rekomList = new ArrayList<>();
@@ -368,66 +367,46 @@ public class WatchActivity extends AppCompatActivity {
 		);
 		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
 
-		// Styling Badge Status (Biru elegan transparan)
-		if (textRating != null) {
-			GradientDrawable statusBg = new GradientDrawable();
-			statusBg.setCornerRadius(100f);
-			statusBg.setColor(Color.parseColor("#172554"));
-			statusBg.setStroke((int)(1 * d), Color.parseColor("#3B82F6"));
-			textRating.setBackground(statusBg);
+		// Semua badge (Status / Ongoing, Tahun, Genre) memakai abu-abu gelap tanpa stroke
+		TextView[] badges = {textRating, textYear, textGenre};
+		for (TextView badge : badges) {
+			if (badge != null) {
+				GradientDrawable pillBg = new GradientDrawable();
+				pillBg.setCornerRadius(6 * d);
+				pillBg.setColor(Color.parseColor("#1E212B"));
+				badge.setBackground(pillBg);
+				badge.setTextColor(Color.parseColor("#CBD5E1"));
+			}
 		}
 
-		// Styling Badge Tahun (Slate gelap elegan)
-		if (textYear != null) {
-			GradientDrawable yearBg = new GradientDrawable();
-			yearBg.setCornerRadius(100f);
-			yearBg.setColor(Color.parseColor("#1E293B"));
-			yearBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
-			textYear.setBackground(yearBg);
-		}
-
-		// Styling Badge Genre (Slate gelap elegan)
-		if (textGenre != null) {
-			GradientDrawable genreBg = new GradientDrawable();
-			genreBg.setCornerRadius(100f);
-			genreBg.setColor(Color.parseColor("#0F172A"));
-			genreBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
-			textGenre.setBackground(genreBg);
-		}
-
-		// Styling Ikon Expand Detail (Lingkaran tipis)
+		// Ikon Expand Detail (Abu-abu gelap bulat tanpa stroke)
 		if (iconExpandDetail != null) {
 			GradientDrawable expandBg = new GradientDrawable();
 			expandBg.setShape(GradientDrawable.OVAL);
-			expandBg.setColor(Color.parseColor("#111827"));
-			expandBg.setStroke((int)(1 * d), Color.parseColor("#1E293B"));
+			expandBg.setColor(Color.parseColor("#1E212B"));
 			iconExpandDetail.setBackground(expandBg);
 		}
 
-		// Styling Pill Sort Episode (Terbaru / Terlama)
+		// Tombol Sort Episode (Abu-abu gelap tanpa stroke)
 		if (btnSortEpisodes != null) {
 			GradientDrawable sortBg = new GradientDrawable();
 			sortBg.setCornerRadius(100f);
-			sortBg.setColor(Color.parseColor("#111827"));
-			sortBg.setStroke((int)(1 * d), Color.parseColor("#1E293B"));
+			sortBg.setColor(Color.parseColor("#1E212B"));
 			btnSortEpisodes.setBackground(sortBg);
 		}
 
+		// Tombol Aksi (Server, Download, Share, Report) abu-abu gelap tanpa stroke
 		View[] actionBtns = {btnActionServer, btnActionDownload, btnActionShare, btnActionReport};
 		for (View btn : actionBtns) {
 			if (btn != null) {
 				GradientDrawable btnBg = new GradientDrawable();
 				btnBg.setCornerRadius(100f);
-				btnBg.setColor(0xFF111111);
-				btnBg.setStroke(2, 0xFF1E293B);
+				btnBg.setColor(Color.parseColor("#1E212B"));
 				btn.setBackground(btnBg);
 			}
 		}
 	}
 
-	// ========================================================
-	// SORT EPISODE: TERBARU <-> TERLAMA
-	// ========================================================
 	public void toggleSortEpisodes() {
 		if (episodeList == null || episodeList.size() <= 1) return;
 
@@ -435,7 +414,6 @@ public class WatchActivity extends AppCompatActivity {
 		Collections.reverse(episodeList);
 		isNewestFirst = !isNewestFirst;
 
-		// Pertahankan sorotan pada episode yang sedang diputar
 		for (int i = 0; i < episodeList.size(); i++) {
 			if (episodeList.get(i) == currentlyPlayingItem) {
 				currentEpisodeIndex = i;
@@ -455,7 +433,7 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// BOTTOM SHEET: DETAIL DONGHUA & SINOPSIS (ALA YOUTUBE)
+	// BOTTOM SHEET SINOPSIS / DETAIL (SESUAI REFERENSI GAMBAR)
 	// ========================================================
 	public void showDetailBottomSheet() {
 		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
@@ -466,41 +444,41 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(28 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#0F172A"));
-		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
+		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
 		// Drag handle
 		View handle = new View(this);
-		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-		handleLp.bottomMargin = (int)(16 * d);
+		handleLp.bottomMargin = (int)(14 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#334155"));
+		handleBg.setColor(Color.parseColor("#2D313E"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		// Header Deskripsi + Tombol Tutup (X)
+		// Header: "Sinopsis" di kiri + tombol "X" di kanan
 		LinearLayout topHeader = new LinearLayout(this);
 		topHeader.setOrientation(LinearLayout.HORIZONTAL);
 		topHeader.setGravity(Gravity.CENTER_VERTICAL);
-		topHeader.setPadding(0, 0, 0, (int)(14 * d));
+		topHeader.setPadding(0, 0, 0, (int)(18 * d));
 
 		TextView tvHeader = new TextView(this);
-		tvHeader.setText("Deskripsi");
+		tvHeader.setText("Sinopsis");
 		tvHeader.setTextColor(Color.WHITE);
-		tvHeader.setTextSize(18f);
+		tvHeader.setTextSize(20f);
 		tvHeader.setTypeface(null, Typeface.BOLD);
 		tvHeader.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 		topHeader.addView(tvHeader);
 
 		TextView btnClose = new TextView(this);
 		btnClose.setText("✕");
-		btnClose.setTextColor(Color.parseColor("#94A3B8"));
-		btnClose.setTextSize(18f);
-		btnClose.setPadding((int)(10 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
+		btnClose.setTextColor(Color.WHITE);
+		btnClose.setTextSize(20f);
+		btnClose.setPadding((int)(10 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
 		btnClose.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -510,14 +488,6 @@ public class WatchActivity extends AppCompatActivity {
 		topHeader.addView(btnClose);
 		root.addView(topHeader);
 
-		// Divider
-		View divider = new View(this);
-		LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int)(1 * d));
-		divLp.bottomMargin = (int)(16 * d);
-		divider.setLayoutParams(divLp);
-		divider.setBackgroundColor(Color.parseColor("#1E293B"));
-		root.addView(divider);
-
 		ScrollView scrollView = new ScrollView(this);
 		scrollView.setVerticalScrollBarEnabled(false);
 
@@ -525,55 +495,123 @@ public class WatchActivity extends AppCompatActivity {
 		content.setOrientation(LinearLayout.VERTICAL);
 		scrollView.addView(content);
 
-		// Judul Lengkap
-		TextView tvFullTitle = new TextView(this);
-		tvFullTitle.setText(detailTitle.isEmpty() ? textJudul.getText().toString() : detailTitle);
-		tvFullTitle.setTextColor(Color.WHITE);
-		tvFullTitle.setTextSize(17f);
-		tvFullTitle.setTypeface(null, Typeface.BOLD);
-		tvFullTitle.setPadding(0, 0, 0, (int)(14 * d));
-		content.addView(tvFullTitle);
+		// Baris Info Utama (Poster Persegi Panjang di Kiri + Judul, Genre, Badge, Total Episode di Kanan)
+		LinearLayout infoHeaderRow = new LinearLayout(this);
+		infoHeaderRow.setOrientation(LinearLayout.HORIZONTAL);
+		infoHeaderRow.setGravity(Gravity.TOP);
+		LinearLayout.LayoutParams infoRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		infoRowLp.bottomMargin = (int)(18 * d);
+		infoHeaderRow.setLayoutParams(infoRowLp);
 
-		// Kartu Metadata (Status, Tahun, Episode, Genre)
-		LinearLayout metaCard = new LinearLayout(this);
-		metaCard.setOrientation(LinearLayout.VERTICAL);
-		metaCard.setPadding((int)(14 * d), (int)(14 * d), (int)(14 * d), (int)(14 * d));
-		LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		metaLp.bottomMargin = (int)(16 * d);
-		metaCard.setLayoutParams(metaLp);
+		// Poster CardView (Lebar 96dp, Tinggi 134dp, Sudut 8dp)
+		CardView posterCard = new CardView(this);
+		LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams((int)(96 * d), (int)(134 * d));
+		cardLp.rightMargin = (int)(16 * d);
+		posterCard.setLayoutParams(cardLp);
+		posterCard.setRadius(8 * d);
+		posterCard.setCardElevation(0f);
+		posterCard.setCardBackgroundColor(Color.parseColor("#1E212B"));
 
-		GradientDrawable metaBg = new GradientDrawable();
-		metaBg.setColor(Color.parseColor("#1E293B"));
-		metaBg.setCornerRadius(14 * d);
-		metaCard.setBackground(metaBg);
+		ImageView ivSheetPoster = new ImageView(this);
+		ivSheetPoster.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		ivSheetPoster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		if (!detailCover.isEmpty()) {
+			Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(ivSheetPoster);
+		}
+		posterCard.addView(ivSheetPoster);
+		infoHeaderRow.addView(posterCard);
 
-		TextView tvMetaInfo = new TextView(this);
-		String epTotalText = (episodeList != null && !episodeList.isEmpty()) ? episodeList.size() + " Episode" : "-";
-		tvMetaInfo.setText(
-			"Status  :  " + detailStatus + "\n" +
-			"Rilis      :  " + detailYear + "\n" +
-			"Total     :  " + epTotalText + "\n" +
-			"Genre   :  " + detailAllGenres
-		);
-		tvMetaInfo.setTextColor(Color.parseColor("#CBD5E1"));
-		tvMetaInfo.setTextSize(13f);
-		tvMetaInfo.setLineSpacing(6 * d, 1f);
-		metaCard.addView(tvMetaInfo);
-		content.addView(metaCard);
+		// Kolom Kanan
+		LinearLayout rightCol = new LinearLayout(this);
+		rightCol.setOrientation(LinearLayout.VERTICAL);
+		rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-		// Label Sinopsis
-		TextView tvSinopsisLabel = new TextView(this);
-		tvSinopsisLabel.setText("Sinopsis");
-		tvSinopsisLabel.setTextColor(Color.WHITE);
-		tvSinopsisLabel.setTextSize(14f);
-		tvSinopsisLabel.setTypeface(null, Typeface.BOLD);
-		tvSinopsisLabel.setPadding(0, 0, 0, (int)(8 * d));
-		content.addView(tvSinopsisLabel);
+		// Judul Donghua
+		TextView tvSheetTitle = new TextView(this);
+		tvSheetTitle.setText(detailTitle.isEmpty() ? textJudul.getText().toString() : detailTitle);
+		tvSheetTitle.setTextColor(Color.WHITE);
+		tvSheetTitle.setTextSize(18f);
+		tvSheetTitle.setTypeface(null, Typeface.BOLD);
+		tvSheetTitle.setMaxLines(2);
+		tvSheetTitle.setEllipsize(TextUtils.TruncateAt.END);
+		rightCol.addView(tvSheetTitle);
 
-		// Isi Sinopsis Lengkap
+		// Subjudul Semua Genre (1 baris dengan titik tiga ...)
+		TextView tvSubGenres = new TextView(this);
+		tvSubGenres.setText(detailAllGenres);
+		tvSubGenres.setTextColor(Color.parseColor("#9CA3AF"));
+		tvSubGenres.setTextSize(13f);
+		tvSubGenres.setMaxLines(1);
+		tvSubGenres.setEllipsize(TextUtils.TruncateAt.END);
+		tvSubGenres.setPadding(0, (int)(6 * d), 0, (int)(10 * d));
+		rightCol.addView(tvSubGenres);
+
+		// Baris 3 Badge Abu-abu Gelap: Status | Tahun | Genre Utama
+		LinearLayout badgeRow = new LinearLayout(this);
+		badgeRow.setOrientation(LinearLayout.HORIZONTAL);
+		badgeRow.setGravity(Gravity.CENTER_VERTICAL);
+		LinearLayout.LayoutParams badgeRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		badgeRowLp.bottomMargin = (int)(12 * d);
+		badgeRow.setLayoutParams(badgeRowLp);
+
+		String[] badgeItems = new String[]{detailStatus, detailYear, detailFirstGenre};
+		for (int b = 0; b < badgeItems.length; b++) {
+			TextView bView = new TextView(this);
+			bView.setText(badgeItems[b]);
+			bView.setTextSize(12f);
+			bView.setTypeface(null, Typeface.BOLD);
+			bView.setTextColor(Color.parseColor("#CBD5E1"));
+			bView.setPadding((int)(8 * d), (int)(4 * d), (int)(8 * d), (int)(4 * d));
+
+			GradientDrawable bBg = new GradientDrawable();
+			bBg.setCornerRadius(5 * d);
+			bBg.setColor(Color.parseColor("#1E212B"));
+			bView.setBackground(bBg);
+
+			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			if (b < badgeItems.length - 1) bLp.rightMargin = (int)(8 * d);
+			bView.setLayoutParams(bLp);
+			badgeRow.addView(bView);
+		}
+		rightCol.addView(badgeRow);
+
+		// Baris Info Tambahan dengan Ikon Bulat Kecil di Kiri (seperti avatar di referensi)
+		LinearLayout studioRow = new LinearLayout(this);
+		studioRow.setOrientation(LinearLayout.HORIZONTAL);
+		studioRow.setGravity(Gravity.CENTER_VERTICAL);
+
+		CardView miniThumb = new CardView(this);
+		LinearLayout.LayoutParams miniLp = new LinearLayout.LayoutParams((int)(22 * d), (int)(22 * d));
+		miniLp.rightMargin = (int)(8 * d);
+		miniThumb.setLayoutParams(miniLp);
+		miniThumb.setRadius(11 * d);
+		miniThumb.setCardElevation(0f);
+		miniThumb.setCardBackgroundColor(Color.parseColor("#1E212B"));
+
+		ImageView ivMini = new ImageView(this);
+		ivMini.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		ivMini.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		if (!detailCover.isEmpty()) {
+			Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(ivMini);
+		}
+		miniThumb.addView(ivMini);
+		studioRow.addView(miniThumb);
+
+		TextView tvEpSummary = new TextView(this);
+		int epTotal = (episodeList != null) ? episodeList.size() : 0;
+		tvEpSummary.setText("Dongflix • " + epTotal + " Episode");
+		tvEpSummary.setTextColor(Color.parseColor("#E5E7EB"));
+		tvEpSummary.setTextSize(13f);
+		studioRow.addView(tvEpSummary);
+
+		rightCol.addView(studioRow);
+		infoHeaderRow.addView(rightCol);
+		content.addView(infoHeaderRow);
+
+		// Isi Sinopsis Lengkap di bawahnya
 		TextView tvSinopsisBody = new TextView(this);
 		tvSinopsisBody.setText(detailSynopsis.isEmpty() ? "Sinopsis belum tersedia untuk donghua ini." : detailSynopsis);
-		tvSinopsisBody.setTextColor(Color.parseColor("#94A3B8"));
+		tvSinopsisBody.setTextColor(Color.parseColor("#9CA3AF"));
 		tvSinopsisBody.setTextSize(13.5f);
 		tvSinopsisBody.setLineSpacing(5 * d, 1f);
 		content.addView(tvSinopsisBody);
@@ -1070,6 +1108,9 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
+	// ========================================================
+	// HELPER BOTTOM SHEET DIALOG ABU-ABU GELAP TANPA STROKE
+	// ========================================================
 	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
 		sheetDialog.setContentView(contentView);
 		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
@@ -1098,17 +1139,17 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#0F172A"));
-		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
+		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
 		View handle = new View(this);
-		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
 		handleLp.bottomMargin = (int)(16 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#334155"));
+		handleBg.setColor(Color.parseColor("#2D313E"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -1123,7 +1164,7 @@ public class WatchActivity extends AppCompatActivity {
 		if (subtitle != null && !subtitle.isEmpty()) {
 			TextView tvSub = new TextView(this);
 			tvSub.setText(subtitle);
-			tvSub.setTextColor(Color.parseColor("#94A3B8"));
+			tvSub.setTextColor(Color.parseColor("#9CA3AF"));
 			tvSub.setTextSize(12f);
 			tvSub.setPadding(0, (int)(2 * d), 0, (int)(14 * d));
 			root.addView(tvSub);
@@ -1154,19 +1195,14 @@ public class WatchActivity extends AppCompatActivity {
 			itemRow.setLayoutParams(rowLp);
 
 			GradientDrawable rowBg = new GradientDrawable();
-			rowBg.setCornerRadius(14 * d);
-			if (isSelected) {
-				rowBg.setColor(Color.parseColor("#1E3A8A"));
-				rowBg.setStroke((int)(1.5f * d), Color.parseColor("#3B82F6"));
-			} else {
-				rowBg.setColor(Color.parseColor("#1E293B"));
-				rowBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
-			}
+			rowBg.setCornerRadius(12 * d);
+			// Abu-abu gelap tanpa stroke
+			rowBg.setColor(isSelected ? Color.parseColor("#252936") : Color.parseColor("#1E212B"));
 			itemRow.setBackground(rowBg);
 
 			TextView tvName = new TextView(this);
 			tvName.setText(optionTitles.get(i));
-			tvName.setTextColor(isSelected ? Color.WHITE : Color.parseColor("#E2E8F0"));
+			tvName.setTextColor(isSelected ? Color.WHITE : Color.parseColor("#D1D5DB"));
 			tvName.setTextSize(15f);
 			tvName.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
 			LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -1178,11 +1214,11 @@ public class WatchActivity extends AppCompatActivity {
 				tvBadge.setText(optionBadges.get(i));
 				tvBadge.setTextSize(11f);
 				tvBadge.setTypeface(null, Typeface.BOLD);
-				tvBadge.setTextColor(isSelected ? Color.parseColor("#93C5FD") : Color.parseColor("#94A3B8"));
+				tvBadge.setTextColor(isSelected ? Color.parseColor("#60A5FA") : Color.parseColor("#9CA3AF"));
 				tvBadge.setPadding((int)(8 * d), (int)(3 * d), (int)(8 * d), (int)(3 * d));
 				GradientDrawable bBg = new GradientDrawable();
-				bBg.setCornerRadius(8 * d);
-				bBg.setColor(isSelected ? Color.parseColor("#172554") : Color.parseColor("#0F172A"));
+				bBg.setCornerRadius(6 * d);
+				bBg.setColor(Color.parseColor("#14161D"));
 				tvBadge.setBackground(bBg);
 				LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
 				bLp.rightMargin = (int)(10 * d);
@@ -1232,17 +1268,17 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#0F172A"));
-		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
+		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
 		View handle = new View(this);
-		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
 		handleLp.bottomMargin = (int)(16 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#334155"));
+		handleBg.setColor(Color.parseColor("#2D313E"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -1313,16 +1349,11 @@ public class WatchActivity extends AppCompatActivity {
 					cellBtn.setText(epLabel);
 					cellBtn.setTextSize(14f);
 					cellBtn.setTypeface(null, isActive ? Typeface.BOLD : Typeface.NORMAL);
-					cellBtn.setTextColor(isActive ? Color.WHITE : Color.parseColor("#94A3B8"));
+					cellBtn.setTextColor(isActive ? Color.WHITE : Color.parseColor("#CBD5E1"));
 
 					GradientDrawable cellBg = new GradientDrawable();
-					cellBg.setCornerRadius(12 * d);
-					if (isActive) {
-						cellBg.setColor(Color.parseColor("#3B82F6"));
-					} else {
-						cellBg.setColor(Color.parseColor("#1E293B"));
-						cellBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
-					}
+					cellBg.setCornerRadius(10 * d);
+					cellBg.setColor(isActive ? Color.parseColor("#3B82F6") : Color.parseColor("#1E212B"));
 					cellBtn.setBackground(cellBg);
 
 					cellBtn.setOnClickListener(new View.OnClickListener() {
@@ -2544,7 +2575,7 @@ public class WatchActivity extends AppCompatActivity {
 			itemView.setLayoutParams(params);
 
 			GradientDrawable itemBg = new GradientDrawable();
-			itemBg.setCornerRadius(14 * density);
+			itemBg.setCornerRadius(12 * density);
 
 			TextView tvEpisode = itemView.findViewById(R.id.textview1);
 			final boolean isActive = (pos == currentEpisodeIndex);
@@ -2556,9 +2587,9 @@ public class WatchActivity extends AppCompatActivity {
 					tvEpisode.setTypeface(null, Typeface.BOLD);
 				}
 			} else {
-				itemBg.setColor(0xFF111111);
+				itemBg.setColor(Color.parseColor("#1E212B"));
 				if (tvEpisode != null) {
-					tvEpisode.setTextColor(0xFF94A3B8);
+					tvEpisode.setTextColor(0xFFCBD5E1);
 					tvEpisode.setTypeface(null, Typeface.NORMAL);
 				}
 			}
