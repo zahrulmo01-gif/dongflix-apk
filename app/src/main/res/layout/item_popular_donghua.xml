@@ -11,7 +11,7 @@
     android:paddingTop="6dp"
     android:paddingBottom="10dp">
 
-    <!-- Rounded HANYA pada gambar cover poster -->
+    <!-- Cover Poster Rounded -->
     <androidx.cardview.widget.CardView
         android:layout_width="130dp"
         android:layout_height="180dp"
@@ -26,12 +26,13 @@
             android:scaleType="centerCrop" />
     </androidx.cardview.widget.CardView>
 
+    <!-- Kontainer Teks Rata Atas (layout_gravity center_vertical dihapus) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="14dp"
-        android:orientation="vertical"
-        android:layout_gravity="center_vertical">
+        android:paddingTop="4dp"
+        android:orientation="vertical">
 
         <TextView
             android:id="@+id/text_popular_title"
