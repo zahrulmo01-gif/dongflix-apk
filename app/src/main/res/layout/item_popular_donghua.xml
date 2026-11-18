@@ -7,17 +7,19 @@
     android:orientation="horizontal"
     android:padding="8dp">
 
+    <!-- Cover Populer: Lebar 130dp, Tinggi 180dp -->
     <ImageView
         android:id="@+id/img_popular_cover"
-        android:layout_width="80dp"
-        android:layout_height="110dp"
+        android:layout_width="130dp"
+        android:layout_height="180dp"
         android:scaleType="centerCrop" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="12dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:layout_gravity="center_vertical">
 
         <TextView
             android:id="@+id/text_popular_title"
@@ -34,13 +36,13 @@
             android:layout_marginTop="4dp"
             android:textColor="#94A3B8"
             android:textSize="12sp"
-            android:maxLines="2" />
+            android:maxLines="3" />
 
         <TextView
             android:id="@+id/text_popular_genre"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             android:textColor="#3B82F6"
             android:textSize="11sp" />
 
@@ -48,7 +50,7 @@
             android:id="@+id/text_popular_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             android:textColor="#CBD5E1"
             android:textSize="11sp" />
     </LinearLayout>
