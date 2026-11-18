@@ -361,7 +361,7 @@ public class WatchActivity extends AppCompatActivity {
 		if (mediaPlayer != null && mediaPlayer.isPlaying()) {
 			mediaPlayer.pause();
 			if (btnPlay != null) {
-				btnPlay.setImageResource(android.R.drawable.ic_media_play);
+				btnPlay.setImageResource(R.drawable.ic_play1);
 			}
 		}
 	}
@@ -757,7 +757,7 @@ public class WatchActivity extends AppCompatActivity {
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
 								btnPlay.setAlpha(1.0f);
-								btnPlay.setImageResource(android.R.drawable.ic_media_pause);
+								btnPlay.setImageResource(R.drawable.ic_pause);
 							}
 
 							if (playerTextureView != null && playerTextureView.isAvailable() && playerSurface == null) {
@@ -801,7 +801,7 @@ public class WatchActivity extends AppCompatActivity {
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
 								btnPlay.setAlpha(1.0f);
-								btnPlay.setImageResource(android.R.drawable.ic_media_play);
+								btnPlay.setImageResource(R.drawable.ic_play1);
 							}
 							return true;
 						}
@@ -1314,6 +1314,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			if (btnRewind != null) btnRewind.setVisibility(View.GONE);
 			if (btnForward != null) btnForward.setVisibility(View.GONE);
+			if (btnFullscreen != null) btnFullscreen.setImageResource(R.drawable.ic_fullscreen_exit);
 
 			int padHoriz = (int) (32 * density);
 			int padTop = (int) (16 * density);
@@ -1347,6 +1348,7 @@ public class WatchActivity extends AppCompatActivity {
 			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
 			if (btnRewind != null) btnRewind.setVisibility(View.VISIBLE);
 			if (btnForward != null) btnForward.setVisibility(View.VISIBLE);
+			if (btnFullscreen != null) btnFullscreen.setImageResource(R.drawable.ic_fullscreen);
 
 			int defPadX = (int) (16 * density);
 			int defPadTop = (int) (12 * density);
@@ -1374,7 +1376,6 @@ public class WatchActivity extends AppCompatActivity {
 		playCircle.setShape(GradientDrawable.OVAL);
 		playCircle.setColor(0xFFFFFFFF);
 		btnPlay.setBackground(playCircle);
-		btnPlay.setColorFilter(0xFF000000);
 
 		final float density = getResources().getDisplayMetrics().density;
 		final int barHeight = (int) (4 * density);
@@ -1594,14 +1595,14 @@ public class WatchActivity extends AppCompatActivity {
 				if (mediaPlayer != null) {
 					if (mediaPlayer.isPlaying()) {
 						mediaPlayer.pause();
-						btnPlay.setImageResource(android.R.drawable.ic_media_play);
+						btnPlay.setImageResource(R.drawable.ic_play1);
 						getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 						if (playerHandler != null && hideControlsRunnable != null) {
 							playerHandler.removeCallbacks(hideControlsRunnable);
 						}
 					} else {
 						mediaPlayer.start();
-						btnPlay.setImageResource(android.R.drawable.ic_media_pause);
+						btnPlay.setImageResource(R.drawable.ic_pause);
 						getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 						resetControlsTimer();
 					}
