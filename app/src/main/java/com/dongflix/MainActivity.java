@@ -425,7 +425,7 @@ public class MainActivity extends AppCompatActivity {
 		float density = getResources().getDisplayMetrics().density;
 		
 		int itemHeightPx = (int) (222 * density);
-		int verticalSpacingPx = (int) (12 * density);
+		int verticalSpacingPx = (int) (16 * density);
 		int paddingBottomPx = (int) (20 * density);
 		
 		ViewGroup.LayoutParams params = gridView.getLayoutParams();
