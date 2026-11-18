@@ -1,8 +1,9 @@
 package com.dongflix;
 
-import android.content.DialogInterface;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
@@ -10,17 +11,22 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.PlaybackParams;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.GestureDetector;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -33,14 +39,15 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.BufferedReader;
@@ -79,11 +86,16 @@ public class WatchActivity extends AppCompatActivity {
 	public Surface playerSurface;
 	public Runnable progressLoop;
 	public Runnable hideControlsRunnable;
+	public Runnable autoDowngradeRunnable;
 	public boolean areControlsVisible = true;
 	public String currentPlayingUrl = "";
 	public boolean isFullscreen = false;
 	public int savedSeekPosition = 0;
-	public int selectedQualityIndex = 0;
+
+	// State Adaptive Auto Quality
+	public boolean isAutoQualityMode = true;
+	public int selectedQualityIndex = 0; // Index pada qualityUrls (resolusi aktual yang diputar)
+	public float currentPlaybackSpeed = 1.0f;
 
 	public int currentEpisodeIndex = 0;
 	public ArrayList<HashMap<String, Object>> episodeList = new ArrayList<>();
@@ -320,6 +332,7 @@ public class WatchActivity extends AppCompatActivity {
 		if (playerHandler != null) {
 			if (progressLoop != null) playerHandler.removeCallbacks(progressLoop);
 			if (hideControlsRunnable != null) playerHandler.removeCallbacks(hideControlsRunnable);
+			if (autoDowngradeRunnable != null) playerHandler.removeCallbacks(autoDowngradeRunnable);
 			playerHandler.removeCallbacksAndMessages(null);
 		}
 
@@ -363,6 +376,117 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
+	// ========================================================
+	// DETEKSI KUALITAS JARINGAN & PILIH RESOLUSI AUTO TERBAIK
+	// ========================================================
+	public int getRecommendedQualityIndex() {
+		if (qualityNames == null || qualityNames.isEmpty()) return 0;
+
+		int targetHeight = 480; // Default aman
+		try {
+			ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+			if (cm != null) {
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+					NetworkCapabilities caps = cm.getNetworkCapabilities(cm.getActiveNetwork());
+					if (caps != null) {
+						if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+							int downMbps = caps.getLinkDownstreamBandwidthKbps() / 1000;
+							if (downMbps >= 15) targetHeight = 1080;
+							else if (downMbps >= 5) targetHeight = 720;
+							else targetHeight = 480;
+						} else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+							int downMbps = caps.getLinkDownstreamBandwidthKbps() / 1000;
+							if (downMbps >= 10) targetHeight = 720;
+							else if (downMbps >= 2) targetHeight = 480;
+							else targetHeight = 360;
+						}
+					}
+				} else {
+					NetworkInfo info = cm.getActiveNetworkInfo();
+					if (info != null && info.isConnected()) {
+						if (info.getType() == ConnectivityManager.TYPE_WIFI) targetHeight = 720;
+						else targetHeight = 480;
+					}
+				}
+			}
+		} catch (Exception ignored) {}
+
+		// Jika provider punya stream "Auto" (HLS m3u8), utamakan itu
+		for (int i = 0; i < qualityNames.size(); i++) {
+			if (qualityNames.get(i).equalsIgnoreCase("Auto")) return i;
+		}
+
+		// Cari resolusi yang paling mendekati targetHeight
+		int bestIdx = 0;
+		int smallestDiff = Integer.MAX_VALUE;
+		for (int i = 0; i < qualityNames.size(); i++) {
+			String numStr = qualityNames.get(i).replaceAll("[^0-9]", "");
+			if (!numStr.isEmpty()) {
+				int resVal = Integer.parseInt(numStr);
+				int diff = Math.abs(resVal - targetHeight);
+				if (diff < smallestDiff) {
+					smallestDiff = diff;
+					bestIdx = i;
+				}
+			}
+		}
+		return bestIdx;
+	}
+
+	// Turunkan 1 tingkat resolusi saat buffering terlalu lama dalam mode Auto
+	public void triggerAutoDowngrade() {
+		if (!isAutoQualityMode || qualityNames == null || qualityNames.size() <= 1) return;
+
+		int currentRes = 9999;
+		String curNum = qualityNames.get(selectedQualityIndex).replaceAll("[^0-9]", "");
+		if (!curNum.isEmpty()) currentRes = Integer.parseInt(curNum);
+
+		int lowerIdx = -1;
+		int closestLowerRes = -1;
+
+		for (int i = 0; i < qualityNames.size(); i++) {
+			if (i == selectedQualityIndex) continue;
+			String numStr = qualityNames.get(i).replaceAll("[^0-9]", "");
+			if (!numStr.isEmpty()) {
+				int resVal = Integer.parseInt(numStr);
+				if (resVal < currentRes && resVal > closestLowerRes) {
+					closestLowerRes = resVal;
+					lowerIdx = i;
+				}
+			}
+		}
+
+		if (lowerIdx != -1) {
+			selectedQualityIndex = lowerIdx;
+			int currentPos = 0;
+			if (mediaPlayer != null) {
+				try {
+					currentPos = mediaPlayer.getCurrentPosition();
+				} catch (Exception ignored) {}
+			}
+			updateQualityBadgeText();
+			Toast.makeText(WatchActivity.this, "Jaringan lambat, otomatis ke " + qualityNames.get(lowerIdx), Toast.LENGTH_SHORT).show();
+			playVideoUrl(qualityUrls.get(lowerIdx), currentPos);
+		}
+	}
+
+	public void updateQualityBadgeText() {
+		if (btnQuality == null || qualityNames.isEmpty()) return;
+		if (isAutoQualityMode) {
+			String activeRes = qualityNames.get(selectedQualityIndex);
+			if (activeRes.equalsIgnoreCase("Auto") || activeRes.equalsIgnoreCase("Default")) {
+				btnQuality.setText("Auto");
+			} else {
+				btnQuality.setText("Auto (" + activeRes + ")");
+			}
+		} else {
+			btnQuality.setText(qualityNames.get(selectedQualityIndex));
+		}
+	}
+
+	// ========================================================
+	// KONTROL VISIBILITAS OVERLAY
+	// ========================================================
 	public void resetControlsTimer() {
 		if (playerHandler != null && hideControlsRunnable != null) {
 			playerHandler.removeCallbacks(hideControlsRunnable);
@@ -403,23 +527,14 @@ public class WatchActivity extends AppCompatActivity {
 		int totalItems = (recyclerEpisode != null && recyclerEpisode.getAdapter() != null) ? recyclerEpisode.getAdapter().getItemCount() : (episodeList != null ? episodeList.size() : 0);
 
 		if (btnPrevEpisode != null) {
-			if (currentEpisodeIndex <= 0) {
-				btnPrevEpisode.setEnabled(false);
-				btnPrevEpisode.setAlpha(0.35f);
-			} else {
-				btnPrevEpisode.setEnabled(true);
-				btnPrevEpisode.setAlpha(1.0f);
-			}
+			btnPrevEpisode.setEnabled(currentEpisodeIndex > 0);
+			btnPrevEpisode.setAlpha(currentEpisodeIndex > 0 ? 1.0f : 0.35f);
 		}
 
 		if (btnNextEpisode != null) {
-			if (currentEpisodeIndex >= (totalItems - 1) || totalItems <= 1) {
-				btnNextEpisode.setEnabled(false);
-				btnNextEpisode.setAlpha(0.35f);
-			} else {
-				btnNextEpisode.setEnabled(true);
-				btnNextEpisode.setAlpha(1.0f);
-			}
+			boolean hasNext = currentEpisodeIndex < (totalItems - 1) && totalItems > 1;
+			btnNextEpisode.setEnabled(hasNext);
+			btnNextEpisode.setAlpha(hasNext ? 1.0f : 0.35f);
 		}
 	}
 
@@ -548,11 +663,17 @@ public class WatchActivity extends AppCompatActivity {
 					btnPlay.setAlpha(0.5f);
 				}
 
+				if (playerHandler != null && autoDowngradeRunnable != null) {
+					playerHandler.removeCallbacks(autoDowngradeRunnable);
+					if (isAutoQualityMode) {
+						// Jika loading awal terlalu lama (> 5 detik), otomatis turun resolusi
+						playerHandler.postDelayed(autoDowngradeRunnable, 5000);
+					}
+				}
+
 				try {
 					if (mediaPlayer != null) {
-						try {
-							mediaPlayer.stop();
-						} catch (Exception ignored) {}
+						try { mediaPlayer.stop(); } catch (Exception ignored) {}
 						try {
 							mediaPlayer.reset();
 							mediaPlayer.release();
@@ -565,9 +686,7 @@ public class WatchActivity extends AppCompatActivity {
 					if (playerTextureView != null && playerTextureView.isAvailable()) {
 						SurfaceTexture st = playerTextureView.getSurfaceTexture();
 						if (st != null) {
-							if (playerSurface != null) {
-								playerSurface.release();
-							}
+							if (playerSurface != null) playerSurface.release();
 							playerSurface = new Surface(st);
 							mediaPlayer.setSurface(playerSurface);
 						}
@@ -615,7 +734,15 @@ public class WatchActivity extends AppCompatActivity {
 									btnPlay.setEnabled(false);
 									btnPlay.setAlpha(0.5f);
 								}
+								// Jika buffering saat menonton > 2.5 detik, otomatis turunkan resolusi
+								if (playerHandler != null && autoDowngradeRunnable != null && isAutoQualityMode) {
+									playerHandler.removeCallbacks(autoDowngradeRunnable);
+									playerHandler.postDelayed(autoDowngradeRunnable, 2500);
+								}
 							} else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END || what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+								if (playerHandler != null && autoDowngradeRunnable != null) {
+									playerHandler.removeCallbacks(autoDowngradeRunnable);
+								}
 								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 								if (btnPlay != null) {
 									btnPlay.setEnabled(true);
@@ -629,6 +756,9 @@ public class WatchActivity extends AppCompatActivity {
 					mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
 						@Override
 						public void onPrepared(MediaPlayer mp) {
+							if (playerHandler != null && autoDowngradeRunnable != null) {
+								playerHandler.removeCallbacks(autoDowngradeRunnable);
+							}
 							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
@@ -649,6 +779,16 @@ public class WatchActivity extends AppCompatActivity {
 							}
 							mp.start();
 
+							// Pertahankan kecepatan putar jika sebelumnya diubah
+							if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentPlaybackSpeed != 1.0f) {
+								try {
+									PlaybackParams params = mp.getPlaybackParams();
+									if (params == null) params = new PlaybackParams();
+									params.setSpeed(currentPlaybackSpeed);
+									mp.setPlaybackParams(params);
+								} catch (Exception ignored) {}
+							}
+
 							if (playerHandler != null && progressLoop != null) {
 								playerHandler.removeCallbacks(progressLoop);
 								playerHandler.post(progressLoop);
@@ -661,6 +801,9 @@ public class WatchActivity extends AppCompatActivity {
 					mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
 						@Override
 						public boolean onError(MediaPlayer mp, int what, int extra) {
+							if (playerHandler != null && autoDowngradeRunnable != null) {
+								playerHandler.removeCallbacks(autoDowngradeRunnable);
+							}
 							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
@@ -684,39 +827,313 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
+	// ========================================================
+	// HELPER BOTTOM SHEET DIALOG MODERN (SERVER, RESOLUSI, SPEED)
+	// ========================================================
+	private void showModernBottomSheet(String title, String subtitle, ArrayList<String> optionTitles, ArrayList<String> optionBadges, int activeIdx, final OnSheetItemClickListener listener) {
+		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#0F172A"));
+		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
+		root.setBackground(sheetBg);
+
+		// Drag handle pill di tengah atas
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int)(16 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#334155"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		// Header Title & Subtitle
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText(title);
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(18f);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		root.addView(tvTitle);
+
+		if (subtitle != null && !subtitle.isEmpty()) {
+			TextView tvSub = new TextView(this);
+			tvSub.setText(subtitle);
+			tvSub.setTextColor(Color.parseColor("#94A3B8"));
+			tvSub.setTextSize(12f);
+			tvSub.setPadding(0, (int)(2 * d), 0, (int)(14 * d));
+			root.addView(tvSub);
+		} else {
+			tvTitle.setPadding(0, 0, 0, (int)(14 * d));
+		}
+
+		// Scrollable list container
+		ScrollView scrollView = new ScrollView(this);
+		scrollView.setVerticalScrollBarEnabled(false);
+		LinearLayout listContainer = new LinearLayout(this);
+		listContainer.setOrientation(LinearLayout.VERTICAL);
+		scrollView.addView(listContainer);
+
+		for (int i = 0; i < optionTitles.size(); i++) {
+			final int index = i;
+			boolean isSelected = (i == activeIdx);
+
+			LinearLayout itemRow = new LinearLayout(this);
+			itemRow.setOrientation(LinearLayout.HORIZONTAL);
+			itemRow.setGravity(Gravity.CENTER_VERTICAL);
+			itemRow.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
+
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int)(10 * d);
+			itemRow.setLayoutParams(rowLp);
+
+			GradientDrawable rowBg = new GradientDrawable();
+			rowBg.setCornerRadius(14 * d);
+			if (isSelected) {
+				rowBg.setColor(Color.parseColor("#1E3A8A"));
+				rowBg.setStroke((int)(1.5f * d), Color.parseColor("#3B82F6"));
+			} else {
+				rowBg.setColor(Color.parseColor("#1E293B"));
+				rowBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
+			}
+			itemRow.setBackground(rowBg);
+
+			TextView tvName = new TextView(this);
+			tvName.setText(optionTitles.get(i));
+			tvName.setTextColor(isSelected ? Color.WHITE : Color.parseColor("#E2E8F0"));
+			tvName.setTextSize(15f);
+			tvName.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
+			LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+			tvName.setLayoutParams(nameLp);
+			itemRow.addView(tvName);
+
+			if (optionBadges != null && i < optionBadges.size() && !optionBadges.get(i).isEmpty()) {
+				TextView tvBadge = new TextView(this);
+				tvBadge.setText(optionBadges.get(i));
+				tvBadge.setTextSize(11f);
+				tvBadge.setTypeface(null, Typeface.BOLD);
+				tvBadge.setTextColor(isSelected ? Color.parseColor("#93C5FD") : Color.parseColor("#94A3B8"));
+				tvBadge.setPadding((int)(8 * d), (int)(3 * d), (int)(8 * d), (int)(3 * d));
+				GradientDrawable bBg = new GradientDrawable();
+				bBg.setCornerRadius(8 * d);
+				bBg.setColor(isSelected ? Color.parseColor("#172554") : Color.parseColor("#0F172A"));
+				tvBadge.setBackground(bBg);
+				LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+				bLp.rightMargin = (int)(10 * d);
+				tvBadge.setLayoutParams(bLp);
+				itemRow.addView(tvBadge);
+			}
+
+			if (isSelected) {
+				TextView tvCheck = new TextView(this);
+				tvCheck.setText("✓");
+				tvCheck.setTextColor(Color.parseColor("#3B82F6"));
+				tvCheck.setTextSize(16f);
+				tvCheck.setTypeface(null, Typeface.BOLD);
+				itemRow.addView(tvCheck);
+			}
+
+			itemRow.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheetDialog.dismiss();
+					listener.onItemClick(index);
+				}
+			});
+
+			listContainer.addView(itemRow);
+		}
+
+		root.addView(scrollView);
+		sheetDialog.setContentView(root);
+		if (sheetDialog.getWindow() != null) {
+			sheetDialog.getWindow().findViewById(com.google.android.material.R.id.design_bottom_sheet)
+				.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+		}
+		sheetDialog.show();
+	}
+
+	private interface OnSheetItemClickListener {
+		void onItemClick(int index);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: PILIH SERVER
+	// ========================================================
 	public void showServerDialog() {
 		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
-		ArrayList<String> displayList = new ArrayList<>();
-		for (int i = 0; i < currentEpisodeServerNames.size(); i++) {
-			if (i == selectedServerIndex) {
-				displayList.add(currentEpisodeServerNames.get(i) + "  ✓");
-			} else {
-				displayList.add(currentEpisodeServerNames.get(i));
+		ArrayList<String> badges = new ArrayList<>();
+		for (String s : currentEpisodeServerNames) {
+			if (s.toLowerCase().contains("ok")) badges.add("Rekomendasi");
+			else if (s.toLowerCase().contains("daily")) badges.add("Multi-Res");
+			else badges.add("Mirror");
+		}
+
+		showModernBottomSheet(
+			"Pilih Server Streaming",
+			"Ganti server jika video terasa lambat atau gagal dimuat",
+			currentEpisodeServerNames,
+			badges,
+			selectedServerIndex,
+			new OnSheetItemClickListener() {
+				@Override
+				public void onItemClick(int which) {
+					selectedServerIndex = which;
+					String chosenName = currentEpisodeServerNames.get(which);
+					String chosenUrl = currentEpisodeServerUrls.get(which);
+
+					if (textActionServer != null) {
+						textActionServer.setText(chosenName);
+					}
+					extractStream(chosenName, chosenUrl);
+				}
+			}
+		);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: PILIH RESOLUSI (AUTO + MANUAL)
+	// ========================================================
+	public void showQualityDialog() {
+		if (qualityNames == null || qualityNames.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		ArrayList<String> titles = new ArrayList<>();
+		ArrayList<String> badges = new ArrayList<>();
+
+		// Opsi pertama selalu "Auto"
+		String currentActiveRes = qualityNames.get(selectedQualityIndex);
+		titles.add("Auto");
+		badges.add(currentActiveRes.equalsIgnoreCase("Auto") ? "Otomatis" : "Aktif: " + currentActiveRes);
+
+		for (String q : qualityNames) {
+			titles.add(q);
+			if (q.contains("1080")) badges.add("Full HD");
+			else if (q.contains("720")) badges.add("HD");
+			else if (q.contains("480")) badges.add("SD");
+			else if (q.contains("360") || q.contains("240") || q.contains("144")) badges.add("Hemat Kuota");
+			else badges.add("");
+		}
+
+		int activeSheetIdx = isAutoQualityMode ? 0 : (selectedQualityIndex + 1);
+
+		showModernBottomSheet(
+			"Kualitas Video",
+			"Auto menyesuaikan resolusi secara otomatis dengan kecepatan jaringan",
+			titles,
+			badges,
+			activeSheetIdx,
+			new OnSheetItemClickListener() {
+				@Override
+				public void onItemClick(int which) {
+					int currentPos = 0;
+					if (mediaPlayer != null) {
+						try {
+							currentPos = mediaPlayer.getCurrentPosition();
+						} catch (Exception ignored) {}
+					}
+
+					if (which == 0) {
+						// Pilih Auto
+						isAutoQualityMode = true;
+						int recIdx = getRecommendedQualityIndex();
+						boolean needReload = (recIdx != selectedQualityIndex);
+						selectedQualityIndex = recIdx;
+						updateQualityBadgeText();
+
+						if (needReload) {
+							playVideoUrl(qualityUrls.get(recIdx), currentPos);
+						}
+					} else {
+						// Pilih Resolusi Manual
+						isAutoQualityMode = false;
+						int realIdx = which - 1;
+						selectedQualityIndex = realIdx;
+						updateQualityBadgeText();
+						playVideoUrl(qualityUrls.get(realIdx), currentPos);
+					}
+				}
+			}
+		);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: KECEPATAN PUTAR
+	// ========================================================
+	public void showSpeedDialog() {
+		final ArrayList<String> speedLabels = new ArrayList<>();
+		speedLabels.add("0.5x");
+		speedLabels.add("0.75x");
+		speedLabels.add("1.0x (Normal)");
+		speedLabels.add("1.25x");
+		speedLabels.add("1.5x");
+		speedLabels.add("2.0x");
+
+		final ArrayList<String> speedBadges = new ArrayList<>();
+		speedBadges.add("Lambat");
+		speedBadges.add("");
+		speedBadges.add("Default");
+		speedBadges.add("");
+		speedBadges.add("Cepat");
+		speedBadges.add("Sangat Cepat");
+
+		final float[] speedVals = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+		int activeIdx = 2;
+		for (int i = 0; i < speedVals.length; i++) {
+			if (Math.abs(speedVals[i] - currentPlaybackSpeed) < 0.01f) {
+				activeIdx = i;
+				break;
 			}
 		}
 
-		final String[] items = displayList.toArray(new String[0]);
-		new AlertDialog.Builder(WatchActivity.this)
-		.setTitle("Pilih Server")
-		.setItems(items, new DialogInterface.OnClickListener() {
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				selectedServerIndex = which;
-				String chosenName = currentEpisodeServerNames.get(which);
-				String chosenUrl = currentEpisodeServerUrls.get(which);
+		showModernBottomSheet(
+			"Kecepatan Pemutaran",
+			"Atur tempo pemutaran video sesuai kenyamananmu",
+			speedLabels,
+			speedBadges,
+			activeIdx,
+			new OnSheetItemClickListener() {
+				@Override
+				public void onItemClick(int which) {
+					float selectedSpeed = speedVals[which];
+					currentPlaybackSpeed = selectedSpeed;
+					String label = (which == 2) ? "1x" : speedLabels.get(which);
 
-				if (textActionServer != null) {
-					textActionServer.setText(chosenName);
+					if (btnSpeed != null) {
+						btnSpeed.setText(label);
+					}
+
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+						if (mediaPlayer != null) {
+							try {
+								boolean isPlaying = mediaPlayer.isPlaying();
+								PlaybackParams params = mediaPlayer.getPlaybackParams();
+								if (params == null) params = new PlaybackParams();
+								params.setSpeed(selectedSpeed);
+								mediaPlayer.setPlaybackParams(params);
+								if (!isPlaying) mediaPlayer.pause();
+							} catch (Exception ignored) {}
+						}
+					}
 				}
-
-				extractStream(chosenName, chosenUrl);
 			}
-		})
-		.show();
+		);
 	}
 
 	public void toggleFullscreen() {
@@ -807,83 +1224,16 @@ public class WatchActivity extends AppCompatActivity {
 		resetControlsTimer();
 	}
 
-	public void showQualityDialog() {
-		if (qualityNames == null || qualityNames.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
-			return;
-		}
-
-		ArrayList<String> displayList = new ArrayList<>();
-		for (int i = 0; i < qualityNames.size(); i++) {
-			if (i == selectedQualityIndex) {
-				displayList.add(qualityNames.get(i) + "  ✓");
-			} else {
-				displayList.add(qualityNames.get(i));
-			}
-		}
-
-		final String[] items = displayList.toArray(new String[0]);
-		new AlertDialog.Builder(WatchActivity.this)
-		.setTitle("Pilih Resolusi")
-		.setItems(items, new DialogInterface.OnClickListener() {
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				selectedQualityIndex = which;
-				String chosenName = qualityNames.get(which);
-
-				if (btnQuality != null) {
-					btnQuality.setText(chosenName);
-				}
-
-				int currentPos = 0;
-				if (mediaPlayer != null) {
-					try {
-						currentPos = mediaPlayer.getCurrentPosition();
-					} catch (Exception ignored) {}
-				}
-				String targetUrl = qualityUrls.get(which);
-				playVideoUrl(targetUrl, currentPos);
-			}
-		})
-		.show();
-	}
-
-	public void showSpeedDialog() {
-		final String[] speeds = new String[]{"0.5x", "0.75x", "Normal (1.0x)", "1.25x", "1.5x", "2.0x"};
-		final float[] speedVals = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
-
-		new AlertDialog.Builder(WatchActivity.this)
-		.setTitle("Kecepatan Putar")
-		.setItems(speeds, new DialogInterface.OnClickListener() {
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				float selectedSpeed = speedVals[which];
-				String label = (which == 2) ? "1x" : speeds[which].replace("x", "") + "x";
-
-				if (btnSpeed != null) {
-					btnSpeed.setText(label);
-				}
-
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-					if (mediaPlayer != null) {
-						try {
-							boolean isPlaying = mediaPlayer.isPlaying();
-							PlaybackParams params = mediaPlayer.getPlaybackParams();
-							if (params == null) params = new PlaybackParams();
-							params.setSpeed(selectedSpeed);
-							mediaPlayer.setPlaybackParams(params);
-							if (!isPlaying) mediaPlayer.pause();
-						} catch (Exception ignored) {}
-					}
-				}
-			}
-		})
-		.show();
-	}
-
 	public void _initPlayerViews() {
 		final boolean[] isUserTrackingSeekBar = new boolean[]{false};
 		playerHandler = new Handler(Looper.getMainLooper());
+
+		autoDowngradeRunnable = new Runnable() {
+			@Override
+			public void run() {
+				triggerAutoDowngrade();
+			}
+		};
 
 		GradientDrawable playCircle = new GradientDrawable();
 		playCircle.setShape(GradientDrawable.OVAL);
@@ -1279,7 +1629,6 @@ public class WatchActivity extends AppCompatActivity {
 
 						final ArrayList<String> tempNames = new ArrayList<>();
 						final ArrayList<String> tempUrls = new ArrayList<>();
-						String autoUrl = "";
 
 						if (!foundOptions.isEmpty()) {
 							String cleanJson = foundOptions
@@ -1319,31 +1668,25 @@ public class WatchActivity extends AppCompatActivity {
 
 										tempNames.add(rName);
 										tempUrls.add(rawUrl);
-
-										if (autoUrl.isEmpty()) {
-											autoUrl = rawUrl;
-										}
 									}
 								}
 							}
 						}
 
-						final String finalOkUrl = autoUrl;
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
-								if (!finalOkUrl.isEmpty()) {
+								if (!tempUrls.isEmpty()) {
 									qualityNames.clear();
 									qualityUrls.clear();
 									qualityNames.addAll(tempNames);
 									qualityUrls.addAll(tempUrls);
-									selectedQualityIndex = 0;
 
-									if (btnQuality != null) {
-										btnQuality.setText(tempNames.get(0));
-									}
+									isAutoQualityMode = true;
+									selectedQualityIndex = getRecommendedQualityIndex();
+									updateQualityBadgeText();
 
-									playVideoUrl(finalOkUrl, 0);
+									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 									Toast.makeText(WatchActivity.this, "Gagal parsing video OK.ru", Toast.LENGTH_SHORT).show();
@@ -1440,11 +1783,12 @@ public class WatchActivity extends AppCompatActivity {
 									qualityUrls.clear();
 									qualityNames.addAll(dmNames);
 									qualityUrls.addAll(dmUrls);
-									selectedQualityIndex = 0;
 
-									if (btnQuality != null) btnQuality.setText(dmNames.get(0));
+									isAutoQualityMode = true;
+									selectedQualityIndex = getRecommendedQualityIndex();
+									updateQualityBadgeText();
 
-									playVideoUrl(dmUrls.get(0), 0);
+									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
 									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 									Toast.makeText(WatchActivity.this, "Stream Dailymotion tidak tersedia", Toast.LENGTH_SHORT).show();
@@ -1498,9 +1842,9 @@ public class WatchActivity extends AppCompatActivity {
 								qualityUrls.clear();
 								qualityNames.add("Default");
 								qualityUrls.add(directDtubeUrl);
+								isAutoQualityMode = true;
 								selectedQualityIndex = 0;
-
-								if (btnQuality != null) btnQuality.setText("Default");
+								updateQualityBadgeText();
 
 								playVideoUrl(directDtubeUrl, 0);
 							}
@@ -1564,9 +1908,9 @@ public class WatchActivity extends AppCompatActivity {
 									qualityUrls.clear();
 									qualityNames.add("Default");
 									qualityUrls.add(finalRumbleUrl);
+									isAutoQualityMode = true;
 									selectedQualityIndex = 0;
-
-									if (btnQuality != null) btnQuality.setText("Default");
+									updateQualityBadgeText();
 
 									playVideoUrl(finalRumbleUrl, 0);
 								} else {
@@ -1621,9 +1965,9 @@ public class WatchActivity extends AppCompatActivity {
 								qualityUrls.clear();
 								qualityNames.add("Default");
 								qualityUrls.add(finalOdyUrl);
+								isAutoQualityMode = true;
 								selectedQualityIndex = 0;
-
-								if (btnQuality != null) btnQuality.setText("Default");
+								updateQualityBadgeText();
 
 								playVideoUrl(finalOdyUrl, 0);
 							}
@@ -1655,9 +1999,9 @@ public class WatchActivity extends AppCompatActivity {
 									qualityUrls.clear();
 									qualityNames.add("Default");
 									qualityUrls.add(finalTargetUrl);
+									isAutoQualityMode = true;
 									selectedQualityIndex = 0;
-
-									if (btnQuality != null) btnQuality.setText("Default");
+									updateQualityBadgeText();
 
 									playVideoUrl(finalTargetUrl, 0);
 								}
@@ -1696,9 +2040,9 @@ public class WatchActivity extends AppCompatActivity {
 									qualityUrls.clear();
 									qualityNames.add("Default");
 									qualityUrls.add(finalGenericUrl);
+									isAutoQualityMode = true;
 									selectedQualityIndex = 0;
-
-									if (btnQuality != null) btnQuality.setText("Default");
+									updateQualityBadgeText();
 
 									playVideoUrl(finalGenericUrl, 0);
 								} else {
