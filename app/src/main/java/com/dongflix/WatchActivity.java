@@ -27,6 +27,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -81,9 +82,9 @@ public class WatchActivity extends AppCompatActivity {
 	private TextureView playerTextureView;
 	private FrameLayout layoutPlayer;
 	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls;
-	private ImageView btnBack, btnPrevEpisode, btnPlay, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
-	private TextView textPlayerTitle, btnSpeed, textTime, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes;
-	private LinearLayout btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
+	private ImageView btnBack, btnCast, btnLock, btnSettings, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
+	private TextView textPlayerTitle, textTime, btnFullscreenEpisodes, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes;
+	private LinearLayout animSeekLeft, animSeekRight, btnUnlockScreen, btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
 	private ProgressBar playerLoading;
 	private SeekBar playerSeekBar;
 	private RecyclerView recyclerEpisode, recyclerRekomendasi;
@@ -97,6 +98,8 @@ public class WatchActivity extends AppCompatActivity {
 	private String detailCover = "";
 
 	private boolean isNewestFirst = true;
+	private boolean isScreenLocked = false;
+	private Runnable hideUnlockBtnRunnable;
 
 	public MediaPlayer mediaPlayer;
 	public Handler playerHandler;
@@ -144,17 +147,26 @@ public class WatchActivity extends AppCompatActivity {
 		topBar = findViewById(R.id.topBar);
 		bottomControls = findViewById(R.id.bottomControls);
 
+		animSeekLeft = findViewById(R.id.animSeekLeft);
+		animSeekRight = findViewById(R.id.animSeekRight);
+		btnUnlockScreen = findViewById(R.id.btnUnlockScreen);
+
 		btnBack = findViewById(R.id.btnBack);
+		btnCast = findViewById(R.id.btnCast);
+		btnLock = findViewById(R.id.btnLock);
+		btnSettings = findViewById(R.id.btnSettings);
 		btnPrevEpisode = findViewById(R.id.btnPrevEpisode);
+		btnRewind = findViewById(R.id.btnRewind);
 		btnPlay = findViewById(R.id.btnPlay);
+		btnForward = findViewById(R.id.btnForward);
 		btnNextEpisode = findViewById(R.id.btnNextEpisode);
 		btnFullscreen = findViewById(R.id.btnFullscreen);
 		imagePoster = findViewById(R.id.imagePoster);
 		iconExpandDetail = findViewById(R.id.iconExpandDetail);
 
 		textPlayerTitle = findViewById(R.id.textPlayerTitle);
-		btnSpeed = findViewById(R.id.btnSpeed);
 		textTime = findViewById(R.id.textTime);
+		btnFullscreenEpisodes = findViewById(R.id.btnFullscreenEpisodes);
 		btnQuality = findViewById(R.id.btnQuality);
 		textJudul = findViewById(R.id.textJudul);
 		textRating = findViewById(R.id.textRating);
@@ -368,6 +380,33 @@ public class WatchActivity extends AppCompatActivity {
 		);
 		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
 
+		// Pill animasi seek kiri & kanan
+		View[] seekPills = {animSeekLeft, animSeekRight};
+		for (View pill : seekPills) {
+			if (pill != null) {
+				GradientDrawable pillBg = new GradientDrawable();
+				pillBg.setCornerRadius(100f);
+				pillBg.setColor(0x99000000);
+				pill.setBackground(pillBg);
+			}
+		}
+
+		// Pill tombol Unlock saat terkunci
+		if (btnUnlockScreen != null) {
+			GradientDrawable lockBg = new GradientDrawable();
+			lockBg.setCornerRadius(100f);
+			lockBg.setColor(0xCC14161D);
+			btnUnlockScreen.setBackground(lockBg);
+		}
+
+		// Pill tombol Episode saat Fullscreen
+		if (btnFullscreenEpisodes != null) {
+			GradientDrawable fsEpBg = new GradientDrawable();
+			fsEpBg.setCornerRadius(100f);
+			fsEpBg.setColor(0x801E212B);
+			btnFullscreenEpisodes.setBackground(fsEpBg);
+		}
+
 		TextView[] badges = {textRating, textYear, textGenre};
 		for (TextView badge : badges) {
 			if (badge != null) {
@@ -401,6 +440,53 @@ public class WatchActivity extends AppCompatActivity {
 				btnBg.setColor(Color.parseColor("#1E212B"));
 				btn.setBackground(btnBg);
 			}
+		}
+	}
+
+	private void showSeekAnimation(final View animView) {
+		if (animView == null) return;
+		animView.animate().cancel();
+		animView.setVisibility(View.VISIBLE);
+		animView.setAlpha(1f);
+		animView.animate()
+			.alpha(0f)
+			.setStartDelay(450)
+			.setDuration(250)
+			.withEndAction(new Runnable() {
+				@Override
+				public void run() {
+					animView.setVisibility(View.GONE);
+				}
+			})
+			.start();
+	}
+
+	private void lockScreenControls() {
+		isScreenLocked = true;
+		hideControls();
+		showUnlockPillTemporarily();
+		Toast.makeText(this, "Layar dikunci", Toast.LENGTH_SHORT).show();
+	}
+
+	private void unlockScreenControls() {
+		isScreenLocked = false;
+		if (btnUnlockScreen != null) {
+			btnUnlockScreen.setVisibility(View.GONE);
+		}
+		if (playerHandler != null && hideUnlockBtnRunnable != null) {
+			playerHandler.removeCallbacks(hideUnlockBtnRunnable);
+		}
+		showControls();
+		Toast.makeText(this, "Kunci layar dibuka", Toast.LENGTH_SHORT).show();
+	}
+
+	private void showUnlockPillTemporarily() {
+		if (btnUnlockScreen == null) return;
+		btnUnlockScreen.setVisibility(View.VISIBLE);
+		btnUnlockScreen.bringToFront();
+		if (playerHandler != null && hideUnlockBtnRunnable != null) {
+			playerHandler.removeCallbacks(hideUnlockBtnRunnable);
+			playerHandler.postDelayed(hideUnlockBtnRunnable, 2500);
 		}
 	}
 
@@ -490,7 +576,6 @@ public class WatchActivity extends AppCompatActivity {
 						bottomSheet.setElevation(0f);
 					}
 
-					// Paksa langsung expanded penuh & atur lebar agar rapi saat Fullscreen / Landscape
 					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
 					behavior.setSkipCollapsed(true);
 					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
@@ -528,6 +613,88 @@ public class WatchActivity extends AppCompatActivity {
 		});
 
 		sheetDialog.show();
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: SETTINGS (KUALITAS, KECEPATAN, SERVER)
+	// ========================================================
+	public void showSettingsBottomSheet() {
+		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
+		root.setBackground(sheetBg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int)(12 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		root.addView(buildSheetHeader("Pengaturan Pemutar", sheetDialog));
+
+		String currentQualityLabel = (btnQuality != null) ? btnQuality.getText().toString() : "Auto";
+		String currentSpeedLabel = (Math.abs(currentPlaybackSpeed - 1.0f) < 0.01f) ? "Normal (1x)" : currentPlaybackSpeed + "x";
+		String currentServerLabel = (textActionServer != null) ? textActionServer.getText().toString() : "Default";
+
+		String[] menuTitles = new String[]{"Kualitas Video", "Kecepatan Putar", "Server Streaming"};
+		String[] menuValues = new String[]{currentQualityLabel, currentSpeedLabel, currentServerLabel};
+
+		for (int i = 0; i < menuTitles.length; i++) {
+			final int idx = i;
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.CENTER_VERTICAL);
+			row.setPadding((int)(16 * d), (int)(15 * d), (int)(16 * d), (int)(15 * d));
+
+			LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			rLp.bottomMargin = (int)(10 * d);
+			row.setLayoutParams(rLp);
+
+			GradientDrawable rBg = new GradientDrawable();
+			rBg.setCornerRadius(12 * d);
+			rBg.setColor(Color.parseColor("#1E212B"));
+			row.setBackground(rBg);
+
+			TextView tvLeft = new TextView(this);
+			tvLeft.setText(menuTitles[i]);
+			tvLeft.setTextColor(Color.WHITE);
+			tvLeft.setTextSize(15f);
+			tvLeft.setTypeface(null, Typeface.BOLD);
+			tvLeft.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+			row.addView(tvLeft);
+
+			TextView tvRight = new TextView(this);
+			tvRight.setText(menuValues[i] + "  ›");
+			tvRight.setTextColor(Color.parseColor("#9CA3AF"));
+			tvRight.setTextSize(13.5f);
+			row.addView(tvRight);
+
+			row.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheetDialog.dismiss();
+					if (idx == 0) showQualityDialog();
+					else if (idx == 1) showSpeedDialog();
+					else if (idx == 2) showServerDialog();
+				}
+			});
+
+			root.addView(row);
+		}
+
+		attachTransparentSheetContainer(sheetDialog, root);
 	}
 
 	// ========================================================
@@ -789,9 +956,6 @@ public class WatchActivity extends AppCompatActivity {
 		void onItemClick(int index);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: SEMUA EPISODE (GRID 5 KOLOM + TOMBOL TUTUP)
-	// ========================================================
 	public void showAllEpisodesBottomSheet() {
 		if (episodeList == null || episodeList.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
@@ -898,9 +1062,6 @@ public class WatchActivity extends AppCompatActivity {
 		attachTransparentSheetContainer(sheetDialog, root);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: PILIH SERVER
-	// ========================================================
 	public void showServerDialog() {
 		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
@@ -927,9 +1088,6 @@ public class WatchActivity extends AppCompatActivity {
 		);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: KUALITAS (TANPA PREMIUM, SESUAI GAMBAR)
-	// ========================================================
 	public void showQualityDialog() {
 		if (qualityNames == null || qualityNames.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
@@ -1007,9 +1165,6 @@ public class WatchActivity extends AppCompatActivity {
 		);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: KECEPATAN PUTAR (SESUAI GAMBAR)
-	// ========================================================
 	public void showSpeedDialog() {
 		final ArrayList<String> speedLabels = new ArrayList<>();
 		speedLabels.add("0.5x");
@@ -1038,11 +1193,6 @@ public class WatchActivity extends AppCompatActivity {
 				public void onItemClick(int which) {
 					float selectedSpeed = speedVals[which];
 					currentPlaybackSpeed = selectedSpeed;
-					String label = (which == 2) ? "1x" : speedLabels.get(which);
-
-					if (btnSpeed != null) {
-						btnSpeed.setText(label);
-					}
 
 					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
 						if (mediaPlayer != null) {
@@ -1067,6 +1217,7 @@ public class WatchActivity extends AppCompatActivity {
 			if (progressLoop != null) playerHandler.removeCallbacks(progressLoop);
 			if (hideControlsRunnable != null) playerHandler.removeCallbacks(hideControlsRunnable);
 			if (autoDowngradeRunnable != null) playerHandler.removeCallbacks(autoDowngradeRunnable);
+			if (hideUnlockBtnRunnable != null) playerHandler.removeCallbacks(hideUnlockBtnRunnable);
 			playerHandler.removeCallbacksAndMessages(null);
 		}
 
@@ -1103,6 +1254,10 @@ public class WatchActivity extends AppCompatActivity {
 
 	@Override
 	public void onBackPressed() {
+		if (isScreenLocked) {
+			showUnlockPillTemporarily();
+			return;
+		}
 		if (isFullscreen) {
 			toggleFullscreen();
 		} else if (!isFinishing()) {
@@ -1222,6 +1377,10 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	public void showControls() {
+		if (isScreenLocked) {
+			showUnlockPillTemporarily();
+			return;
+		}
 		if (playerControlsOverlay != null) {
 			playerControlsOverlay.setVisibility(View.VISIBLE);
 			playerControlsOverlay.bringToFront();
@@ -1241,6 +1400,14 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	public void toggleControls() {
+		if (isScreenLocked) {
+			if (btnUnlockScreen != null && btnUnlockScreen.getVisibility() == View.VISIBLE) {
+				btnUnlockScreen.setVisibility(View.GONE);
+			} else {
+				showUnlockPillTemporarily();
+			}
+			return;
+		}
 		if (areControlsVisible) {
 			hideControls();
 		} else {
@@ -1592,44 +1759,64 @@ public class WatchActivity extends AppCompatActivity {
 				textPlayerTitle.setVisibility(View.VISIBLE);
 			}
 
-			int sideMarginFull = (int) (36 * density);
+			if (btnFullscreenEpisodes != null) {
+				btnFullscreenEpisodes.setVisibility(View.VISIBLE);
+			}
+
+			int sideMarginFull = (int) (32 * density);
 			if (btnPrevEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
-				lp.width = (int) (46 * density);
-				lp.height = (int) (46 * density);
+				lp.width = (int) (42 * density);
+				lp.height = (int) (42 * density);
 				lp.setMargins(sideMarginFull, 0, 0, 0);
 				btnPrevEpisode.setLayoutParams(lp);
 			}
 
 			if (btnNextEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnNextEpisode.getLayoutParams();
-				lp.width = (int) (46 * density);
-				lp.height = (int) (46 * density);
+				lp.width = (int) (42 * density);
+				lp.height = (int) (42 * density);
 				lp.setMargins(0, 0, sideMarginFull, 0);
 				btnNextEpisode.setLayoutParams(lp);
 			}
 
+			int gapCenterFull = (int) (36 * density);
+			if (btnRewind != null) {
+				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnRewind.getLayoutParams();
+				lp.width = (int) (46 * density);
+				lp.height = (int) (46 * density);
+				btnRewind.setLayoutParams(lp);
+			}
+
 			if (playContainer != null) {
-				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) playContainer.getLayoutParams();
-				lp.width = (int) (84 * density);
-				lp.height = (int) (84 * density);
+				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) playContainer.getLayoutParams();
+				lp.width = (int) (82 * density);
+				lp.height = (int) (82 * density);
+				lp.setMargins(gapCenterFull, 0, gapCenterFull, 0);
 				playContainer.setLayoutParams(lp);
 			}
 
 			if (playerLoading != null) {
 				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
-				lp.width = (int) (84 * density);
-				lp.height = (int) (84 * density);
+				lp.width = (int) (82 * density);
+				lp.height = (int) (82 * density);
 				playerLoading.setLayoutParams(lp);
 			}
 
 			if (btnPlay != null) {
 				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
-				lp.width = (int) (70 * density);
-				lp.height = (int) (70 * density);
+				lp.width = (int) (68 * density);
+				lp.height = (int) (68 * density);
 				btnPlay.setLayoutParams(lp);
 				int padPlay = (int) (18 * density);
 				btnPlay.setPadding(padPlay, padPlay, padPlay, padPlay);
+			}
+
+			if (btnForward != null) {
+				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnForward.getLayoutParams();
+				lp.width = (int) (46 * density);
+				lp.height = (int) (46 * density);
+				btnForward.setLayoutParams(lp);
 			}
 
 			if (btnBack != null) {
@@ -1645,13 +1832,12 @@ public class WatchActivity extends AppCompatActivity {
 				lp.height = (int) (28 * density);
 				btnFullscreen.setLayoutParams(lp);
 			}
-			if (btnSpeed != null) btnSpeed.setTextSize(15f);
 			if (btnQuality != null) btnQuality.setTextSize(15f);
 			if (textTime != null) textTime.setTextSize(14f);
 
-			int padHoriz = (int) (36 * density);
-			int padTop = (int) (20 * density);
-			int padBottom = (int) (16 * density);
+			int padHoriz = (int) (32 * density);
+			int padTop = (int) (18 * density);
+			int padBottom = (int) (14 * density);
 			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, 0);
 			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
 
@@ -1679,45 +1865,62 @@ public class WatchActivity extends AppCompatActivity {
 
 			if (scrollContent != null) scrollContent.setVisibility(View.VISIBLE);
 			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
+			if (btnFullscreenEpisodes != null) btnFullscreenEpisodes.setVisibility(View.GONE);
 
-			int sideMarginNormal = (int) (16 * density);
+			int sideMarginNormal = (int) (12 * density);
 			if (btnPrevEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
-				lp.width = (int) (36 * density);
-				lp.height = (int) (36 * density);
+				lp.width = (int) (32 * density);
+				lp.height = (int) (32 * density);
 				lp.setMargins(sideMarginNormal, 0, 0, 0);
 				btnPrevEpisode.setLayoutParams(lp);
 			}
 
 			if (btnNextEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnNextEpisode.getLayoutParams();
-				lp.width = (int) (36 * density);
-				lp.height = (int) (36 * density);
+				lp.width = (int) (32 * density);
+				lp.height = (int) (32 * density);
 				lp.setMargins(0, 0, sideMarginNormal, 0);
 				btnNextEpisode.setLayoutParams(lp);
 			}
 
+			int gapCenterNormal = (int) (22 * density);
+			if (btnRewind != null) {
+				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnRewind.getLayoutParams();
+				lp.width = (int) (36 * density);
+				lp.height = (int) (36 * density);
+				btnRewind.setLayoutParams(lp);
+			}
+
 			if (playContainer != null) {
-				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) playContainer.getLayoutParams();
-				lp.width = (int) (68 * density);
-				lp.height = (int) (68 * density);
+				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) playContainer.getLayoutParams();
+				lp.width = (int) (64 * density);
+				lp.height = (int) (64 * density);
+				lp.setMargins(gapCenterNormal, 0, gapCenterNormal, 0);
 				playContainer.setLayoutParams(lp);
 			}
 
 			if (playerLoading != null) {
 				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
-				lp.width = (int) (68 * density);
-				lp.height = (int) (68 * density);
+				lp.width = (int) (64 * density);
+				lp.height = (int) (64 * density);
 				playerLoading.setLayoutParams(lp);
 			}
 
 			if (btnPlay != null) {
 				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
-				lp.width = (int) (56 * density);
-				lp.height = (int) (56 * density);
+				lp.width = (int) (54 * density);
+				lp.height = (int) (54 * density);
 				btnPlay.setLayoutParams(lp);
-				int padPlay = (int) (15 * density);
+				int padPlay = (int) (14 * density);
 				btnPlay.setPadding(padPlay, padPlay, padPlay, padPlay);
+			}
+
+			if (btnForward != null) {
+				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnForward.getLayoutParams();
+				lp.width = (int) (36 * density);
+				lp.height = (int) (36 * density);
+				btnForward.setLayoutParams(lp);
 			}
 
 			if (btnBack != null) {
@@ -1733,12 +1936,11 @@ public class WatchActivity extends AppCompatActivity {
 				lp.height = (int) (24 * density);
 				btnFullscreen.setLayoutParams(lp);
 			}
-			if (btnSpeed != null) btnSpeed.setTextSize(14f);
-			if (btnQuality != null) btnQuality.setTextSize(14f);
+			if (btnQuality != null) btnQuality.setTextSize(13f);
 			if (textTime != null) textTime.setTextSize(13f);
 
-			int defPadX = (int) (16 * density);
-			int defPadTop = (int) (12 * density);
+			int defPadX = (int) (14 * density);
+			int defPadTop = (int) (10 * density);
 			int defPadBottom = (int) (6 * density);
 			if (topBar != null) topBar.setPadding(defPadX, defPadTop, defPadX, 0);
 			if (bottomControls != null) bottomControls.setPadding(0, 0, 0, defPadBottom);
@@ -1756,6 +1958,15 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void run() {
 				triggerAutoDowngrade();
+			}
+		};
+
+		hideUnlockBtnRunnable = new Runnable() {
+			@Override
+			public void run() {
+				if (btnUnlockScreen != null) {
+					btnUnlockScreen.setVisibility(View.GONE);
+				}
 			}
 		};
 
@@ -1886,6 +2097,10 @@ public class WatchActivity extends AppCompatActivity {
 
 			@Override
 			public boolean onDoubleTap(MotionEvent e) {
+				if (isScreenLocked) {
+					showUnlockPillTemporarily();
+					return true;
+				}
 				if (mediaPlayer == null || layoutPlayer == null) return false;
 
 				float touchX = e.getX();
@@ -1898,7 +2113,7 @@ public class WatchActivity extends AppCompatActivity {
 						playerSeekBar.setProgress(targetPos);
 						playerSeekBar.invalidate();
 					}
-					Toast.makeText(WatchActivity.this, "-10 detik", Toast.LENGTH_SHORT).show();
+					showSeekAnimation(animSeekLeft);
 				} else {
 					int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
 					mediaPlayer.seekTo(targetPos);
@@ -1906,7 +2121,7 @@ public class WatchActivity extends AppCompatActivity {
 						playerSeekBar.setProgress(targetPos);
 						playerSeekBar.invalidate();
 					}
-					Toast.makeText(WatchActivity.this, "+10 detik", Toast.LENGTH_SHORT).show();
+					showSeekAnimation(animSeekRight);
 				}
 				resetControlsTimer();
 				return true;
@@ -2015,6 +2230,42 @@ public class WatchActivity extends AppCompatActivity {
 			});
 		}
 
+		if (btnRewind != null) {
+			btnRewind.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					if (mediaPlayer != null) {
+						int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
+						mediaPlayer.seekTo(targetPos);
+						if (playerSeekBar != null) {
+							playerSeekBar.setProgress(targetPos);
+							playerSeekBar.invalidate();
+						}
+						showSeekAnimation(animSeekLeft);
+					}
+				}
+			});
+		}
+
+		if (btnForward != null) {
+			btnForward.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					if (mediaPlayer != null) {
+						int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
+						mediaPlayer.seekTo(targetPos);
+						if (playerSeekBar != null) {
+							playerSeekBar.setProgress(targetPos);
+							playerSeekBar.invalidate();
+						}
+						showSeekAnimation(animSeekRight);
+					}
+				}
+			});
+		}
+
 		if (btnPrevEpisode != null) {
 			btnPrevEpisode.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -2040,6 +2291,47 @@ public class WatchActivity extends AppCompatActivity {
 			});
 		}
 
+		if (btnLock != null) {
+			btnLock.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					lockScreenControls();
+				}
+			});
+		}
+
+		if (btnUnlockScreen != null) {
+			btnUnlockScreen.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					unlockScreenControls();
+				}
+			});
+		}
+
+		if (btnCast != null) {
+			btnCast.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					try {
+						startActivity(new Intent(Settings.ACTION_CAST_SETTINGS));
+					} catch (Exception e) {
+						Toast.makeText(WatchActivity.this, "Fitur Cast tidak tersedia di perangkat ini", Toast.LENGTH_SHORT).show();
+					}
+				}
+			});
+		}
+
+		if (btnSettings != null) {
+			btnSettings.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showSettingsBottomSheet();
+				}
+			});
+		}
+
 		if (btnQuality != null) {
 			btnQuality.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -2049,11 +2341,11 @@ public class WatchActivity extends AppCompatActivity {
 			});
 		}
 
-		if (btnSpeed != null) {
-			btnSpeed.setOnClickListener(new View.OnClickListener() {
+		if (btnFullscreenEpisodes != null) {
+			btnFullscreenEpisodes.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					showSpeedDialog();
+					showAllEpisodesBottomSheet();
 				}
 			});
 		}
