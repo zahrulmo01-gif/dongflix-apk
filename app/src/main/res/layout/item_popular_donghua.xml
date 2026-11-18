@@ -1,57 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<androidx.cardview.widget.CardView
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/linear35"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="8dp">
-
-    <!-- Cover Populer: Lebar 130dp, Tinggi 180dp -->
-    <ImageView
-        android:id="@+id/img_popular_cover"
-        android:layout_width="130dp"
-        android:layout_height="180dp"
-        android:scaleType="centerCrop" />
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="#111111"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginBottom="12dp">
 
     <LinearLayout
+        android:id="@+id/linear35"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginLeft="12dp"
-        android:orientation="vertical"
-        android:layout_gravity="center_vertical">
+        android:orientation="horizontal"
+        android:padding="8dp">
 
-        <TextView
-            android:id="@+id/text_popular_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+        <!-- Cover Populer: Lebar 130dp, Tinggi 180dp dengan sudut rounded -->
+        <ImageView
+            android:id="@+id/img_popular_cover"
+            android:layout_width="130dp"
+            android:layout_height="180dp"
+            android:scaleType="centerCrop" />
 
-        <TextView
-            android:id="@+id/text_popular_desc"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="#94A3B8"
-            android:textSize="12sp"
-            android:maxLines="3" />
+            android:layout_marginLeft="12dp"
+            android:orientation="vertical"
+            android:layout_gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/text_popular_genre"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#3B82F6"
-            android:textSize="11sp" />
+            <TextView
+                android:id="@+id/text_popular_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/text_popular_status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#CBD5E1"
-            android:textSize="11sp" />
+            <TextView
+                android:id="@+id/text_popular_desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:maxLines="3"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/text_popular_genre"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#3B82F6"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/text_popular_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#CBD5E1"
+                android:textSize="11sp" />
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</androidx.cardview.widget.CardView>
