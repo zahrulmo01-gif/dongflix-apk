@@ -11,7 +11,6 @@
     android:paddingTop="6dp"
     android:paddingBottom="10dp">
 
-    <!-- Cover Poster Rounded -->
     <androidx.cardview.widget.CardView
         android:layout_width="130dp"
         android:layout_height="180dp"
@@ -26,17 +25,16 @@
             android:scaleType="centerCrop" />
     </androidx.cardview.widget.CardView>
 
-    <!-- Kontainer Teks Rata Atas (layout_gravity center_vertical dihapus) -->
+    <!-- Tinggi disamakan 180dp agar sinopsis penuh ke bawah tanpa terpotong -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="180dp"
         android:layout_marginLeft="14dp"
-        android:paddingTop="4dp"
         android:orientation="vertical">
 
         <TextView
             android:id="@+id/text_popular_title"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFF"
             android:textSize="16sp"
@@ -46,19 +44,19 @@
 
         <TextView
             android:id="@+id/text_popular_desc"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="4dp"
             android:textColor="#94A3B8"
             android:textSize="12sp"
-            android:maxLines="3"
             android:ellipsize="end" />
 
         <TextView
             android:id="@+id/text_popular_genre"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:textColor="#3B82F6"
             android:textSize="11sp"
             android:maxLines="1"
@@ -68,7 +66,7 @@
             android:id="@+id/text_popular_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:paddingHorizontal="10dp"
             android:paddingVertical="4dp"
             android:textColor="#CBD5E1"
