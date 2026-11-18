@@ -8,7 +8,7 @@
     android:orientation="horizontal"
     android:paddingLeft="16dp"
     android:paddingRight="12dp"
-    android:paddingTop="6dp"
+    android:paddingTop="2dp"
     android:paddingBottom="10dp">
 
     <androidx.cardview.widget.CardView
@@ -25,7 +25,6 @@
             android:scaleType="centerCrop" />
     </androidx.cardview.widget.CardView>
 
-    <!-- Tinggi disamakan 180dp agar sinopsis penuh ke bawah tanpa terpotong -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="180dp"
@@ -42,21 +41,27 @@
             android:maxLines="2"
             android:ellipsize="end" />
 
+        <!-- maxLines="4" wajib ada agar ellipsize="end" memunculkan tanda ... -->
         <TextView
             android:id="@+id/text_popular_desc"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:textColor="#94A3B8"
             android:textSize="12sp"
+            android:lineSpacingExtra="2dp"
+            android:maxLines="4"
             android:ellipsize="end" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <TextView
             android:id="@+id/text_popular_genre"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
             android:textColor="#3B82F6"
             android:textSize="11sp"
             android:maxLines="1"
