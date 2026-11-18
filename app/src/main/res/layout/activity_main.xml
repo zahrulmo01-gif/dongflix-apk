@@ -33,14 +33,12 @@
 					android:src="@drawable/default_image"
 					android:scaleType="centerCrop" />
 					
-				<!-- Gradasi Gelap Bawah Slider -->
 				<View
 					android:id="@+id/hero_shadow"
 					android:layout_width="match_parent"
 					android:layout_height="260dp"
 					android:layout_alignParentBottom="true" />
 					
-				<!-- Gradasi Gelap Atas Slider -->
 				<View
 					android:id="@+id/header_shadow"
 					android:layout_width="match_parent"
@@ -200,7 +198,6 @@
 								android:textColor="#0F172A" />
 						</LinearLayout>
 						
-						<!-- Indikator Slider di sebelah kanan -->
 						<LinearLayout
 							android:id="@+id/indicator_capsule"
 							android:layout_width="wrap_content"
@@ -264,8 +261,6 @@
 				android:layout_height="wrap_content"
 				android:clipToPadding="false"
 				android:clipChildren="false"
-				android:paddingStart="16dp"
-				android:paddingEnd="16dp"
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
 				
@@ -302,7 +297,6 @@
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
 			
-			<!-- GridView dengan Padding Kiri-Kanan agar tidak mepet -->
 			<GridView
 				android:id="@+id/gridview1"
 				android:layout_width="match_parent"
@@ -344,16 +338,12 @@
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:layout_marginBottom="100dp"
-				android:paddingLeft="16dp"
-				android:paddingRight="16dp"
-				android:paddingBottom="8dp"
 				android:clipChildren="false"
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
 	
-	<!-- Halaman Search, Favorite, Profile (Tetap dipertahankan) -->
 	<LinearLayout
 		android:id="@+id/layout_search"
 		android:layout_width="match_parent"
@@ -462,7 +452,7 @@
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:layout_marginTop="30dp"
-			padding="16dp"
+			android:padding="16dp"
 			android:background="#1E293B"
 			android:orientation="vertical">
 			<TextView
@@ -484,7 +474,6 @@
 		</LinearLayout>
 	</LinearLayout>
 	
-	<!-- Navbar Mengapung -->
 	<LinearLayout
 		android:id="@+id/navbar"
 		android:layout_width="match_parent"
