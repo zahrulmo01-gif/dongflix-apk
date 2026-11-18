@@ -2,6 +2,7 @@ package com.dongflix;
 
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -44,6 +45,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
@@ -74,12 +76,23 @@ public class WatchActivity extends AppCompatActivity {
 	private TextureView playerTextureView;
 	private FrameLayout layoutPlayer;
 	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls;
-	private ImageView btnBack, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster;
-	private TextView textPlayerTitle, btnSpeed, textTime, btnQuality, textJudul, textRating, textYear, textGenre, textSinopsis, textActionServer;
-	private LinearLayout btnFill, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
+	private ImageView btnBack, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
+	private TextView textPlayerTitle, btnSpeed, textTime, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes;
+	private LinearLayout btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
 	private ProgressBar playerLoading;
 	private SeekBar playerSeekBar;
-	private RecyclerView recyclerEpisode;
+	private RecyclerView recyclerEpisode, recyclerRekomendasi;
+
+	// Detail data untuk Bottom Sheet ala YouTube
+	private String detailTitle = "";
+	private String detailSynopsis = "";
+	private String detailStatus = "Donghua";
+	private String detailYear = "2026";
+	private String detailAllGenres = "-";
+	private String detailCover = "";
+
+	// State Sort Episode (true = Terbaru di depan, false = Terlama / Ep 1 di depan)
+	private boolean isNewestFirst = true;
 
 	public MediaPlayer mediaPlayer;
 	public Handler playerHandler;
@@ -135,6 +148,7 @@ public class WatchActivity extends AppCompatActivity {
 		btnNextEpisode = findViewById(R.id.btnNextEpisode);
 		btnFullscreen = findViewById(R.id.btnFullscreen);
 		imagePoster = findViewById(R.id.imagePoster);
+		iconExpandDetail = findViewById(R.id.iconExpandDetail);
 
 		textPlayerTitle = findViewById(R.id.textPlayerTitle);
 		btnSpeed = findViewById(R.id.btnSpeed);
@@ -144,10 +158,12 @@ public class WatchActivity extends AppCompatActivity {
 		textRating = findViewById(R.id.textRating);
 		textYear = findViewById(R.id.textYear);
 		textGenre = findViewById(R.id.textGenre);
-		textSinopsis = findViewById(R.id.textSinopsis);
 		textActionServer = findViewById(R.id.textActionServer);
+		textSortEpisodes = findViewById(R.id.textSortEpisodes);
 
 		btnFill = findViewById(R.id.btnFill);
+		btnOpenDetail = findViewById(R.id.btnOpenDetail);
+		btnSortEpisodes = findViewById(R.id.btnSortEpisodes);
 		btnActionServer = findViewById(R.id.btnActionServer);
 		btnActionDownload = findViewById(R.id.btnActionDownload);
 		btnActionShare = findViewById(R.id.btnActionShare);
@@ -156,6 +172,7 @@ public class WatchActivity extends AppCompatActivity {
 		playerLoading = findViewById(R.id.playerLoading);
 		playerSeekBar = findViewById(R.id.playerSeekBar);
 		recyclerEpisode = findViewById(R.id.recyclerEpisode);
+		recyclerRekomendasi = findViewById(R.id.recyclerRekomendasi);
 
 		_req_watch_request_listener = new RequestNetwork.RequestListener() {
 			@Override
@@ -165,7 +182,11 @@ public class WatchActivity extends AppCompatActivity {
 				if (_tag.equals("slug")) {
 					eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
 					if (eps != null && !eps.isEmpty()) {
+						// API default urut dari lama ke baru -> reverse agar terbaru di depan
 						Collections.reverse(eps);
+						isNewestFirst = true;
+						if (textSortEpisodes != null) textSortEpisodes.setText("Terbaru");
+
 						if (recyclerEpisode != null) {
 							recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
 						}
@@ -195,36 +216,63 @@ public class WatchActivity extends AppCompatActivity {
 							for (int i = 0; i < jsonArray.length(); i++) {
 								JSONObject obj = jsonArray.getJSONObject(i);
 								if (targetSlug.equals(obj.optString("slug"))) {
-									String title = obj.optString("title");
-									String synopsis = obj.optString("synopsis")
+									detailTitle = obj.optString("title");
+									detailSynopsis = obj.optString("synopsis")
 											.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
 											.replaceAll("[^\\x20-\\x7E\\n]", "")
 											.trim();
-									String cover = obj.optString("cover").trim();
-									if (cover.contains("i.ibb.co.com")) {
-										cover = cover.replace("i.ibb.co.com", "i.ibb.co");
+									detailStatus = obj.optString("status", "Donghua");
+									if (detailStatus.isEmpty()) detailStatus = "Donghua";
+
+									detailCover = obj.optString("cover").trim();
+									if (detailCover.contains("i.ibb.co.com")) {
+										detailCover = detailCover.replace("i.ibb.co.com", "i.ibb.co");
+									}
+									if (detailCover.startsWith("http://")) {
+										detailCover = detailCover.replace("http://", "https://");
 									}
 									String released = obj.optString("released");
 
 									String firstGenre = "-";
+									StringBuilder allGenresSb = new StringBuilder();
 									JSONArray genresArray = obj.optJSONArray("genres");
 									if (genresArray != null && genresArray.length() > 0) {
 										firstGenre = genresArray.optString(0);
+										for (int g = 0; g < genresArray.length(); g++) {
+											if (g > 0) allGenresSb.append(", ");
+											allGenresSb.append(genresArray.optString(g));
+										}
+									}
+									detailAllGenres = allGenresSb.length() > 0 ? allGenresSb.toString() : firstGenre;
+
+									if (released.length() >= 4) {
+										detailYear = released.substring(released.length() - 4);
 									}
 
-									if (textJudul != null) textJudul.setText(title);
-									if (textSinopsis != null) textSinopsis.setText(synopsis);
+									if (textJudul != null) textJudul.setText(detailTitle);
+									if (textRating != null) textRating.setText(detailStatus);
+									if (textYear != null) textYear.setText(detailYear);
 									if (textGenre != null) textGenre.setText(firstGenre);
 
-									if (released.length() >= 4 && textYear != null) {
-										textYear.setText(released.substring(released.length() - 4));
-									}
-
-									if (imagePoster != null && !cover.isEmpty()) {
-										Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imagePoster);
+									if (imagePoster != null && !detailCover.isEmpty()) {
+										Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(imagePoster);
 									}
 									break;
 								}
+							}
+
+							// Muat Rekomendasi Serupa (6 donghua)
+							ArrayList<HashMap<String, Object>> allList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
+							if (allList != null && recyclerRekomendasi != null) {
+								ArrayList<HashMap<String, Object>> rekomList = new ArrayList<>();
+								for (HashMap<String, Object> item : allList) {
+									String s = item.get("slug") != null ? item.get("slug").toString() : "";
+									if (!s.equals(targetSlug)) {
+										rekomList.add(item);
+										if (rekomList.size() >= 6) break;
+									}
+								}
+								recyclerRekomendasi.setAdapter(new RecyclerRekomendasiAdapter(rekomList));
 							}
 						} catch (Exception e) {
 							e.printStackTrace();
@@ -259,6 +307,11 @@ public class WatchActivity extends AppCompatActivity {
 
 		if (recyclerEpisode != null) {
 			recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		}
+
+		if (recyclerRekomendasi != null) {
+			recyclerRekomendasi.setLayoutManager(new GridLayoutManager(this, 3));
+			recyclerRekomendasi.setNestedScrollingEnabled(false);
 		}
 
 		_initPlayerViews();
@@ -301,6 +354,8 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	public void _WatchUI() {
+		float d = getResources().getDisplayMetrics().density;
+
 		GradientDrawable topGrad = new GradientDrawable(
 			GradientDrawable.Orientation.TOP_BOTTOM,
 			new int[]{0xCC000000, 0x00000000}
@@ -313,12 +368,50 @@ public class WatchActivity extends AppCompatActivity {
 		);
 		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
 
-		GradientDrawable badgeBg = new GradientDrawable();
-		badgeBg.setCornerRadius(12f);
-		badgeBg.setColor(0xFF141824);
-		if (textRating != null) textRating.setBackground(badgeBg);
-		if (textYear != null) textYear.setBackground(badgeBg);
-		if (textGenre != null) textGenre.setBackground(badgeBg);
+		// Styling Badge Status (Biru elegan transparan)
+		if (textRating != null) {
+			GradientDrawable statusBg = new GradientDrawable();
+			statusBg.setCornerRadius(100f);
+			statusBg.setColor(Color.parseColor("#172554"));
+			statusBg.setStroke((int)(1 * d), Color.parseColor("#3B82F6"));
+			textRating.setBackground(statusBg);
+		}
+
+		// Styling Badge Tahun (Slate gelap elegan)
+		if (textYear != null) {
+			GradientDrawable yearBg = new GradientDrawable();
+			yearBg.setCornerRadius(100f);
+			yearBg.setColor(Color.parseColor("#1E293B"));
+			yearBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
+			textYear.setBackground(yearBg);
+		}
+
+		// Styling Badge Genre (Slate gelap elegan)
+		if (textGenre != null) {
+			GradientDrawable genreBg = new GradientDrawable();
+			genreBg.setCornerRadius(100f);
+			genreBg.setColor(Color.parseColor("#0F172A"));
+			genreBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
+			textGenre.setBackground(genreBg);
+		}
+
+		// Styling Ikon Expand Detail (Lingkaran tipis)
+		if (iconExpandDetail != null) {
+			GradientDrawable expandBg = new GradientDrawable();
+			expandBg.setShape(GradientDrawable.OVAL);
+			expandBg.setColor(Color.parseColor("#111827"));
+			expandBg.setStroke((int)(1 * d), Color.parseColor("#1E293B"));
+			iconExpandDetail.setBackground(expandBg);
+		}
+
+		// Styling Pill Sort Episode (Terbaru / Terlama)
+		if (btnSortEpisodes != null) {
+			GradientDrawable sortBg = new GradientDrawable();
+			sortBg.setCornerRadius(100f);
+			sortBg.setColor(Color.parseColor("#111827"));
+			sortBg.setStroke((int)(1 * d), Color.parseColor("#1E293B"));
+			btnSortEpisodes.setBackground(sortBg);
+		}
 
 		View[] actionBtns = {btnActionServer, btnActionDownload, btnActionShare, btnActionReport};
 		for (View btn : actionBtns) {
@@ -330,6 +423,163 @@ public class WatchActivity extends AppCompatActivity {
 				btn.setBackground(btnBg);
 			}
 		}
+	}
+
+	// ========================================================
+	// SORT EPISODE: TERBARU <-> TERLAMA
+	// ========================================================
+	public void toggleSortEpisodes() {
+		if (episodeList == null || episodeList.size() <= 1) return;
+
+		HashMap<String, Object> currentlyPlayingItem = episodeList.get(currentEpisodeIndex);
+		Collections.reverse(episodeList);
+		isNewestFirst = !isNewestFirst;
+
+		// Pertahankan sorotan pada episode yang sedang diputar
+		for (int i = 0; i < episodeList.size(); i++) {
+			if (episodeList.get(i) == currentlyPlayingItem) {
+				currentEpisodeIndex = i;
+				break;
+			}
+		}
+
+		if (textSortEpisodes != null) {
+			textSortEpisodes.setText(isNewestFirst ? "Terbaru" : "Terlama");
+		}
+
+		if (recyclerEpisode != null && recyclerEpisode.getAdapter() != null) {
+			recyclerEpisode.getAdapter().notifyDataSetChanged();
+			recyclerEpisode.scrollToPosition(currentEpisodeIndex);
+		}
+		updateEpisodeNavButtons();
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: DETAIL DONGHUA & SINOPSIS (ALA YOUTUBE)
+	// ========================================================
+	public void showDetailBottomSheet() {
+		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(28 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#0F172A"));
+		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
+		root.setBackground(sheetBg);
+
+		// Drag handle
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int)(16 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#334155"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		// Header Deskripsi + Tombol Tutup (X)
+		LinearLayout topHeader = new LinearLayout(this);
+		topHeader.setOrientation(LinearLayout.HORIZONTAL);
+		topHeader.setGravity(Gravity.CENTER_VERTICAL);
+		topHeader.setPadding(0, 0, 0, (int)(14 * d));
+
+		TextView tvHeader = new TextView(this);
+		tvHeader.setText("Deskripsi");
+		tvHeader.setTextColor(Color.WHITE);
+		tvHeader.setTextSize(18f);
+		tvHeader.setTypeface(null, Typeface.BOLD);
+		tvHeader.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		topHeader.addView(tvHeader);
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("✕");
+		btnClose.setTextColor(Color.parseColor("#94A3B8"));
+		btnClose.setTextSize(18f);
+		btnClose.setPadding((int)(10 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheetDialog.dismiss();
+			}
+		});
+		topHeader.addView(btnClose);
+		root.addView(topHeader);
+
+		// Divider
+		View divider = new View(this);
+		LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int)(1 * d));
+		divLp.bottomMargin = (int)(16 * d);
+		divider.setLayoutParams(divLp);
+		divider.setBackgroundColor(Color.parseColor("#1E293B"));
+		root.addView(divider);
+
+		ScrollView scrollView = new ScrollView(this);
+		scrollView.setVerticalScrollBarEnabled(false);
+
+		LinearLayout content = new LinearLayout(this);
+		content.setOrientation(LinearLayout.VERTICAL);
+		scrollView.addView(content);
+
+		// Judul Lengkap
+		TextView tvFullTitle = new TextView(this);
+		tvFullTitle.setText(detailTitle.isEmpty() ? textJudul.getText().toString() : detailTitle);
+		tvFullTitle.setTextColor(Color.WHITE);
+		tvFullTitle.setTextSize(17f);
+		tvFullTitle.setTypeface(null, Typeface.BOLD);
+		tvFullTitle.setPadding(0, 0, 0, (int)(14 * d));
+		content.addView(tvFullTitle);
+
+		// Kartu Metadata (Status, Tahun, Episode, Genre)
+		LinearLayout metaCard = new LinearLayout(this);
+		metaCard.setOrientation(LinearLayout.VERTICAL);
+		metaCard.setPadding((int)(14 * d), (int)(14 * d), (int)(14 * d), (int)(14 * d));
+		LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		metaLp.bottomMargin = (int)(16 * d);
+		metaCard.setLayoutParams(metaLp);
+
+		GradientDrawable metaBg = new GradientDrawable();
+		metaBg.setColor(Color.parseColor("#1E293B"));
+		metaBg.setCornerRadius(14 * d);
+		metaCard.setBackground(metaBg);
+
+		TextView tvMetaInfo = new TextView(this);
+		String epTotalText = (episodeList != null && !episodeList.isEmpty()) ? episodeList.size() + " Episode" : "-";
+		tvMetaInfo.setText(
+			"Status  :  " + detailStatus + "\n" +
+			"Rilis      :  " + detailYear + "\n" +
+			"Total     :  " + epTotalText + "\n" +
+			"Genre   :  " + detailAllGenres
+		);
+		tvMetaInfo.setTextColor(Color.parseColor("#CBD5E1"));
+		tvMetaInfo.setTextSize(13f);
+		tvMetaInfo.setLineSpacing(6 * d, 1f);
+		metaCard.addView(tvMetaInfo);
+		content.addView(metaCard);
+
+		// Label Sinopsis
+		TextView tvSinopsisLabel = new TextView(this);
+		tvSinopsisLabel.setText("Sinopsis");
+		tvSinopsisLabel.setTextColor(Color.WHITE);
+		tvSinopsisLabel.setTextSize(14f);
+		tvSinopsisLabel.setTypeface(null, Typeface.BOLD);
+		tvSinopsisLabel.setPadding(0, 0, 0, (int)(8 * d));
+		content.addView(tvSinopsisLabel);
+
+		// Isi Sinopsis Lengkap
+		TextView tvSinopsisBody = new TextView(this);
+		tvSinopsisBody.setText(detailSynopsis.isEmpty() ? "Sinopsis belum tersedia untuk donghua ini." : detailSynopsis);
+		tvSinopsisBody.setTextColor(Color.parseColor("#94A3B8"));
+		tvSinopsisBody.setTextSize(13.5f);
+		tvSinopsisBody.setLineSpacing(5 * d, 1f);
+		content.addView(tvSinopsisBody);
+
+		root.addView(scrollView);
+		attachTransparentSheetContainer(sheetDialog, root);
 	}
 
 	@Override
@@ -1003,15 +1253,15 @@ public class WatchActivity extends AppCompatActivity {
 		headerRow.setPadding(0, 0, 0, (int)(16 * d));
 
 		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Semua Episode");
+		tvTitle.setText("Semua Episode (" + (isNewestFirst ? "Terbaru" : "Terlama") + ")");
 		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(18f);
+		tvTitle.setTextSize(17f);
 		tvTitle.setTypeface(null, Typeface.BOLD);
 		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 		headerRow.addView(tvTitle);
 
 		TextView tvCount = new TextView(this);
-		tvCount.setText(episodeList.size() + " Episode");
+		tvCount.setText(episodeList.size() + " Ep");
 		tvCount.setTextColor(Color.parseColor("#3B82F6"));
 		tvCount.setTextSize(13f);
 		tvCount.setTypeface(null, Typeface.BOLD);
@@ -1690,6 +1940,24 @@ public class WatchActivity extends AppCompatActivity {
 			});
 		}
 
+		if (btnOpenDetail != null) {
+			btnOpenDetail.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showDetailBottomSheet();
+				}
+			});
+		}
+
+		if (btnSortEpisodes != null) {
+			btnSortEpisodes.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					toggleSortEpisodes();
+				}
+			});
+		}
+
 		TextView btnSeeAllEpisodes = findViewById(R.id.textview85);
 		if (btnSeeAllEpisodes != null) {
 			btnSeeAllEpisodes.setOnClickListener(new View.OnClickListener() {
@@ -2326,6 +2594,88 @@ public class WatchActivity extends AppCompatActivity {
 					}
 
 					playEpisodeByIndex(pos);
+				}
+			});
+		}
+
+		@Override
+		public int getItemCount() {
+			return _data.size();
+		}
+
+		public class ViewHolder extends RecyclerView.ViewHolder {
+			public ViewHolder(View v) {
+				super(v);
+			}
+		}
+	}
+
+	public class RecyclerRekomendasiAdapter extends RecyclerView.Adapter<RecyclerRekomendasiAdapter.ViewHolder> {
+
+		ArrayList<HashMap<String, Object>> _data;
+
+		public RecyclerRekomendasiAdapter(ArrayList<HashMap<String, Object>> _arr) {
+			_data = _arr;
+		}
+
+		@Override
+		public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+			View v = getLayoutInflater().inflate(R.layout.custom_anime, parent, false);
+			return new ViewHolder(v);
+		}
+
+		@Override
+		public void onBindViewHolder(ViewHolder holder, int position) {
+			final HashMap<String, Object> item = _data.get(position);
+			View view = holder.itemView;
+			float d = view.getResources().getDisplayMetrics().density;
+
+			GridLayoutManager.LayoutParams lp = new GridLayoutManager.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			lp.setMargins((int)(4 * d), 0, (int)(4 * d), (int)(14 * d));
+			view.setLayoutParams(lp);
+
+			TextView textTitle = view.findViewById(R.id.text_title);
+			TextView textStatus = view.findViewById(R.id.text_status);
+			TextView textEpisode = view.findViewById(R.id.text_episode);
+			ImageView imgCover = view.findViewById(R.id.img_cover);
+			View view2 = view.findViewById(R.id.view2);
+
+			if (textStatus != null) {
+				GradientDrawable statusBg = new GradientDrawable();
+				statusBg.setCornerRadius(50f);
+				statusBg.setColor(0xFF3B82F6);
+				textStatus.setBackground(statusBg);
+				textStatus.setText(item.get("status") != null ? item.get("status").toString() : "");
+			}
+			if (view2 != null) {
+				view2.setBackground(new GradientDrawable(
+					GradientDrawable.Orientation.BOTTOM_TOP,
+					new int[]{Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT}
+				));
+			}
+			if (textTitle != null) textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
+			if (textEpisode != null) textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
+
+			String coverUrl = item.get("cover") != null ? item.get("cover").toString().trim() : "";
+			if (coverUrl.contains("i.ibb.co.com")) coverUrl = coverUrl.replace("i.ibb.co.com", "i.ibb.co");
+			if (coverUrl.startsWith("http://")) coverUrl = coverUrl.replace("http://", "https://");
+			if (imgCover != null && !coverUrl.isEmpty()) {
+				Glide.with(getApplicationContext()).load(Uri.parse(coverUrl)).into(imgCover);
+			}
+
+			view.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					String nextSlug = item.get("slug") != null ? item.get("slug").toString() : "";
+					if (!nextSlug.isEmpty()) {
+						Intent intent = new Intent(WatchActivity.this, WatchActivity.class);
+						intent.putExtra("slug", nextSlug);
+						startActivity(intent);
+						finish();
+					}
 				}
 			});
 		}
