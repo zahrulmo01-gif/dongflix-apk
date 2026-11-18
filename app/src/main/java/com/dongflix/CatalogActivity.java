@@ -24,8 +24,7 @@ import java.util.HashMap;
 public class CatalogActivity extends AppCompatActivity {
 
     private GridView gridCatalog;
-    private TextView btnLoadMore;
-    private ImageView btnBack;
+    private TextView btnLoadMore, btnBack;
 
     private RequestNetwork req;
     private RequestNetwork.RequestListener reqListener;
@@ -42,7 +41,9 @@ public class CatalogActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_catalog);
 
-        setupStatusBar();
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(Color.BLACK);
+        }
 
         gridCatalog = findViewById(R.id.grid_catalog);
         btnLoadMore = findViewById(R.id.btn_load_more);
@@ -94,7 +95,6 @@ public class CatalogActivity extends AppCompatActivity {
             }
         });
 
-        // Skeleton loading awal 18 item
         ArrayList<HashMap<String, Object>> dummy = new ArrayList<>();
         for (int i = 0; i < 18; i++) {
             HashMap<String, Object> m = new HashMap<>();
@@ -144,28 +144,13 @@ public class CatalogActivity extends AppCompatActivity {
         int rows = (int) Math.ceil((double) items / columns);
         float density = getResources().getDisplayMetrics().density;
 
-        // Tinggi card 165dp + margin judul 6dp + tinggi teks judul 34dp + padding 4dp = 209dp
-        int itemHeightPx = (int) (209 * density);
+        int itemHeightPx = (int) (211 * density);
         int verticalSpacingPx = (int) (12 * density);
 
         ViewGroup.LayoutParams params = gridView.getLayoutParams();
         params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + (int) (16 * density);
         gridView.setLayoutParams(params);
         gridView.requestLayout();
-    }
-
-    private void setupStatusBar() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(Color.BLACK);
-        }
-        View header = findViewById(R.id.catalog_header);
-        if (header != null) {
-            int statusBarHeight = 0;
-            int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-            if (resId > 0) statusBarHeight = getResources().getDimensionPixelSize(resId);
-            float d = getResources().getDisplayMetrics().density;
-            header.setPadding((int)(16 * d), statusBarHeight + (int)(8 * d), (int)(16 * d), (int)(12 * d));
-        }
     }
 
     public class CatalogAdapter extends BaseAdapter {
@@ -206,7 +191,7 @@ public class CatalogActivity extends AppCompatActivity {
 
                 GradientDrawable gradient = new GradientDrawable(
                     GradientDrawable.Orientation.BOTTOM_TOP,
-                    new int[] { Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT }
+                    new int[] { Color.parseColor("#F2000000"), Color.parseColor("#80000000"), Color.TRANSPARENT }
                 );
                 view2.setBackground(gradient);
 
