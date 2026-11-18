@@ -45,7 +45,7 @@ public class MainActivity extends AppCompatActivity {
 	
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular;
-	private TextView textHeroTitle, textHeroDesc;
+	private TextView textHeroTitle, textHeroDesc, textSeeAll;
 	private ImageView imgHeroBanner, imgPlayIcon;
 	private LinearLayout btnHeroPlay, indicatorCapsule;
 	private View dot0, dot1, dot2;
@@ -66,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
 		listPopular = findViewById(R.id.listPopular);
 		textHeroTitle = findViewById(R.id.text_hero_title);
 		textHeroDesc = findViewById(R.id.text_hero_desc);
+		textSeeAll = findViewById(R.id.text_see_all);
 		imgHeroBanner = findViewById(R.id.img_hero_banner);
 		btnHeroPlay = findViewById(R.id.btn_hero_play);
 		imgPlayIcon = findViewById(R.id.img_play_icon);
@@ -74,6 +75,16 @@ public class MainActivity extends AppCompatActivity {
 		dot1 = findViewById(R.id.dot_1);
 		dot2 = findViewById(R.id.dot_2);
 		
+		if (textSeeAll != null) {
+			textSeeAll.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					Intent intent = new Intent(MainActivity.this, CatalogActivity.class);
+					startActivity(intent);
+				}
+			});
+		}
+		
 		if (gridview1 != null) {
 			gridview1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 				@Override
@@ -81,10 +92,11 @@ public class MainActivity extends AppCompatActivity {
 					final int _position = _param3;
 					if (listMap != null && _position < listMap.size()) {
 						HashMap<String, Object> selectedData = listMap.get(_position);
+						if (selectedData.containsKey("is_loading")) return;
 						
 						String animeUrl = selectedData.containsKey("url") ? selectedData.get("url").toString() : "";
 						String animeTitle = selectedData.containsKey("title") ? selectedData.get("title").toString() : "";
-						String animeCover = selectedData.containsKey("image") ? selectedData.get("image").toString() : "";
+						String animeCover = selectedData.containsKey("cover") ? selectedData.get("cover").toString() : "";
 						
 						Intent intent = new Intent(MainActivity.this, DetailActivity.class);
 						intent.putExtra("url", animeUrl);
@@ -407,7 +419,8 @@ public class MainActivity extends AppCompatActivity {
 		int rows = (int) Math.ceil((double) items / columns);
 		float density = getResources().getDisplayMetrics().density;
 		
-		int itemHeightPx = (int) (184 * density);
+		// Tinggi card 165dp + margin judul 6dp + tinggi teks judul 34dp + padding 4dp = 209dp
+		int itemHeightPx = (int) (209 * density);
 		int verticalSpacingPx = (int) (12 * density);
 		int paddingBottomPx = (int) (16 * density);
 		
@@ -512,7 +525,7 @@ public class MainActivity extends AppCompatActivity {
 			if (item.containsKey("is_loading")) {
 				if (textTitle != null) {
 					textTitle.setText("");
-					textTitle.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
+					textTitle.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)20, 0xFF111111));
 				}
 				if (textStatus != null) textStatus.setBackgroundColor(Color.parseColor("#111111"));
 				if (textEpisode != null) textEpisode.setBackgroundColor(Color.parseColor("#111111"));
