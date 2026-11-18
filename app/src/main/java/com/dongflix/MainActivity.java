@@ -416,22 +416,37 @@ public class MainActivity extends AppCompatActivity {
 		if (imgHome != null) imgHome.performClick();
 	}
 	
-	public void setGridViewHeightBasedOnChildren(GridView gridView, int columns) {
-		android.widget.ListAdapter listAdapter = gridView.getAdapter();
-		if (listAdapter == null) return;
-		
-		int items = listAdapter.getCount();
-		int rows = (int) Math.ceil((double) items / columns);
-		float density = getResources().getDisplayMetrics().density;
-		
-		int itemHeightPx = (int) (222 * density);
-		int verticalSpacingPx = (int) (16 * density);
-		int paddingBottomPx = (int) (20 * density);
-		
-		ViewGroup.LayoutParams params = gridView.getLayoutParams();
-		params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + paddingBottomPx;
-		gridView.setLayoutParams(params);
-		gridView.requestLayout();
+	public void setGridViewHeightBasedOnChildren(final GridView gridView, final int columns) {
+		gridView.post(new Runnable() {
+			@Override
+			public void run() {
+				if (gridView.getAdapter() == null || gridView.getAdapter().getCount() == 0) return;
+
+				int items = gridView.getAdapter().getCount();
+				int rows = (int) Math.ceil((double) items / columns);
+				float density = getResources().getDisplayMetrics().density;
+
+				int horizontalSpacingPx = (int) (12 * density);
+				int verticalSpacingPx = (int) (16 * density);
+				int paddingHorizontal = gridView.getPaddingLeft() + gridView.getPaddingRight();
+				int paddingBottomPx = (int) (16 * density);
+
+				int availableWidth = gridView.getWidth() - paddingHorizontal - (horizontalSpacingPx * (columns - 1));
+				int columnWidth = availableWidth / columns;
+
+				View itemView = gridView.getAdapter().getView(0, null, gridView);
+				itemView.measure(
+					View.MeasureSpec.makeMeasureSpec(columnWidth, View.MeasureSpec.EXACTLY),
+					View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+				);
+
+				int exactItemHeight = itemView.getMeasuredHeight();
+				ViewGroup.LayoutParams params = gridView.getLayoutParams();
+				params.height = (exactItemHeight * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + paddingBottomPx;
+				gridView.setLayoutParams(params);
+				gridView.requestLayout();
+			}
+		});
 	}
 	
 	public class RecyclerPopularAdapter extends RecyclerView.Adapter<RecyclerPopularAdapter.ViewHolder> {
