@@ -41,6 +41,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -78,7 +79,7 @@ public class WatchActivity extends AppCompatActivity {
 	private TextureView playerTextureView;
 	private FrameLayout layoutPlayer;
 	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls;
-	private ImageView btnBack, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
+	private ImageView btnBack, btnPrevEpisode, btnPlay, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
 	private TextView textPlayerTitle, btnSpeed, textTime, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes;
 	private LinearLayout btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
 	private ProgressBar playerLoading;
@@ -143,9 +144,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		btnBack = findViewById(R.id.btnBack);
 		btnPrevEpisode = findViewById(R.id.btnPrevEpisode);
-		btnRewind = findViewById(R.id.btnRewind);
 		btnPlay = findViewById(R.id.btnPlay);
-		btnForward = findViewById(R.id.btnForward);
 		btnNextEpisode = findViewById(R.id.btnNextEpisode);
 		btnFullscreen = findViewById(R.id.btnFullscreen);
 		imagePoster = findViewById(R.id.imagePoster);
@@ -367,7 +366,6 @@ public class WatchActivity extends AppCompatActivity {
 		);
 		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
 
-		// Semua badge (Status / Ongoing, Tahun, Genre) memakai abu-abu gelap tanpa stroke
 		TextView[] badges = {textRating, textYear, textGenre};
 		for (TextView badge : badges) {
 			if (badge != null) {
@@ -379,7 +377,6 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		}
 
-		// Ikon Expand Detail (Abu-abu gelap bulat tanpa stroke)
 		if (iconExpandDetail != null) {
 			GradientDrawable expandBg = new GradientDrawable();
 			expandBg.setShape(GradientDrawable.OVAL);
@@ -387,7 +384,6 @@ public class WatchActivity extends AppCompatActivity {
 			iconExpandDetail.setBackground(expandBg);
 		}
 
-		// Tombol Sort Episode (Abu-abu gelap tanpa stroke)
 		if (btnSortEpisodes != null) {
 			GradientDrawable sortBg = new GradientDrawable();
 			sortBg.setCornerRadius(100f);
@@ -395,7 +391,6 @@ public class WatchActivity extends AppCompatActivity {
 			btnSortEpisodes.setBackground(sortBg);
 		}
 
-		// Tombol Aksi (Server, Download, Share, Report) abu-abu gelap tanpa stroke
 		View[] actionBtns = {btnActionServer, btnActionDownload, btnActionShare, btnActionReport};
 		for (View btn : actionBtns) {
 			if (btn != null) {
@@ -432,9 +427,6 @@ public class WatchActivity extends AppCompatActivity {
 		updateEpisodeNavButtons();
 	}
 
-	// ========================================================
-	// BOTTOM SHEET SINOPSIS / DETAIL (SESUAI REFERENSI GAMBAR)
-	// ========================================================
 	public void showDetailBottomSheet() {
 		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
 		float d = getResources().getDisplayMetrics().density;
@@ -448,7 +440,6 @@ public class WatchActivity extends AppCompatActivity {
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
-		// Drag handle
 		View handle = new View(this);
 		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -460,7 +451,6 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		// Header: "Sinopsis" di kiri + tombol "X" di kanan
 		LinearLayout topHeader = new LinearLayout(this);
 		topHeader.setOrientation(LinearLayout.HORIZONTAL);
 		topHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -495,7 +485,6 @@ public class WatchActivity extends AppCompatActivity {
 		content.setOrientation(LinearLayout.VERTICAL);
 		scrollView.addView(content);
 
-		// Baris Info Utama (Poster Persegi Panjang di Kiri + Judul, Genre, Badge, Total Episode di Kanan)
 		LinearLayout infoHeaderRow = new LinearLayout(this);
 		infoHeaderRow.setOrientation(LinearLayout.HORIZONTAL);
 		infoHeaderRow.setGravity(Gravity.TOP);
@@ -503,7 +492,6 @@ public class WatchActivity extends AppCompatActivity {
 		infoRowLp.bottomMargin = (int)(18 * d);
 		infoHeaderRow.setLayoutParams(infoRowLp);
 
-		// Poster CardView (Lebar 96dp, Tinggi 134dp, Sudut 8dp)
 		CardView posterCard = new CardView(this);
 		LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams((int)(96 * d), (int)(134 * d));
 		cardLp.rightMargin = (int)(16 * d);
@@ -521,12 +509,10 @@ public class WatchActivity extends AppCompatActivity {
 		posterCard.addView(ivSheetPoster);
 		infoHeaderRow.addView(posterCard);
 
-		// Kolom Kanan
 		LinearLayout rightCol = new LinearLayout(this);
 		rightCol.setOrientation(LinearLayout.VERTICAL);
 		rightCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-		// Judul Donghua
 		TextView tvSheetTitle = new TextView(this);
 		tvSheetTitle.setText(detailTitle.isEmpty() ? textJudul.getText().toString() : detailTitle);
 		tvSheetTitle.setTextColor(Color.WHITE);
@@ -536,7 +522,6 @@ public class WatchActivity extends AppCompatActivity {
 		tvSheetTitle.setEllipsize(TextUtils.TruncateAt.END);
 		rightCol.addView(tvSheetTitle);
 
-		// Subjudul Semua Genre (1 baris dengan titik tiga ...)
 		TextView tvSubGenres = new TextView(this);
 		tvSubGenres.setText(detailAllGenres);
 		tvSubGenres.setTextColor(Color.parseColor("#9CA3AF"));
@@ -546,7 +531,6 @@ public class WatchActivity extends AppCompatActivity {
 		tvSubGenres.setPadding(0, (int)(6 * d), 0, (int)(10 * d));
 		rightCol.addView(tvSubGenres);
 
-		// Baris 3 Badge Abu-abu Gelap: Status | Tahun | Genre Utama
 		LinearLayout badgeRow = new LinearLayout(this);
 		badgeRow.setOrientation(LinearLayout.HORIZONTAL);
 		badgeRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -575,7 +559,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 		rightCol.addView(badgeRow);
 
-		// Baris Info Tambahan dengan Ikon Bulat Kecil di Kiri (seperti avatar di referensi)
 		LinearLayout studioRow = new LinearLayout(this);
 		studioRow.setOrientation(LinearLayout.HORIZONTAL);
 		studioRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -608,7 +591,6 @@ public class WatchActivity extends AppCompatActivity {
 		infoHeaderRow.addView(rightCol);
 		content.addView(infoHeaderRow);
 
-		// Isi Sinopsis Lengkap di bawahnya
 		TextView tvSinopsisBody = new TextView(this);
 		tvSinopsisBody.setText(detailSynopsis.isEmpty() ? "Sinopsis belum tersedia untuk donghua ini." : detailSynopsis);
 		tvSinopsisBody.setTextColor(Color.parseColor("#9CA3AF"));
@@ -1108,9 +1090,6 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
-	// ========================================================
-	// HELPER BOTTOM SHEET DIALOG ABU-ABU GELAP TANPA STROKE
-	// ========================================================
 	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
 		sheetDialog.setContentView(contentView);
 		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
@@ -1196,7 +1175,6 @@ public class WatchActivity extends AppCompatActivity {
 
 			GradientDrawable rowBg = new GradientDrawable();
 			rowBg.setCornerRadius(12 * d);
-			// Abu-abu gelap tanpa stroke
 			rowBg.setColor(isSelected ? Color.parseColor("#252936") : Color.parseColor("#1E212B"));
 			itemRow.setBackground(rowBg);
 
@@ -1541,6 +1519,7 @@ public class WatchActivity extends AppCompatActivity {
 		final Window window = getWindow();
 		final View decorView = window.getDecorView();
 		final View scrollContent = findViewById(R.id.vscroll16);
+		final FrameLayout playContainer = findViewById(R.id.frame_layout5);
 		final float density = getResources().getDisplayMetrics().density;
 
 		if (!isFullscreen) {
@@ -1575,16 +1554,72 @@ public class WatchActivity extends AppCompatActivity {
 
 			if (textPlayerTitle != null && textJudul != null) {
 				textPlayerTitle.setText(textJudul.getText().toString());
+				textPlayerTitle.setTextSize(17f);
 				textPlayerTitle.setVisibility(View.VISIBLE);
 			}
 
-			if (btnRewind != null) btnRewind.setVisibility(View.GONE);
-			if (btnForward != null) btnForward.setVisibility(View.GONE);
-			if (btnFullscreen != null) btnFullscreen.setImageResource(R.drawable.ic_fullscreen_exit);
+			// Tombol Prev & Next di paling pinggir layar (Landscape)
+			int sideMarginFull = (int) (36 * density);
+			if (btnPrevEpisode != null) {
+				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
+				lp.width = (int) (46 * density);
+				lp.height = (int) (46 * density);
+				lp.setMargins(sideMarginFull, 0, 0, 0);
+				btnPrevEpisode.setLayoutParams(lp);
+			}
 
-			int padHoriz = (int) (32 * density);
-			int padTop = (int) (16 * density);
-			int padBottom = (int) (12 * density);
+			if (btnNextEpisode != null) {
+				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnNextEpisode.getLayoutParams();
+				lp.width = (int) (46 * density);
+				lp.height = (int) (46 * density);
+				lp.setMargins(0, 0, sideMarginFull, 0);
+				btnNextEpisode.setLayoutParams(lp);
+			}
+
+			// Tombol Play & Loading di tengah layar
+			if (playContainer != null) {
+				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) playContainer.getLayoutParams();
+				lp.width = (int) (84 * density);
+				lp.height = (int) (84 * density);
+				playContainer.setLayoutParams(lp);
+			}
+
+			if (playerLoading != null) {
+				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
+				lp.width = (int) (84 * density);
+				lp.height = (int) (84 * density);
+				playerLoading.setLayoutParams(lp);
+			}
+
+			if (btnPlay != null) {
+				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
+				lp.width = (int) (70 * density);
+				lp.height = (int) (70 * density);
+				btnPlay.setLayoutParams(lp);
+				int padPlay = (int) (18 * density);
+				btnPlay.setPadding(padPlay, padPlay, padPlay, padPlay);
+			}
+
+			if (btnBack != null) {
+				ViewGroup.LayoutParams lp = btnBack.getLayoutParams();
+				lp.width = (int) (32 * density);
+				lp.height = (int) (32 * density);
+				btnBack.setLayoutParams(lp);
+			}
+			if (btnFullscreen != null) {
+				btnFullscreen.setImageResource(R.drawable.ic_fullscreen_exit);
+				ViewGroup.LayoutParams lp = btnFullscreen.getLayoutParams();
+				lp.width = (int) (28 * density);
+				lp.height = (int) (28 * density);
+				btnFullscreen.setLayoutParams(lp);
+			}
+			if (btnSpeed != null) btnSpeed.setTextSize(15f);
+			if (btnQuality != null) btnQuality.setTextSize(15f);
+			if (textTime != null) textTime.setTextSize(14f);
+
+			int padHoriz = (int) (36 * density);
+			int padTop = (int) (20 * density);
+			int padBottom = (int) (16 * density);
 			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, 0);
 			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
 
@@ -1612,9 +1647,63 @@ public class WatchActivity extends AppCompatActivity {
 
 			if (scrollContent != null) scrollContent.setVisibility(View.VISIBLE);
 			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
-			if (btnRewind != null) btnRewind.setVisibility(View.VISIBLE);
-			if (btnForward != null) btnForward.setVisibility(View.VISIBLE);
-			if (btnFullscreen != null) btnFullscreen.setImageResource(R.drawable.ic_fullscreen);
+
+			int sideMarginNormal = (int) (16 * density);
+			if (btnPrevEpisode != null) {
+				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
+				lp.width = (int) (36 * density);
+				lp.height = (int) (36 * density);
+				lp.setMargins(sideMarginNormal, 0, 0, 0);
+				btnPrevEpisode.setLayoutParams(lp);
+			}
+
+			if (btnNextEpisode != null) {
+				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnNextEpisode.getLayoutParams();
+				lp.width = (int) (36 * density);
+				lp.height = (int) (36 * density);
+				lp.setMargins(0, 0, sideMarginNormal, 0);
+				btnNextEpisode.setLayoutParams(lp);
+			}
+
+			if (playContainer != null) {
+				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) playContainer.getLayoutParams();
+				lp.width = (int) (68 * density);
+				lp.height = (int) (68 * density);
+				playContainer.setLayoutParams(lp);
+			}
+
+			if (playerLoading != null) {
+				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
+				lp.width = (int) (68 * density);
+				lp.height = (int) (68 * density);
+				playerLoading.setLayoutParams(lp);
+			}
+
+			if (btnPlay != null) {
+				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
+				lp.width = (int) (56 * density);
+				lp.height = (int) (56 * density);
+				btnPlay.setLayoutParams(lp);
+				int padPlay = (int) (15 * density);
+				btnPlay.setPadding(padPlay, padPlay, padPlay, padPlay);
+			}
+
+			if (btnBack != null) {
+				ViewGroup.LayoutParams lp = btnBack.getLayoutParams();
+				lp.width = (int) (28 * density);
+				lp.height = (int) (28 * density);
+				btnBack.setLayoutParams(lp);
+			}
+			if (btnFullscreen != null) {
+				btnFullscreen.setImageResource(R.drawable.ic_fullscreen);
+				ViewGroup.LayoutParams lp = btnFullscreen.getLayoutParams();
+				lp.width = (int) (24 * density);
+				lp.height = (int) (24 * density);
+				btnFullscreen.setLayoutParams(lp);
+			}
+			if (btnSpeed != null) btnSpeed.setTextSize(14f);
+			if (btnQuality != null) btnQuality.setTextSize(14f);
+			if (textTime != null) textTime.setTextSize(13f);
 
 			int defPadX = (int) (16 * density);
 			int defPadTop = (int) (12 * density);
@@ -1888,40 +1977,6 @@ public class WatchActivity extends AppCompatActivity {
 							btnPlay.setImageResource(R.drawable.ic_pause);
 							getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 							resetControlsTimer();
-						}
-					}
-				}
-			});
-		}
-
-		if (btnRewind != null) {
-			btnRewind.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					resetControlsTimer();
-					if (mediaPlayer != null) {
-						int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
-						mediaPlayer.seekTo(targetPos);
-						if (playerSeekBar != null) {
-							playerSeekBar.setProgress(targetPos);
-							playerSeekBar.invalidate();
-						}
-					}
-				}
-			});
-		}
-
-		if (btnForward != null) {
-			btnForward.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					resetControlsTimer();
-					if (mediaPlayer != null) {
-						int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
-						mediaPlayer.seekTo(targetPos);
-						if (playerSeekBar != null) {
-							playerSeekBar.setProgress(targetPos);
-							playerSeekBar.invalidate();
 						}
 					}
 				}
