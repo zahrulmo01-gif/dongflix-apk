@@ -6,37 +6,47 @@
 	android:layout_width="match_parent"
 	android:layout_height="match_parent"
 	android:background="#000000">
+	
 	<androidx.core.widget.NestedScrollView
 		android:id="@+id/main_scroll_view"
 		android:layout_width="match_parent"
 		android:layout_height="match_parent"
 		android:fillViewport="true"
-		android:clipToPadding="false">
+		android:clipToPadding="false"
+		android:paddingBottom="90dp">
+		
 		<LinearLayout
 			android:id="@+id/linear81"
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:orientation="vertical">
+			
 			<RelativeLayout
 				android:id="@+id/hero_container"
 				android:layout_width="match_parent"
 				android:layout_height="420dp">
+				
 				<ImageView
 					android:id="@+id/img_hero_banner"
 					android:layout_width="match_parent"
 					android:layout_height="match_parent"
 					android:src="@drawable/default_image"
 					android:scaleType="centerCrop" />
+					
+				<!-- Gradasi Gelap Bawah Slider -->
 				<View
 					android:id="@+id/hero_shadow"
 					android:layout_width="match_parent"
 					android:layout_height="260dp"
 					android:layout_alignParentBottom="true" />
+					
+				<!-- Gradasi Gelap Atas Slider -->
 				<View
 					android:id="@+id/header_shadow"
 					android:layout_width="match_parent"
 					android:layout_height="135dp"
 					android:layout_alignParentTop="true" />
+					
 				<RelativeLayout
 					android:id="@+id/relativelayout69"
 					android:layout_width="match_parent"
@@ -46,6 +56,7 @@
 					android:paddingRight="16dp"
 					android:paddingBottom="12dp"
 					android:layout_alignParentTop="true">
+					
 					<LinearLayout
 						android:id="@+id/header_left"
 						android:layout_width="wrap_content"
@@ -54,18 +65,21 @@
 						android:orientation="horizontal"
 						android:layout_alignParentTop="true"
 						android:layout_alignParentLeft="true">
+						
 						<ImageView
 							android:id="@+id/img_user_avatar"
 							android:layout_width="46dp"
 							android:layout_height="46dp"
 							android:src="@drawable/ic_profile"
 							android:scaleType="centerCrop" />
+							
 						<LinearLayout
 							android:id="@+id/linear40"
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
 							android:layout_marginLeft="12dp"
 							android:orientation="vertical">
+							
 							<TextView
 								android:id="@+id/textview62"
 								android:layout_width="wrap_content"
@@ -73,6 +87,7 @@
 								android:text="Welcome"
 								android:textSize="12sp"
 								android:textColor="#94A3B8" />
+								
 							<TextView
 								android:id="@+id/text_username"
 								android:layout_width="wrap_content"
@@ -83,6 +98,7 @@
 								android:textColor="#FFFFFF" />
 						</LinearLayout>
 					</LinearLayout>
+					
 					<LinearLayout
 						android:id="@+id/linear82"
 						android:layout_width="wrap_content"
@@ -91,6 +107,7 @@
 						android:orientation="horizontal"
 						android:layout_alignParentRight="true"
 						android:layout_alignParentTop="true">
+						
 						<ImageView
 							android:id="@+id/btn_top_search"
 							android:layout_width="38dp"
@@ -98,6 +115,7 @@
 							android:padding="8dp"
 							android:src="@drawable/ic_search"
 							android:scaleType="center" />
+							
 						<ImageView
 							android:id="@+id/btn_top_notif"
 							android:layout_width="38dp"
@@ -108,6 +126,7 @@
 							android:scaleType="center" />
 					</LinearLayout>
 				</RelativeLayout>
+				
 				<RelativeLayout
 					android:id="@+id/relativelayout70"
 					android:layout_width="match_parent"
@@ -116,11 +135,13 @@
 					android:paddingRight="16dp"
 					android:paddingBottom="16dp"
 					android:layout_alignParentBottom="true">
+					
 					<LinearLayout
 						android:id="@+id/layout_hero_text"
 						android:layout_width="match_parent"
 						android:layout_height="wrap_content"
 						android:orientation="vertical">
+						
 						<TextView
 							android:id="@+id/text_hero_title"
 							android:layout_width="match_parent"
@@ -131,6 +152,7 @@
 							android:textColor="#FFFFFF"
 							android:maxLines="2"
 							android:ellipsize="end" />
+							
 						<TextView
 							android:id="@+id/text_hero_desc"
 							android:layout_width="match_parent"
@@ -142,12 +164,14 @@
 							android:maxLines="2"
 							android:ellipsize="end" />
 					</LinearLayout>
+					
 					<RelativeLayout
 						android:id="@+id/relativelayout71"
 						android:layout_width="match_parent"
 						android:layout_height="wrap_content"
 						android:layout_marginTop="14dp"
 						android:layout_below="@id/layout_hero_text">
+						
 						<LinearLayout
 							android:id="@+id/btn_hero_play"
 							android:layout_width="wrap_content"
@@ -157,12 +181,14 @@
 							android:gravity="center_horizontal|center_vertical"
 							android:orientation="horizontal"
 							android:layout_alignParentLeft="true">
+							
 							<ImageView
 								android:id="@+id/img_play_icon"
 								android:layout_width="16dp"
 								android:layout_height="16dp"
 								android:src="@drawable/ic_play"
 								android:scaleType="center" />
+								
 							<TextView
 								android:id="@+id/text_play_label"
 								android:layout_width="wrap_content"
@@ -173,6 +199,8 @@
 								android:textStyle="bold"
 								android:textColor="#0F172A" />
 						</LinearLayout>
+						
+						<!-- Indikator Slider di sebelah kanan -->
 						<LinearLayout
 							android:id="@+id/indicator_capsule"
 							android:layout_width="wrap_content"
@@ -183,17 +211,20 @@
 							android:orientation="horizontal"
 							android:layout_alignParentRight="true"
 							android:layout_centerVertical="true">
+							
 							<View
 								android:id="@+id/dot_0"
 								android:layout_width="16dp"
 								android:layout_height="5dp"
 								android:background="#FFFFFF" />
+								
 							<View
 								android:id="@+id/dot_1"
 								android:layout_width="5dp"
 								android:layout_height="5dp"
 								android:layout_marginLeft="5dp"
 								android:background="#FFFFFF" />
+								
 							<View
 								android:id="@+id/dot_2"
 								android:layout_width="5dp"
@@ -204,6 +235,7 @@
 					</RelativeLayout>
 				</RelativeLayout>
 			</RelativeLayout>
+			
 			<RelativeLayout
 				android:id="@+id/layout_section_popular"
 				android:layout_width="match_parent"
@@ -213,6 +245,7 @@
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
 				android:paddingBottom="8dp">
+				
 				<TextView
 					android:id="@+id/text_title_popular"
 					android:layout_width="wrap_content"
@@ -224,16 +257,18 @@
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
+			
 			<androidx.recyclerview.widget.RecyclerView
 				android:id="@+id/recyclerPopular"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:clipToPadding="false"
 				android:clipChildren="false"
-				android:paddingStart="8dp"
-				android:paddingEnd="60dp"
+				android:paddingStart="16dp"
+				android:paddingEnd="16dp"
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
+				
 			<RelativeLayout
 				android:id="@+id/relativelayout72"
 				android:layout_width="match_parent"
@@ -243,6 +278,7 @@
 				android:paddingTop="14dp"
 				android:paddingRight="16dp"
 				android:paddingBottom="8dp">
+				
 				<TextView
 					android:id="@+id/textview77"
 					android:layout_width="wrap_content"
@@ -253,6 +289,7 @@
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
+					
 				<TextView
 					android:id="@+id/text_see_all"
 					android:layout_width="wrap_content"
@@ -264,19 +301,22 @@
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
+			
+			<!-- GridView dengan Padding Kiri-Kanan agar tidak mepet -->
 			<GridView
 				android:id="@+id/gridview1"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:paddingLeft="8dp"
-				android:paddingRight="8dp"
-				android:paddingBottom="8dp"
+				android:paddingLeft="16dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="16dp"
 				android:numColumns="3"
-				android:horizontalSpacing="4dp"
-				android:verticalSpacing="8dp"
+				android:horizontalSpacing="8dp"
+				android:verticalSpacing="12dp"
 				android:stretchMode="columnWidth"
 				android:nestedScrollingEnabled="false"
 				tools:listitem="@layout/custom_anime" />
+				
 			<RelativeLayout
 				android:id="@+id/layout_populary"
 				android:layout_width="match_parent"
@@ -286,6 +326,7 @@
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
 				android:paddingBottom="8dp">
+				
 				<TextView
 					android:id="@+id/text_popular"
 					android:layout_width="wrap_content"
@@ -297,19 +338,22 @@
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
+			
 			<androidx.recyclerview.widget.RecyclerView
 				android:id="@+id/listPopular"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:layout_marginBottom="100dp"
-				android:paddingLeft="8dp"
-				android:paddingRight="8dp"
+				android:paddingLeft="16dp"
+				android:paddingRight="16dp"
 				android:paddingBottom="8dp"
 				android:clipChildren="false"
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
+	
+	<!-- Halaman Search, Favorite, Profile (Tetap dipertahankan) -->
 	<LinearLayout
 		android:id="@+id/layout_search"
 		android:layout_width="match_parent"
@@ -349,6 +393,7 @@
 			android:verticalSpacing="8dp"
 			android:stretchMode="columnWidth" />
 	</LinearLayout>
+	
 	<LinearLayout
 		android:id="@+id/layout_favorite"
 		android:layout_width="match_parent"
@@ -374,6 +419,7 @@
 			android:choiceMode="none"
 			android:divider="@null" />
 	</LinearLayout>
+	
 	<LinearLayout
 		android:id="@+id/layout_profile"
 		android:layout_width="match_parent"
@@ -416,7 +462,7 @@
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:layout_marginTop="30dp"
-			android:padding="16dp"
+			padding="16dp"
 			android:background="#1E293B"
 			android:orientation="vertical">
 			<TextView
@@ -437,6 +483,8 @@
 				android:textColor="#FFFFFF" />
 		</LinearLayout>
 	</LinearLayout>
+	
+	<!-- Navbar Mengapung -->
 	<LinearLayout
 		android:id="@+id/navbar"
 		android:layout_width="match_parent"
@@ -447,6 +495,7 @@
 		android:gravity="center_vertical"
 		android:orientation="horizontal"
 		android:layout_alignParentBottom="true">
+		
 		<ImageView
 			android:id="@+id/img_home"
 			android:layout_width="0dp"
@@ -454,6 +503,7 @@
 			android:src="@drawable/ic_home"
 			android:scaleType="center"
 			android:layout_weight="1" />
+			
 		<ImageView
 			android:id="@+id/img_search"
 			android:layout_width="0dp"
@@ -461,6 +511,7 @@
 			android:src="@drawable/ic_search"
 			android:scaleType="center"
 			android:layout_weight="1" />
+			
 		<ImageView
 			android:id="@+id/img_favorite"
 			android:layout_width="0dp"
@@ -468,6 +519,7 @@
 			android:src="@drawable/ic_favorite"
 			android:scaleType="center"
 			android:layout_weight="1" />
+			
 		<ImageView
 			android:id="@+id/img_profile"
 			android:layout_width="0dp"
