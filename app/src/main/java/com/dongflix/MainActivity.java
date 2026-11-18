@@ -128,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
 							
 							int verticalSpacing = (int)(12 * getResources().getDisplayMetrics().density);
 							android.view.ViewGroup.LayoutParams params = gridview1.getLayoutParams();
-							params.height = (itemHeight * totalRows) + (verticalSpacing * rows) + (int)(30 * getResources().getDisplayMetrics().density);
+							params.height = (itemHeight * totalRows) + (verticalSpacing * totalRows) + (int)(30 * getResources().getDisplayMetrics().density);
 							gridview1.setLayoutParams(params);
 							gridview1.requestLayout();
 						}
