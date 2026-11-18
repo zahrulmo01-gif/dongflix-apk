@@ -306,8 +306,8 @@
 				android:paddingRight="16dp"
 				android:paddingBottom="16dp"
 				android:numColumns="3"
-				android:horizontalSpacing="8dp"
-				android:verticalSpacing="12dp"
+				android:horizontalSpacing="12dp"
+				android:verticalSpacing="16dp"
 				android:stretchMode="columnWidth"
 				android:nestedScrollingEnabled="false"
 				tools:listitem="@layout/custom_anime" />
@@ -380,8 +380,8 @@
 			android:layout_height="match_parent"
 			android:layout_marginTop="16dp"
 			android:numColumns="3"
-			android:horizontalSpacing="8dp"
-			android:verticalSpacing="8dp"
+			android:horizontalSpacing="12dp"
+			android:verticalSpacing="16dp"
 			android:stretchMode="columnWidth" />
 	</LinearLayout>
 	
