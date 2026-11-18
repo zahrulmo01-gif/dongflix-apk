@@ -1,12 +1,1825 @@
 package com.dongflix;
 
+import android.content.DialogInterface;
+import android.content.pm.ActivityInfo;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.SurfaceTexture;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.PlaybackParams;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.GestureDetector;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.Surface;
+import android.view.TextureView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import com.bumptech.glide.Glide;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.Queue;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class WatchActivity extends AppCompatActivity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        // Tambahkan pemutar video ExoPlayer di sini
-    }
+
+	private ArrayList<HashMap<String, Object>> eps = new ArrayList<>();
+	private RequestNetwork req_watch;
+	private RequestNetwork.RequestListener _req_watch_request_listener;
+
+	private TextureView playerTextureView;
+	private FrameLayout layoutPlayer;
+	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls;
+	private ImageView btnBack, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster;
+	private TextView textPlayerTitle, btnSpeed, textTime, btnQuality, textJudul, textRating, textYear, textGenre, textSinopsis, textActionServer;
+	private LinearLayout btnFill, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
+	private ProgressBar playerLoading;
+	private SeekBar playerSeekBar;
+	private RecyclerView recyclerEpisode;
+
+	public MediaPlayer mediaPlayer;
+	public Handler playerHandler;
+	public Surface playerSurface;
+	public Runnable progressLoop;
+	public Runnable hideControlsRunnable;
+	public boolean areControlsVisible = true;
+	public String currentPlayingUrl = "";
+	public boolean isFullscreen = false;
+	public int savedSeekPosition = 0;
+	public int selectedQualityIndex = 0;
+
+	public int currentEpisodeIndex = 0;
+	public ArrayList<HashMap<String, Object>> episodeList = new ArrayList<>();
+
+	public ArrayList<String> currentEpisodeServerNames = new ArrayList<>();
+	public ArrayList<String> currentEpisodeServerUrls = new ArrayList<>();
+	public int selectedServerIndex = 0;
+
+	public ArrayList<String> qualityNames = new ArrayList<>();
+	public ArrayList<String> qualityUrls = new ArrayList<>();
+
+	public String dmSessionCookie = "";
+
+	@Override
+	protected void onCreate(Bundle _savedInstanceState) {
+		super.onCreate(_savedInstanceState);
+		setContentView(R.layout.activity_watch);
+		initialize(_savedInstanceState);
+		initializeLogic();
+	}
+
+	private void initialize(Bundle _savedInstanceState) {
+		req_watch = new RequestNetwork(this);
+
+		playerTextureView = findViewById(R.id.playerTextureView);
+		layoutPlayer = findViewById(R.id.layoutPlayer);
+		playerControlsOverlay = findViewById(R.id.playerControlsOverlay);
+		gradientTop = findViewById(R.id.gradientTop);
+		gradientBottom = findViewById(R.id.gradientBottom);
+		topBar = findViewById(R.id.topBar);
+		bottomControls = findViewById(R.id.bottomControls);
+
+		btnBack = findViewById(R.id.btnBack);
+		btnPrevEpisode = findViewById(R.id.btnPrevEpisode);
+		btnRewind = findViewById(R.id.btnRewind);
+		btnPlay = findViewById(R.id.btnPlay);
+		btnForward = findViewById(R.id.btnForward);
+		btnNextEpisode = findViewById(R.id.btnNextEpisode);
+		btnFullscreen = findViewById(R.id.btnFullscreen);
+		imagePoster = findViewById(R.id.imagePoster);
+
+		textPlayerTitle = findViewById(R.id.textPlayerTitle);
+		btnSpeed = findViewById(R.id.btnSpeed);
+		textTime = findViewById(R.id.textTime);
+		btnQuality = findViewById(R.id.btnQuality);
+		textJudul = findViewById(R.id.textJudul);
+		textRating = findViewById(R.id.textRating);
+		textYear = findViewById(R.id.textYear);
+		textGenre = findViewById(R.id.textGenre);
+		textSinopsis = findViewById(R.id.textSinopsis);
+		textActionServer = findViewById(R.id.textActionServer);
+
+		btnFill = findViewById(R.id.btnFill);
+		btnActionServer = findViewById(R.id.btnActionServer);
+		btnActionDownload = findViewById(R.id.btnActionDownload);
+		btnActionShare = findViewById(R.id.btnActionShare);
+		btnActionReport = findViewById(R.id.btnActionReport);
+
+		playerLoading = findViewById(R.id.playerLoading);
+		playerSeekBar = findViewById(R.id.playerSeekBar);
+		recyclerEpisode = findViewById(R.id.recyclerEpisode);
+
+		_req_watch_request_listener = new RequestNetwork.RequestListener() {
+			@Override
+			public void onResponse(String _param1, String _param2, HashMap<String, Object> _param3) {
+				final String _tag = _param1;
+				final String _response = _param2;
+				if (_tag.equals("slug")) {
+					eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
+					if (eps != null && !eps.isEmpty()) {
+						Collections.reverse(eps);
+						recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
+						episodeList = eps;
+						currentEpisodeIndex = 0;
+
+						if (playerTextureView.isAvailable()) {
+							playEpisodeByIndex(0);
+						} else {
+							playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+								@Override
+								public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+									playerSurface = new Surface(st);
+									playEpisodeByIndex(0);
+								}
+								@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
+								@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
+								@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+							});
+						}
+					}
+				} else {
+					String targetSlug = getIntent().getStringExtra("slug");
+					if (targetSlug != null && !targetSlug.isEmpty()) {
+						try {
+							JSONArray jsonArray = new JSONArray(_response);
+							for (int i = 0; i < jsonArray.length(); i++) {
+								JSONObject obj = jsonArray.getJSONObject(i);
+								if (targetSlug.equals(obj.optString("slug"))) {
+									String title = obj.optString("title");
+									String synopsis = obj.optString("synopsis")
+											.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
+											.replaceAll("[^\\x20-\\x7E\\n]", "")
+											.trim();
+									String cover = obj.optString("cover").trim();
+									if (cover.contains("i.ibb.co.com")) {
+										cover = cover.replace("i.ibb.co.com", "i.ibb.co");
+									}
+									String released = obj.optString("released");
+
+									String firstGenre = "-";
+									JSONArray genresArray = obj.optJSONArray("genres");
+									if (genresArray != null && genresArray.length() > 0) {
+										firstGenre = genresArray.optString(0);
+									}
+
+									textJudul.setText(title);
+									textSinopsis.setText(synopsis);
+									textGenre.setText(firstGenre);
+
+									if (released.length() >= 4) {
+										textYear.setText(released.substring(released.length() - 4));
+									}
+
+									Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imagePoster);
+									break;
+								}
+							}
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+				}
+			}
+
+			@Override
+			public void onErrorResponse(String _param1, String _param2) {
+			}
+		};
+	}
+
+	private void initializeLogic() {
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			Window window = getWindow();
+			window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+			window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+			window.setStatusBarColor(0xFF000000);
+		}
+
+		_WatchUI();
+
+		String slug = getIntent().getStringExtra("slug");
+		if (slug == null) slug = "";
+
+		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
+		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
+
+		recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+
+		_initPlayerViews();
+		applyCustomFonts();
+	}
+
+	private void applyCustomFonts() {
+		try {
+			final Typeface fontReg = Typeface.createFromAsset(getAssets(), "fonts/productsans_reg.ttf");
+			final Typeface fontMed = Typeface.createFromAsset(getAssets(), "fonts/productsans_med.ttf");
+			final Typeface fontBold = Typeface.createFromAsset(getAssets(), "fonts/productsans_bold.ttf");
+
+			Queue<View> viewQueue = new LinkedList<>();
+			viewQueue.add(getWindow().getDecorView().findViewById(android.R.id.content));
+
+			while (!viewQueue.isEmpty()) {
+				View currentView = viewQueue.poll();
+				if (currentView instanceof TextView) {
+					TextView tv = (TextView) currentView;
+					Typeface tf = tv.getTypeface();
+					int style = (tf != null) ? tf.getStyle() : Typeface.NORMAL;
+
+					if (style == Typeface.BOLD) {
+						tv.setTypeface(fontBold, Typeface.NORMAL);
+					} else if (style == Typeface.BOLD_ITALIC) {
+						tv.setTypeface(fontBold, Typeface.ITALIC);
+					} else if (style == Typeface.ITALIC) {
+						tv.setTypeface(fontReg, Typeface.ITALIC);
+					} else {
+						tv.setTypeface(fontMed, Typeface.NORMAL);
+					}
+				} else if (currentView instanceof ViewGroup) {
+					ViewGroup group = (ViewGroup) currentView;
+					for (int i = 0; i < group.getChildCount(); i++) {
+						viewQueue.add(group.getChildAt(i));
+					}
+				}
+			}
+		} catch (Exception ignored) {}
+	}
+
+	public void _WatchUI() {
+		GradientDrawable topGrad = new GradientDrawable(
+			GradientDrawable.Orientation.TOP_BOTTOM,
+			new int[]{0xCC000000, 0x00000000}
+		);
+		if (gradientTop != null) gradientTop.setBackground(topGrad);
+
+		GradientDrawable botGrad = new GradientDrawable(
+			GradientDrawable.Orientation.BOTTOM_TOP,
+			new int[]{0xCC000000, 0x00000000}
+		);
+		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
+
+		GradientDrawable badgeBg = new GradientDrawable();
+		badgeBg.setCornerRadius(12f);
+		badgeBg.setColor(0xFF141824);
+		if (textRating != null) textRating.setBackground(badgeBg);
+		if (textYear != null) textYear.setBackground(badgeBg);
+		if (textGenre != null) textGenre.setBackground(badgeBg);
+
+		View[] actionBtns = {btnActionServer, btnActionDownload, btnActionShare, btnActionReport};
+		for (View btn : actionBtns) {
+			if (btn != null) {
+				GradientDrawable btnBg = new GradientDrawable();
+				btnBg.setCornerRadius(100f);
+				btnBg.setColor(0xFF111111);
+				btnBg.setStroke(2, 0xFF1E293B);
+				btn.setBackground(btnBg);
+			}
+		}
+	}
+
+	@Override
+	public void onDestroy() {
+		if (playerHandler != null) {
+			if (progressLoop != null) playerHandler.removeCallbacks(progressLoop);
+			if (hideControlsRunnable != null) playerHandler.removeCallbacks(hideControlsRunnable);
+			playerHandler.removeCallbacksAndMessages(null);
+		}
+
+		if (mediaPlayer != null) {
+			try {
+				if (mediaPlayer.isPlaying()) {
+					mediaPlayer.stop();
+				}
+				mediaPlayer.reset();
+				mediaPlayer.release();
+			} catch (Exception ignored) {}
+			mediaPlayer = null;
+		}
+
+		if (playerSurface != null) {
+			playerSurface.release();
+			playerSurface = null;
+		}
+
+		getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		super.onDestroy();
+	}
+
+	@Override
+	public void onPause() {
+		super.onPause();
+		if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+			mediaPlayer.pause();
+			if (btnPlay != null) {
+				btnPlay.setImageResource(android.R.drawable.ic_media_play);
+			}
+		}
+	}
+
+	@Override
+	public void onBackPressed() {
+		if (isFullscreen) {
+			toggleFullscreen();
+		} else if (!isFinishing()) {
+			finish();
+		}
+	}
+
+	public void resetControlsTimer() {
+		if (playerHandler != null && hideControlsRunnable != null) {
+			playerHandler.removeCallbacks(hideControlsRunnable);
+			if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+				playerHandler.postDelayed(hideControlsRunnable, 3500);
+			}
+		}
+	}
+
+	public void showControls() {
+		if (playerControlsOverlay != null) {
+			playerControlsOverlay.setVisibility(View.VISIBLE);
+			playerControlsOverlay.bringToFront();
+		}
+		areControlsVisible = true;
+		resetControlsTimer();
+	}
+
+	public void hideControls() {
+		if (playerControlsOverlay != null) {
+			playerControlsOverlay.setVisibility(View.GONE);
+		}
+		areControlsVisible = false;
+		if (playerHandler != null && hideControlsRunnable != null) {
+			playerHandler.removeCallbacks(hideControlsRunnable);
+		}
+	}
+
+	public void toggleControls() {
+		if (areControlsVisible) {
+			hideControls();
+		} else {
+			showControls();
+		}
+	}
+
+	public void updateEpisodeNavButtons() {
+		int totalItems = (recyclerEpisode != null && recyclerEpisode.getAdapter() != null) ? recyclerEpisode.getAdapter().getItemCount() : (episodeList != null ? episodeList.size() : 0);
+
+		if (btnPrevEpisode != null) {
+			if (currentEpisodeIndex <= 0) {
+				btnPrevEpisode.setEnabled(false);
+				btnPrevEpisode.setAlpha(0.35f);
+			} else {
+				btnPrevEpisode.setEnabled(true);
+				btnPrevEpisode.setAlpha(1.0f);
+			}
+		}
+
+		if (btnNextEpisode != null) {
+			if (currentEpisodeIndex >= (totalItems - 1) || totalItems <= 1) {
+				btnNextEpisode.setEnabled(false);
+				btnNextEpisode.setAlpha(0.35f);
+			} else {
+				btnNextEpisode.setEnabled(true);
+				btnNextEpisode.setAlpha(1.0f);
+			}
+		}
+	}
+
+	public void playEpisodeByIndex(final int targetIndex) {
+		if (episodeList == null || episodeList.isEmpty()) return;
+		if (targetIndex < 0 || targetIndex >= episodeList.size()) return;
+
+		currentEpisodeIndex = targetIndex;
+		updateEpisodeNavButtons();
+
+		runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				if (recyclerEpisode != null) {
+					recyclerEpisode.scrollToPosition(targetIndex);
+					if (recyclerEpisode.getAdapter() != null) {
+						recyclerEpisode.getAdapter().notifyDataSetChanged();
+					}
+				}
+
+				if (playerLoading != null) playerLoading.setVisibility(View.VISIBLE);
+				if (btnPlay != null) {
+					btnPlay.setEnabled(false);
+					btnPlay.setAlpha(0.5f);
+				}
+
+				HashMap<String, Object> item = episodeList.get(targetIndex);
+				if (!item.containsKey("servers")) {
+					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					if (btnPlay != null) {
+						btnPlay.setEnabled(true);
+						btnPlay.setAlpha(1.0f);
+					}
+					return;
+				}
+
+				currentEpisodeServerNames.clear();
+				currentEpisodeServerUrls.clear();
+
+				try {
+					Object rawServers = item.get("servers");
+					JSONArray sArray;
+					if (rawServers instanceof JSONArray) {
+						sArray = (JSONArray) rawServers;
+					} else if (rawServers instanceof ArrayList) {
+						sArray = new JSONArray((ArrayList<?>) rawServers);
+					} else {
+						sArray = new JSONArray(rawServers.toString());
+					}
+
+					for (int i = 0; i < sArray.length(); i++) {
+						JSONObject sObj;
+						Object itemObj = sArray.get(i);
+						if (itemObj instanceof HashMap) {
+							sObj = new JSONObject((HashMap<?, ?>) itemObj);
+						} else {
+							sObj = sArray.getJSONObject(i);
+						}
+
+						String sName = sObj.optString("name", "Server " + (i + 1));
+						String sLink = sObj.optString("link");
+						if (!sLink.isEmpty()) {
+							currentEpisodeServerNames.add(sName);
+							currentEpisodeServerUrls.add(sLink);
+						}
+					}
+				} catch (Exception ignored) {
+					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					if (btnPlay != null) {
+						btnPlay.setEnabled(true);
+						btnPlay.setAlpha(1.0f);
+					}
+					return;
+				}
+
+				if (currentEpisodeServerUrls.isEmpty()) {
+					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					if (btnPlay != null) {
+						btnPlay.setEnabled(true);
+						btnPlay.setAlpha(1.0f);
+					}
+					return;
+				}
+
+				int targetServerIdx = 0;
+				for (int i = 0; i < currentEpisodeServerNames.size(); i++) {
+					String name = currentEpisodeServerNames.get(i).toLowerCase();
+					if (name.contains("ok") || name.contains("odnoklassniki")) {
+						targetServerIdx = i;
+						break;
+					}
+				}
+
+				selectedServerIndex = targetServerIdx;
+				String chosenServerName = currentEpisodeServerNames.get(targetServerIdx);
+				String chosenServerUrl = currentEpisodeServerUrls.get(targetServerIdx);
+
+				if (textActionServer != null) {
+					textActionServer.setText(chosenServerName);
+				}
+
+				extractStream(chosenServerName, chosenServerUrl);
+			}
+		});
+	}
+
+	public void playVideoUrl(final String rawUrl, final int targetSeek) {
+		if (rawUrl == null || rawUrl.trim().isEmpty()) return;
+
+		String normalized = rawUrl.trim();
+		if (normalized.startsWith("Https://")) {
+			normalized = "https://" + normalized.substring(8);
+		} else if (normalized.startsWith("Http://")) {
+			normalized = "http://" + normalized.substring(7);
+		}
+		final String cleanUrl = normalized;
+		currentPlayingUrl = cleanUrl;
+		savedSeekPosition = targetSeek;
+
+		runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				if (playerLoading != null) playerLoading.setVisibility(View.VISIBLE);
+				if (btnPlay != null) {
+					btnPlay.setEnabled(false);
+					btnPlay.setAlpha(0.5f);
+				}
+
+				try {
+					if (mediaPlayer != null) {
+						try {
+							mediaPlayer.stop();
+						} catch (Exception ignored) {}
+						try {
+							mediaPlayer.reset();
+							mediaPlayer.release();
+						} catch (Exception ignored) {}
+						mediaPlayer = null;
+					}
+
+					mediaPlayer = new MediaPlayer();
+
+					if (playerTextureView != null && playerTextureView.isAvailable()) {
+						SurfaceTexture st = playerTextureView.getSurfaceTexture();
+						if (st != null) {
+							if (playerSurface != null) {
+								playerSurface.release();
+							}
+							playerSurface = new Surface(st);
+							mediaPlayer.setSurface(playerSurface);
+						}
+					} else if (playerSurface != null && playerSurface.isValid()) {
+						mediaPlayer.setSurface(playerSurface);
+					}
+
+					Map<String, String> headers = new HashMap<>();
+					headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+					if (cleanUrl.contains("ok.ru") || cleanUrl.contains("odnoklassniki")) {
+						headers.put("Referer", "https://ok.ru/");
+					} else if (cleanUrl.contains("dailymotion") || cleanUrl.contains("dmcdn")) {
+						headers.put("Referer", "https://www.dailymotion.com/");
+						if (dmSessionCookie != null && !dmSessionCookie.isEmpty()) {
+							headers.put("Cookie", dmSessionCookie);
+						}
+					}
+
+					headers.put("Accept", "*/*");
+
+					mediaPlayer.setDataSource(WatchActivity.this, Uri.parse(cleanUrl), headers);
+					mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+
+					mediaPlayer.setOnBufferingUpdateListener(new MediaPlayer.OnBufferingUpdateListener() {
+						@Override
+						public void onBufferingUpdate(MediaPlayer mp, int percent) {
+							try {
+								int duration = mp.getDuration();
+								if (duration > 0 && playerSeekBar != null) {
+									int cacheMillis = (int) ((duration * (long) percent) / 100);
+									playerSeekBar.setSecondaryProgress(cacheMillis);
+									playerSeekBar.invalidate();
+								}
+							} catch (Exception ignored) {}
+						}
+					});
+
+					mediaPlayer.setOnInfoListener(new MediaPlayer.OnInfoListener() {
+						@Override
+						public boolean onInfo(MediaPlayer mp, int what, int extra) {
+							if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
+								if (playerLoading != null) playerLoading.setVisibility(View.VISIBLE);
+								if (btnPlay != null) {
+									btnPlay.setEnabled(false);
+									btnPlay.setAlpha(0.5f);
+								}
+							} else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END || what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								if (btnPlay != null) {
+									btnPlay.setEnabled(true);
+									btnPlay.setAlpha(1.0f);
+								}
+							}
+							return false;
+						}
+					});
+
+					mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+						@Override
+						public void onPrepared(MediaPlayer mp) {
+							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+							if (btnPlay != null) {
+								btnPlay.setEnabled(true);
+								btnPlay.setAlpha(1.0f);
+								btnPlay.setImageResource(android.R.drawable.ic_media_pause);
+							}
+
+							if (playerTextureView != null && playerTextureView.isAvailable() && playerSurface == null) {
+								playerSurface = new Surface(playerTextureView.getSurfaceTexture());
+								mp.setSurface(playerSurface);
+							}
+
+							int duration = mp.getDuration();
+							if (playerSeekBar != null) playerSeekBar.setMax(duration);
+
+							if (savedSeekPosition > 0 && savedSeekPosition < duration) {
+								mp.seekTo(savedSeekPosition);
+							}
+							mp.start();
+
+							if (playerHandler != null && progressLoop != null) {
+								playerHandler.removeCallbacks(progressLoop);
+								playerHandler.post(progressLoop);
+							}
+							updateEpisodeNavButtons();
+							resetControlsTimer();
+						}
+					});
+
+					mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+						@Override
+						public boolean onError(MediaPlayer mp, int what, int extra) {
+							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+							if (btnPlay != null) {
+								btnPlay.setEnabled(true);
+								btnPlay.setAlpha(1.0f);
+								btnPlay.setImageResource(android.R.drawable.ic_media_play);
+							}
+							return true;
+						}
+					});
+
+					mediaPlayer.prepareAsync();
+
+				} catch (Exception e) {
+					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					if (btnPlay != null) {
+						btnPlay.setEnabled(true);
+						btnPlay.setAlpha(1.0f);
+					}
+				}
+			}
+		});
+	}
+
+	public void showServerDialog() {
+		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		ArrayList<String> displayList = new ArrayList<>();
+		for (int i = 0; i < currentEpisodeServerNames.size(); i++) {
+			if (i == selectedServerIndex) {
+				displayList.add(currentEpisodeServerNames.get(i) + "  ✓");
+			} else {
+				displayList.add(currentEpisodeServerNames.get(i));
+			}
+		}
+
+		final String[] items = displayList.toArray(new String[0]);
+		new AlertDialog.Builder(WatchActivity.this)
+		.setTitle("Pilih Server")
+		.setItems(items, new DialogInterface.OnClickListener() {
+			@Override
+			public void onClick(DialogInterface dialog, int which) {
+				selectedServerIndex = which;
+				String chosenName = currentEpisodeServerNames.get(which);
+				String chosenUrl = currentEpisodeServerUrls.get(which);
+
+				if (textActionServer != null) {
+					textActionServer.setText(chosenName);
+				}
+
+				extractStream(chosenName, chosenUrl);
+			}
+		})
+		.show();
+	}
+
+	public void toggleFullscreen() {
+		final Window window = getWindow();
+		final View decorView = window.getDecorView();
+		final View scrollContent = findViewById(R.id.vscroll16);
+		final float density = getResources().getDisplayMetrics().density;
+
+		if (!isFullscreen) {
+			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+				WindowManager.LayoutParams lp = window.getAttributes();
+				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+				window.setAttributes(lp);
+			}
+
+			window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+
+			decorView.setSystemUiVisibility(
+				View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+				| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+				| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+				| View.SYSTEM_UI_FLAG_FULLSCREEN
+				| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+			);
+
+			if (scrollContent != null) scrollContent.setVisibility(View.GONE);
+
+			if (layoutPlayer != null) {
+				ViewGroup.LayoutParams lp = layoutPlayer.getLayoutParams();
+				lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+				lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+				layoutPlayer.setLayoutParams(lp);
+			}
+
+			if (textPlayerTitle != null && textJudul != null) {
+				textPlayerTitle.setText(textJudul.getText().toString());
+				textPlayerTitle.setVisibility(View.VISIBLE);
+			}
+
+			if (btnRewind != null) btnRewind.setVisibility(View.GONE);
+			if (btnForward != null) btnForward.setVisibility(View.GONE);
+
+			int padHoriz = (int) (32 * density);
+			int padTop = (int) (16 * density);
+			int padBottom = (int) (12 * density);
+			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, 0);
+			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
+
+			isFullscreen = true;
+		} else {
+			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+				WindowManager.LayoutParams lp = window.getAttributes();
+				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+				window.setAttributes(lp);
+			}
+
+			window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			window.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+			decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+
+			int heightPx = (int) (220 * density);
+			if (layoutPlayer != null) {
+				ViewGroup.LayoutParams lp = layoutPlayer.getLayoutParams();
+				lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+				lp.height = heightPx;
+				layoutPlayer.setLayoutParams(lp);
+			}
+
+			if (scrollContent != null) scrollContent.setVisibility(View.VISIBLE);
+			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
+			if (btnRewind != null) btnRewind.setVisibility(View.VISIBLE);
+			if (btnForward != null) btnForward.setVisibility(View.VISIBLE);
+
+			int defPadX = (int) (16 * density);
+			int defPadTop = (int) (12 * density);
+			int defPadBottom = (int) (6 * density);
+			if (topBar != null) topBar.setPadding(defPadX, defPadTop, defPadX, 0);
+			if (bottomControls != null) bottomControls.setPadding(0, 0, 0, defPadBottom);
+
+			isFullscreen = false;
+		}
+		resetControlsTimer();
+	}
+
+	public void showQualityDialog() {
+		if (qualityNames == null || qualityNames.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		ArrayList<String> displayList = new ArrayList<>();
+		for (int i = 0; i < qualityNames.size(); i++) {
+			if (i == selectedQualityIndex) {
+				displayList.add(qualityNames.get(i) + "  ✓");
+			} else {
+				displayList.add(qualityNames.get(i));
+			}
+		}
+
+		final String[] items = displayList.toArray(new String[0]);
+		new AlertDialog.Builder(WatchActivity.this)
+		.setTitle("Pilih Resolusi")
+		.setItems(items, new DialogInterface.OnClickListener() {
+			@Override
+			public void onClick(DialogInterface dialog, int which) {
+				selectedQualityIndex = which;
+				String chosenName = qualityNames.get(which);
+
+				if (btnQuality != null) {
+					btnQuality.setText(chosenName);
+				}
+
+				int currentPos = 0;
+				if (mediaPlayer != null) {
+					try {
+						currentPos = mediaPlayer.getCurrentPosition();
+					} catch (Exception ignored) {}
+				}
+				String targetUrl = qualityUrls.get(which);
+				playVideoUrl(targetUrl, currentPos);
+			}
+		})
+		.show();
+	}
+
+	public void showSpeedDialog() {
+		final String[] speeds = new String[]{"0.5x", "0.75x", "Normal (1.0x)", "1.25x", "1.5x", "2.0x"};
+		final float[] speedVals = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+
+		new AlertDialog.Builder(WatchActivity.this)
+		.setTitle("Kecepatan Putar")
+		.setItems(speeds, new DialogInterface.OnClickListener() {
+			@Override
+			public void onClick(DialogInterface dialog, int which) {
+				float selectedSpeed = speedVals[which];
+				String label = (which == 2) ? "1x" : speeds[which].replace("x", "") + "x";
+
+				if (btnSpeed != null) {
+					btnSpeed.setText(label);
+				}
+
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+					if (mediaPlayer != null) {
+						try {
+							boolean isPlaying = mediaPlayer.isPlaying();
+							PlaybackParams params = mediaPlayer.getPlaybackParams();
+							if (params == null) params = new PlaybackParams();
+							params.setSpeed(selectedSpeed);
+							mediaPlayer.setPlaybackParams(params);
+							if (!isPlaying) mediaPlayer.pause();
+						} catch (Exception ignored) {}
+					}
+				}
+			}
+		})
+		.show();
+	}
+
+	public void _initPlayerViews() {
+		final boolean[] isUserTrackingSeekBar = new boolean[]{false};
+		playerHandler = new Handler(Looper.getMainLooper());
+
+		GradientDrawable playCircle = new GradientDrawable();
+		playCircle.setShape(GradientDrawable.OVAL);
+		playCircle.setColor(0xFFFFFFFF);
+		btnPlay.setBackground(playCircle);
+		btnPlay.setColorFilter(0xFF000000);
+
+		final float density = getResources().getDisplayMetrics().density;
+		final int barHeight = (int) (4 * density);
+		final int cornerRadius = (int) (2 * density);
+		final int gapSize = (int) (4 * density);
+
+		Drawable customTrackDrawable = new Drawable() {
+			private final Paint paintBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint paintCache = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint paintProgress = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+			{
+				paintBg.setColor(0x33FFFFFF);
+				paintCache.setColor(0x80CCCCCC);
+				paintProgress.setColor(0xFF3B82F6);
+			}
+
+			@Override
+			public void draw(Canvas canvas) {
+				Rect bounds = getBounds();
+				float width = bounds.width();
+				float top = bounds.centerY() - (barHeight / 2f);
+				float bottom = bounds.centerY() + (barHeight / 2f);
+
+				int max = playerSeekBar.getMax();
+				if (max <= 0) max = 1;
+
+				float progressRatio = (float) playerSeekBar.getProgress() / max;
+				float cacheRatio = (float) playerSeekBar.getSecondaryProgress() / max;
+
+				float progressRight = bounds.left + (width * progressRatio);
+				float cacheRight = bounds.left + (width * cacheRatio);
+
+				if (cacheRight > bounds.left) {
+					canvas.drawRoundRect(new RectF(bounds.left, top, cacheRight, bottom), cornerRadius, cornerRadius, paintCache);
+				}
+
+				if (progressRight > bounds.left) {
+					canvas.drawRoundRect(new RectF(bounds.left, top, progressRight, bottom), cornerRadius, cornerRadius, paintProgress);
+				}
+
+				float bgStart = Math.max(cacheRight, progressRight) + gapSize;
+				if (bgStart < bounds.right) {
+					canvas.drawRoundRect(new RectF(bgStart, top, bounds.right, bottom), cornerRadius, cornerRadius, paintBg);
+				}
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+
+		playerSeekBar.setProgressDrawable(customTrackDrawable);
+
+		final int normalThumbSize = (int) (12 * density);
+		final int activeThumbSize = (int) (16 * density);
+
+		final GradientDrawable customThumb = new GradientDrawable();
+		customThumb.setShape(GradientDrawable.OVAL);
+		customThumb.setColor(0xFF3B82F6);
+		customThumb.setSize(normalThumbSize, normalThumbSize);
+
+		playerSeekBar.setThumb(customThumb);
+		playerSeekBar.setThumbOffset(normalThumbSize / 2);
+
+		playerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+			@Override
+			public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+				seekBar.invalidate();
+				if (fromUser) {
+					int curSec = (progress / 1000) % 60;
+					int curMin = (progress / (1000 * 60)) % 60;
+					int total = (mediaPlayer != null) ? mediaPlayer.getDuration() : 0;
+					int totSec = (total / 1000) % 60;
+					int totMin = (total / (1000 * 60)) % 60;
+					textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
+				}
+			}
+
+			@Override
+			public void onStartTrackingTouch(SeekBar seekBar) {
+				isUserTrackingSeekBar[0] = true;
+				customThumb.setSize(activeThumbSize, activeThumbSize);
+				seekBar.setThumb(customThumb);
+				seekBar.setThumbOffset(activeThumbSize / 2);
+
+				if (playerHandler != null && hideControlsRunnable != null) {
+					playerHandler.removeCallbacks(hideControlsRunnable);
+				}
+			}
+
+			@Override
+			public void onStopTrackingTouch(SeekBar seekBar) {
+				if (mediaPlayer != null) {
+					mediaPlayer.seekTo(seekBar.getProgress());
+				}
+				customThumb.setSize(normalThumbSize, normalThumbSize);
+				seekBar.setThumb(customThumb);
+				seekBar.setThumbOffset(normalThumbSize / 2);
+
+				isUserTrackingSeekBar[0] = false;
+				resetControlsTimer();
+			}
+		});
+
+		hideControlsRunnable = new Runnable() {
+			@Override
+			public void run() {
+				hideControls();
+			}
+		};
+
+		final GestureDetector playerGestureDetector = new GestureDetector(WatchActivity.this, new GestureDetector.SimpleOnGestureListener() {
+			@Override
+			public boolean onSingleTapConfirmed(MotionEvent e) {
+				toggleControls();
+				return true;
+			}
+
+			@Override
+			public boolean onDoubleTap(MotionEvent e) {
+				if (mediaPlayer == null) return false;
+
+				float touchX = e.getX();
+				int viewWidth = layoutPlayer.getWidth();
+
+				if (touchX < (viewWidth / 2f)) {
+					int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
+					mediaPlayer.seekTo(targetPos);
+					playerSeekBar.setProgress(targetPos);
+					playerSeekBar.invalidate();
+					Toast.makeText(WatchActivity.this, "-10 detik", Toast.LENGTH_SHORT).show();
+				} else {
+					int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
+					mediaPlayer.seekTo(targetPos);
+					playerSeekBar.setProgress(targetPos);
+					playerSeekBar.invalidate();
+					Toast.makeText(WatchActivity.this, "+10 detik", Toast.LENGTH_SHORT).show();
+				}
+				resetControlsTimer();
+				return true;
+			}
+
+			@Override
+			public boolean onDown(MotionEvent e) {
+				return true;
+			}
+		});
+
+		layoutPlayer.setOnTouchListener(new View.OnTouchListener() {
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				return playerGestureDetector.onTouchEvent(event);
+			}
+		});
+
+		playerControlsOverlay.setOnTouchListener(new View.OnTouchListener() {
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				return playerGestureDetector.onTouchEvent(event);
+			}
+		});
+
+		playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+			@Override
+			public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
+				playerSurface = new Surface(surfaceTexture);
+				if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+					mediaPlayer.setSurface(playerSurface);
+				}
+			}
+			@Override public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
+			@Override
+			public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+				if (playerSurface != null) {
+					playerSurface.release();
+					playerSurface = null;
+				}
+				if (mediaPlayer != null) {
+					mediaPlayer.release();
+					mediaPlayer = null;
+				}
+				return true;
+			}
+			@Override public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
+		});
+
+		progressLoop = new Runnable() {
+			@Override
+			public void run() {
+				try {
+					if (mediaPlayer != null && mediaPlayer.isPlaying() && !isUserTrackingSeekBar[0]) {
+						int cur = mediaPlayer.getCurrentPosition();
+						int tot = mediaPlayer.getDuration();
+
+						playerSeekBar.setProgress(cur);
+						playerSeekBar.invalidate();
+
+						int curSec = (cur / 1000) % 60;
+						int curMin = (cur / (1000 * 60)) % 60;
+						int totSec = (tot / 1000) % 60;
+						int totMin = (tot / (1000 * 60)) % 60;
+						textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
+					}
+				} catch (Exception ignored) {}
+
+				if (playerHandler != null) {
+					playerHandler.postDelayed(this, 500);
+				}
+			}
+		};
+
+		btnPlay.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				resetControlsTimer();
+				if (mediaPlayer != null) {
+					if (mediaPlayer.isPlaying()) {
+						mediaPlayer.pause();
+						btnPlay.setImageResource(android.R.drawable.ic_media_play);
+						getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+						if (playerHandler != null && hideControlsRunnable != null) {
+							playerHandler.removeCallbacks(hideControlsRunnable);
+						}
+					} else {
+						mediaPlayer.start();
+						btnPlay.setImageResource(android.R.drawable.ic_media_pause);
+						getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+						resetControlsTimer();
+					}
+				}
+			}
+		});
+
+		btnRewind.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				resetControlsTimer();
+				if (mediaPlayer != null) {
+					int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
+					mediaPlayer.seekTo(targetPos);
+					playerSeekBar.setProgress(targetPos);
+					playerSeekBar.invalidate();
+				}
+			}
+		});
+
+		btnForward.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				resetControlsTimer();
+				if (mediaPlayer != null) {
+					int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
+					mediaPlayer.seekTo(targetPos);
+					playerSeekBar.setProgress(targetPos);
+					playerSeekBar.invalidate();
+				}
+			}
+		});
+
+		btnPrevEpisode.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				resetControlsTimer();
+				if (currentEpisodeIndex > 0) {
+					playEpisodeByIndex(currentEpisodeIndex - 1);
+				}
+			}
+		});
+
+		btnNextEpisode.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				resetControlsTimer();
+				int totalItems = (recyclerEpisode.getAdapter() != null) ? recyclerEpisode.getAdapter().getItemCount() : 0;
+				if (currentEpisodeIndex < (totalItems - 1)) {
+					playEpisodeByIndex(currentEpisodeIndex + 1);
+				}
+			}
+		});
+
+		btnQuality.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				showQualityDialog();
+			}
+		});
+
+		btnSpeed.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				showSpeedDialog();
+			}
+		});
+
+		final boolean[] isFillMode = new boolean[]{false};
+		btnFill.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				resetControlsTimer();
+				isFillMode[0] = !isFillMode[0];
+				if (isFillMode[0]) {
+					playerTextureView.setScaleX(1.33f);
+					playerTextureView.setScaleY(1.33f);
+					Toast.makeText(WatchActivity.this, "Mode: Fill", Toast.LENGTH_SHORT).show();
+				} else {
+					playerTextureView.setScaleX(1.0f);
+					playerTextureView.setScaleY(1.0f);
+					Toast.makeText(WatchActivity.this, "Mode: Original", Toast.LENGTH_SHORT).show();
+				}
+			}
+		});
+
+		btnActionServer.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				showServerDialog();
+			}
+		});
+
+		btnFullscreen.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				toggleFullscreen();
+			}
+		});
+
+		btnBack.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (isFullscreen) {
+					toggleFullscreen();
+				} else {
+					finish();
+				}
+			}
+		});
+
+		updateEpisodeNavButtons();
+	}
+
+	public void extractStream(final String server, final String targetUrl) {
+		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
+
+		String cleanUrl = targetUrl.trim();
+		if (cleanUrl.startsWith("//")) {
+			cleanUrl = "https:" + cleanUrl;
+		} else if (!cleanUrl.startsWith("http")) {
+			cleanUrl = "https://" + cleanUrl;
+		}
+		final String finalTargetUrl = cleanUrl;
+		final String serverKey = (server != null) ? server.trim().toLowerCase() : "";
+
+		if (serverKey.contains("ok") || serverKey.contains("odnoklassniki")) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					HttpURLConnection conn = null;
+					BufferedReader reader = null;
+					try {
+						URL url = new URL(finalTargetUrl);
+						conn = (HttpURLConnection) url.openConnection();
+						conn.setRequestMethod("GET");
+						conn.setConnectTimeout(8000);
+						conn.setReadTimeout(8000);
+						conn.setInstanceFollowRedirects(true);
+						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+						conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+						conn.setRequestProperty("Referer", "https://ok.ru/");
+
+						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+						String line;
+						String foundOptions = "";
+
+						while ((line = reader.readLine()) != null) {
+							int idx = line.indexOf("data-options=");
+							if (idx != -1) {
+								int qStart = idx + 13;
+								char quote = line.charAt(qStart);
+								int qEnd = line.indexOf(quote, qStart + 1);
+								if (qEnd != -1) {
+									foundOptions = line.substring(qStart + 1, qEnd);
+									break;
+								}
+							}
+						}
+
+						final ArrayList<String> tempNames = new ArrayList<>();
+						final ArrayList<String> tempUrls = new ArrayList<>();
+						String autoUrl = "";
+
+						if (!foundOptions.isEmpty()) {
+							String cleanJson = foundOptions
+								.replace("&quot;", "\"")
+								.replace("&amp;", "&")
+								.replace("&#39;", "'")
+								.replace("&lt;", "<")
+								.replace("&gt;", ">");
+
+							JSONObject optJson = new JSONObject(cleanJson);
+							JSONObject metadata = null;
+							if (optJson.has("flashvars")) {
+								JSONObject fv = optJson.getJSONObject("flashvars");
+								if (fv.has("metadata")) {
+									Object mObj = fv.get("metadata");
+									metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
+								}
+							} else if (optJson.has("metadata")) {
+								Object mObj = optJson.get("metadata");
+								metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
+							}
+
+							if (metadata != null && metadata.has("videos")) {
+								JSONArray videos = metadata.getJSONArray("videos");
+								for (int k = 0; k < videos.length(); k++) {
+									JSONObject v = videos.getJSONObject(k);
+									if (v.has("url")) {
+										String rawUrl = v.getString("url").replace("\\/", "/").replace("\\u0026", "&");
+										String rName = v.optString("name", "Resolusi " + (k + 1)).toUpperCase();
+
+										if (rName.equalsIgnoreCase("mobile")) rName = "144P";
+										if (rName.equalsIgnoreCase("lowest")) rName = "240P";
+										if (rName.equalsIgnoreCase("low")) rName = "360P";
+										if (rName.equalsIgnoreCase("medium")) rName = "480P";
+										if (rName.equalsIgnoreCase("high")) rName = "720P";
+										if (rName.equalsIgnoreCase("hd")) rName = "1080P";
+
+										tempNames.add(rName);
+										tempUrls.add(rawUrl);
+
+										if (autoUrl.isEmpty()) {
+											autoUrl = rawUrl;
+										}
+									}
+								}
+							}
+						}
+
+						final String finalOkUrl = autoUrl;
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (!finalOkUrl.isEmpty()) {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.addAll(tempNames);
+									qualityUrls.addAll(tempUrls);
+									selectedQualityIndex = 0;
+
+									if (btnQuality != null) {
+										btnQuality.setText(tempNames.get(0));
+									}
+
+									playVideoUrl(finalOkUrl, 0);
+								} else {
+									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+									Toast.makeText(WatchActivity.this, "Gagal parsing video OK.ru", Toast.LENGTH_SHORT).show();
+								}
+							}
+						});
+
+					} catch (final Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								String err = (e != null && e.getMessage() != null) ? e.getMessage() : "Koneksi terputus";
+								Toast.makeText(WatchActivity.this, "Error OK.ru: " + err, Toast.LENGTH_SHORT).show();
+							}
+						});
+					} finally {
+						try {
+							if (reader != null) reader.close();
+							if (conn != null) conn.disconnect();
+						} catch (Exception ignored) {}
+					}
+				}
+			}).start();
+		} else if (serverKey.contains("daily") || serverKey.contains("dailymotion")) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					HttpURLConnection conn = null;
+					BufferedReader reader = null;
+					try {
+						String dailyId = "";
+						if (finalTargetUrl.contains("id=")) {
+							Uri uri = Uri.parse(finalTargetUrl);
+							dailyId = uri.getQueryParameter("id");
+						} else if (finalTargetUrl.contains("/video/")) {
+							String[] parts = finalTargetUrl.split("/video/");
+							if (parts.length > 1) dailyId = parts[1].split("\\?")[0];
+						} else {
+							String cPath = finalTargetUrl.split("\\?")[0];
+							dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
+						}
+
+						if (dailyId == null || dailyId.trim().isEmpty()) {
+							throw new Exception("ID tidak ditemukan");
+						}
+
+						String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + dailyId.trim();
+						URL url = new URL(dmApiUrl);
+						conn = (HttpURLConnection) url.openConnection();
+						conn.setRequestMethod("GET");
+						conn.setConnectTimeout(6000);
+						conn.setReadTimeout(6000);
+						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
+						conn.setRequestProperty("Referer", "https://www.dailymotion.com/");
+						conn.setRequestProperty("Origin", "https://www.dailymotion.com");
+
+						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+						StringBuilder sb = new StringBuilder();
+						String line;
+						while ((line = reader.readLine()) != null) sb.append(line);
+
+						final ArrayList<String> dmNames = new ArrayList<>();
+						final ArrayList<String> dmUrls = new ArrayList<>();
+						String resBody = sb.toString();
+
+						if (!resBody.isEmpty()) {
+							JSONObject metaObj = new JSONObject(resBody);
+							if (metaObj.has("qualities")) {
+								JSONObject qualities = metaObj.getJSONObject("qualities");
+								String[] checkKeys = new String[]{"auto", "1080", "720", "480", "380", "240"};
+
+								for (String qKey : checkKeys) {
+									if (qualities.has(qKey)) {
+										JSONArray qArr = qualities.optJSONArray(qKey);
+										if (qArr != null && qArr.length() > 0) {
+											String streamUrl = qArr.getJSONObject(0).optString("url");
+											if (!streamUrl.isEmpty()) {
+												String label = qKey.equalsIgnoreCase("auto") ? "Auto" : qKey + "P";
+												dmNames.add(label);
+												dmUrls.add(streamUrl);
+											}
+										}
+									}
+								}
+							}
+						}
+
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (!dmUrls.isEmpty()) {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.addAll(dmNames);
+									qualityUrls.addAll(dmUrls);
+									selectedQualityIndex = 0;
+
+									if (btnQuality != null) btnQuality.setText(dmNames.get(0));
+
+									playVideoUrl(dmUrls.get(0), 0);
+								} else {
+									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+									Toast.makeText(WatchActivity.this, "Stream Dailymotion tidak tersedia", Toast.LENGTH_SHORT).show();
+								}
+							}
+						});
+
+					} catch (final Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								Toast.makeText(WatchActivity.this, "Gagal memproses Dailymotion", Toast.LENGTH_SHORT).show();
+							}
+						});
+					} finally {
+						try {
+							if (reader != null) reader.close();
+							if (conn != null) conn.disconnect();
+						} catch (Exception ignored) {}
+					}
+				}
+			}).start();
+		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube")) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						String videoHash = "";
+						if (finalTargetUrl.contains("?v=")) {
+							Uri uri = Uri.parse(finalTargetUrl);
+							videoHash = uri.getQueryParameter("v");
+						} else if (finalTargetUrl.contains("/v/")) {
+							String[] parts = finalTargetUrl.split("/v/");
+							if (parts.length > 1) videoHash = parts[1].split("[/?#]")[0];
+						} else {
+							String cleanPath = finalTargetUrl.split("\\?")[0];
+							videoHash = cleanPath.substring(cleanPath.lastIndexOf('/') + 1);
+						}
+
+						if (videoHash == null || videoHash.trim().isEmpty()) {
+							throw new Exception("Hash D-Tube tidak ditemukan");
+						}
+
+						final String directDtubeUrl = "https://ipfs.io/ipfs/" + videoHash.trim();
+
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								qualityNames.clear();
+								qualityUrls.clear();
+								qualityNames.add("Default");
+								qualityUrls.add(directDtubeUrl);
+								selectedQualityIndex = 0;
+
+								if (btnQuality != null) btnQuality.setText("Default");
+
+								playVideoUrl(directDtubeUrl, 0);
+							}
+						});
+					} catch (Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								Toast.makeText(WatchActivity.this, "Gagal memuat server D-Tube", Toast.LENGTH_SHORT).show();
+							}
+						});
+					}
+				}
+			}).start();
+		} else if (serverKey.contains("rumble")) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					HttpURLConnection conn = null;
+					BufferedReader reader = null;
+					try {
+						URL url = new URL(finalTargetUrl);
+						conn = (HttpURLConnection) url.openConnection();
+						conn.setRequestMethod("GET");
+						conn.setConnectTimeout(6000);
+						conn.setReadTimeout(6000);
+						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
+
+						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+						StringBuilder sb = new StringBuilder();
+						String line;
+						String streamUrl = "";
+
+						while ((line = reader.readLine()) != null) {
+							sb.append(line);
+							if (line.contains(".mp4") && line.contains("https://")) {
+								Pattern p = Pattern.compile("\"url\":\\s*\"(https:[^\"\\s]+?\\.mp4)\"");
+								Matcher m = p.matcher(line);
+								if (m.find()) {
+									streamUrl = m.group(1).replace("\\/", "/");
+									break;
+								}
+							}
+						}
+
+						if (streamUrl.isEmpty()) {
+							Pattern p2 = Pattern.compile("(https?://[a-zA-Z0-9.-]+\\.rumble\\.com/[^\"'\\s]+\\.mp4)");
+							Matcher m2 = p2.matcher(sb.toString());
+							if (m2.find()) {
+								streamUrl = m2.group(1);
+							}
+						}
+
+						final String finalRumbleUrl = streamUrl;
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (!finalRumbleUrl.isEmpty()) {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.add("Default");
+									qualityUrls.add(finalRumbleUrl);
+									selectedQualityIndex = 0;
+
+									if (btnQuality != null) btnQuality.setText("Default");
+
+									playVideoUrl(finalRumbleUrl, 0);
+								} else {
+									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+									Toast.makeText(WatchActivity.this, "Rumble membutuhkan Private DNS", Toast.LENGTH_SHORT).show();
+								}
+							}
+						});
+
+					} catch (Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								Toast.makeText(WatchActivity.this, "Gagal koneksi Rumble", Toast.LENGTH_SHORT).show();
+							}
+						});
+					} finally {
+						try {
+							if (reader != null) reader.close();
+							if (conn != null) conn.disconnect();
+						} catch (Exception ignored) {}
+					}
+				}
+			}).start();
+		} else if (serverKey.contains("odysee")) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						String streamOdysee = "";
+						if (finalTargetUrl.contains("signature=")) {
+							Uri uri = Uri.parse(finalTargetUrl);
+							String sig = uri.getQueryParameter("signature");
+							String sigTs = uri.getQueryParameter("signature_ts");
+							String path = uri.getPath();
+							if (path != null && path.contains("/embed/")) {
+								String cleanClaim = path.replace("/$/embed/", "").replace("/embed/", "");
+								streamOdysee = "https://player.odycdn.com/api/v4/streams/free/" + cleanClaim + "/" + sig + "/" + sigTs;
+							}
+						}
+
+						if (streamOdysee.isEmpty()) {
+							streamOdysee = finalTargetUrl;
+						}
+
+						final String finalOdyUrl = streamOdysee;
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								qualityNames.clear();
+								qualityUrls.clear();
+								qualityNames.add("Default");
+								qualityUrls.add(finalOdyUrl);
+								selectedQualityIndex = 0;
+
+								if (btnQuality != null) btnQuality.setText("Default");
+
+								playVideoUrl(finalOdyUrl, 0);
+							}
+						});
+					} catch (Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								Toast.makeText(WatchActivity.this, "Gagal memproses server Odysee", Toast.LENGTH_SHORT).show();
+							}
+						});
+					}
+				}
+			}).start();
+		} else {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					HttpURLConnection conn = null;
+					BufferedReader reader = null;
+					try {
+						String lowerTarget = finalTargetUrl.toLowerCase();
+						if (lowerTarget.contains(".mp4") || lowerTarget.contains(".m3u8")) {
+							new Handler(Looper.getMainLooper()).post(new Runnable() {
+								@Override
+								public void run() {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.add("Default");
+									qualityUrls.add(finalTargetUrl);
+									selectedQualityIndex = 0;
+
+									if (btnQuality != null) btnQuality.setText("Default");
+
+									playVideoUrl(finalTargetUrl, 0);
+								}
+							});
+							return;
+						}
+
+						URL url = new URL(finalTargetUrl);
+						conn = (HttpURLConnection) url.openConnection();
+						conn.setRequestMethod("GET");
+						conn.setConnectTimeout(5000);
+						conn.setReadTimeout(5000);
+						conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36");
+
+						reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+						String line;
+						String streamFound = "";
+
+						while ((line = reader.readLine()) != null) {
+							if (line.contains(".m3u8") || line.contains(".mp4")) {
+								Pattern p = Pattern.compile("(https?://[^\"'\\s]+\\.(?:m3u8|mp4)[^\"'\\s]*)");
+								Matcher m = p.matcher(line);
+								if (m.find()) {
+									streamFound = m.group(1).replace("\\/", "/");
+									break;
+								}
+							}
+						}
+
+						final String finalGenericUrl = streamFound;
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (!finalGenericUrl.isEmpty()) {
+									qualityNames.clear();
+									qualityUrls.clear();
+									qualityNames.add("Default");
+									qualityUrls.add(finalGenericUrl);
+									selectedQualityIndex = 0;
+
+									if (btnQuality != null) btnQuality.setText("Default");
+
+									playVideoUrl(finalGenericUrl, 0);
+								} else {
+									if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+									Toast.makeText(WatchActivity.this, "Server " + serverKey + " terproteksi captcha/iklan", Toast.LENGTH_SHORT).show();
+								}
+							}
+						});
+
+					} catch (Exception e) {
+						new Handler(Looper.getMainLooper()).post(new Runnable() {
+							@Override
+							public void run() {
+								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								Toast.makeText(WatchActivity.this, "Server gagal dimuat", Toast.LENGTH_SHORT).show();
+							}
+						});
+					} finally {
+						try {
+							if (reader != null) reader.close();
+							if (conn != null) conn.disconnect();
+						} catch (Exception ignored) {}
+					}
+				}
+			}).start();
+		}
+	}
+
+	public class RecyclerEpisodeAdapter extends RecyclerView.Adapter<RecyclerEpisodeAdapter.ViewHolder> {
+
+		ArrayList<HashMap<String, Object>> _data;
+
+		public RecyclerEpisodeAdapter(ArrayList<HashMap<String, Object>> _arr) {
+			_data = _arr;
+		}
+
+		@Override
+		public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+			LayoutInflater _inflater = getLayoutInflater();
+			View _v = _inflater.inflate(R.layout.eps_list, parent, false);
+			return new ViewHolder(_v);
+		}
+
+		@Override
+		public void onBindViewHolder(ViewHolder _holder, final int _position) {
+			final int pos = _position;
+			final View itemView = _holder.itemView;
+			final float density = itemView.getContext().getResources().getDisplayMetrics().density;
+
+			int widthPx = (int) (65 * density);
+			int heightPx = (int) (60 * density);
+			int marginEndPx = (int) (8 * density);
+
+			RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(widthPx, heightPx);
+			params.setMarginEnd(marginEndPx);
+			itemView.setLayoutParams(params);
+
+			GradientDrawable itemBg = new GradientDrawable();
+			itemBg.setCornerRadius(14 * density);
+
+			TextView tvEpisode = itemView.findViewById(R.id.textview1);
+			final boolean isActive = (pos == currentEpisodeIndex);
+
+			if (isActive) {
+				itemBg.setColor(0xFF3B82F6);
+				if (tvEpisode != null) {
+					tvEpisode.setTextColor(0xFFFFFFFF);
+					tvEpisode.setTypeface(null, Typeface.BOLD);
+				}
+			} else {
+				itemBg.setColor(0xFF111111);
+				if (tvEpisode != null) {
+					tvEpisode.setTextColor(0xFF94A3B8);
+					tvEpisode.setTypeface(null, Typeface.NORMAL);
+				}
+			}
+			itemView.setBackground(itemBg);
+
+			if (tvEpisode != null && _data.get(pos) != null) {
+				HashMap<String, Object> itemData = _data.get(pos);
+				if (itemData.containsKey("episode")) {
+					Object epObj = itemData.get("episode");
+					if (epObj != null) {
+						tvEpisode.setText(epObj.toString().replace("Ep ", "").replace("Eps ", "").trim());
+					}
+				} else if (itemData.containsKey("title")) {
+					Object tObj = itemData.get("title");
+					if (tObj != null) {
+						tvEpisode.setText(tObj.toString().replaceAll("[^0-9]", "").trim());
+					}
+				} else {
+					tvEpisode.setText(String.valueOf(pos + 1));
+				}
+			}
+
+			itemView.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (currentEpisodeIndex == pos && mediaPlayer != null && mediaPlayer.isPlaying()) {
+						return;
+					}
+
+					if (episodeList != _data) {
+						episodeList.clear();
+						episodeList.addAll(_data);
+					}
+
+					playEpisodeByIndex(pos);
+				}
+			});
+		}
+
+		@Override
+		public int getItemCount() {
+			return _data.size();
+		}
+
+		public class ViewHolder extends RecyclerView.ViewHolder {
+			public ViewHolder(View v) {
+				super(v);
+			}
+		}
+	}
 }
