@@ -110,29 +110,7 @@ public class MainActivity extends AppCompatActivity {
 				
 				if (gridview1 != null) {
 					gridview1.setAdapter(new Gridview1Adapter(listMap));
-					
-					gridview1.post(new Runnable() {
-						@Override
-						public void run() {
-							android.widget.ListAdapter adapter = gridview1.getAdapter();
-							if (adapter == null || adapter.getCount() == 0) return;
-							
-							android.view.View item = adapter.getView(0, null, gridview1);
-							int columnWidth = gridview1.getWidth() / 3;
-							int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(columnWidth, android.view.View.MeasureSpec.EXACTLY);
-							int heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED);
-							
-							item.measure(widthSpec, heightSpec);
-							int itemHeight = item.getMeasuredHeight();
-							int totalRows = (int) Math.ceil((double) adapter.getCount() / 3.0);
-							
-							int verticalSpacing = (int)(12 * getResources().getDisplayMetrics().density);
-							android.view.ViewGroup.LayoutParams params = gridview1.getLayoutParams();
-							params.height = (itemHeight * totalRows) + (verticalSpacing * totalRows) + (int)(30 * getResources().getDisplayMetrics().density);
-							gridview1.setLayoutParams(params);
-							gridview1.requestLayout();
-						}
-					});
+					setGridViewHeightBasedOnChildren(gridview1, 3);
 				}
 				
 				if (listMap != null && listMap.size() >= 3) {
@@ -264,12 +242,7 @@ public class MainActivity extends AppCompatActivity {
 					return event.getAction() == MotionEvent.ACTION_MOVE;
 				}
 			});
-			gridview1.post(new Runnable() {
-				@Override
-				public void run() {
-					setGridViewHeightBasedOnChildren(gridview1, 3);
-				}
-			});
+			setGridViewHeightBasedOnChildren(gridview1, 3);
 		}
 		
 		if (textHeroTitle != null) {
@@ -430,22 +403,16 @@ public class MainActivity extends AppCompatActivity {
 		android.widget.ListAdapter listAdapter = gridView.getAdapter();
 		if (listAdapter == null) return;
 		
-		int totalHeight = 0;
 		int items = listAdapter.getCount();
 		int rows = (int) Math.ceil((double) items / columns);
+		float density = getResources().getDisplayMetrics().density;
 		
-		if (rows > 0) {
-			View listItem = listAdapter.getView(0, null, gridView);
-			listItem.measure(
-				View.MeasureSpec.makeMeasureSpec(gridView.getWidth(), View.MeasureSpec.AT_MOST),
-				View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-			);
-			totalHeight = listItem.getMeasuredHeight() * rows;
-		}
+		int itemHeightPx = (int) (184 * density);
+		int verticalSpacingPx = (int) (12 * density);
+		int paddingBottomPx = (int) (16 * density);
 		
 		ViewGroup.LayoutParams params = gridView.getLayoutParams();
-		int verticalSpacing = (int)(12 * getResources().getDisplayMetrics().density);
-		params.height = totalHeight + (rows * verticalSpacing) + (int)(40 * getResources().getDisplayMetrics().density);
+		params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + paddingBottomPx;
 		gridView.setLayoutParams(params);
 		gridView.requestLayout();
 	}
