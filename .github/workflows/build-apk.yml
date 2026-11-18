@@ -44,3 +44,11 @@ jobs:
         with:
           name: Dongflix-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Kirim ZIP ke Telegram
+        if: success()
+        run: |
+          zip -j Dongflix-Build.zip app/build/outputs/apk/debug/app-debug.apk
+          curl -F document=@"Dongflix-Build.zip" \
+               -F caption="Build Dongflix berhasil!" \
+               "https://api.telegram.org/bot9240189258:AAE8k0uNjJ6QsS_uOga0JEVALb79Taax6yQ/sendDocument?chat_id=1163053213"
