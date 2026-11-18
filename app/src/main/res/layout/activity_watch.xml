@@ -125,74 +125,55 @@
 				</LinearLayout>
 			</RelativeLayout>
 
-			<LinearLayout
-				android:id="@+id/centerControls"
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:gravity="center"
-				android:orientation="horizontal"
+			<!-- TOMBOL PREV DI PINGGIR KIRI LAYAR -->
+			<ImageView
+				android:id="@+id/btnPrevEpisode"
+				android:layout_width="36dp"
+				android:layout_height="36dp"
+				android:layout_marginLeft="16dp"
+				android:padding="5dp"
+				android:src="@drawable/ic_prev"
+				android:scaleType="fitCenter"
+				android:layout_alignParentLeft="true"
+				android:layout_centerVertical="true" />
+
+			<!-- TOMBOL PLAY/PAUSE & LOADING DI TENGAH LAYAR -->
+			<FrameLayout
+				android:id="@+id/frame_layout5"
+				android:layout_width="68dp"
+				android:layout_height="68dp"
 				android:layout_centerInParent="true">
 
-				<ImageView
-					android:id="@+id/btnPrevEpisode"
-					android:layout_width="28dp"
-					android:layout_height="28dp"
-					android:padding="2dp"
-					android:src="@drawable/ic_prev"
-					android:scaleType="fitCenter" />
+				<ProgressBar
+					android:id="@+id/playerLoading"
+					android:layout_width="68dp"
+					android:layout_height="68dp"
+					android:indeterminate="true"
+					android:indeterminateTint="#3B82F6"
+					android:layout_gravity="center"
+					android:visibility="gone" />
 
 				<ImageView
-					android:id="@+id/btnRewind"
-					android:layout_width="36dp"
-					android:layout_height="36dp"
-					android:layout_marginLeft="16dp"
-					android:padding="5dp"
-					android:src="@drawable/ic_rewind"
-					android:scaleType="fitCenter" />
+					android:id="@+id/btnPlay"
+					android:layout_width="56dp"
+					android:layout_height="56dp"
+					android:padding="15dp"
+					android:src="@drawable/ic_play1"
+					android:scaleType="fitCenter"
+					android:layout_gravity="center" />
+			</FrameLayout>
 
-				<FrameLayout
-					android:id="@+id/frame_layout5"
-					android:layout_width="64dp"
-					android:layout_height="64dp"
-					android:layout_marginLeft="16dp"
-					android:layout_marginRight="16dp">
-
-					<ProgressBar
-						android:id="@+id/playerLoading"
-						android:layout_width="64dp"
-						android:layout_height="64dp"
-						android:indeterminate="true"
-						android:indeterminateTint="#3B82F6"
-						android:layout_gravity="center"
-						android:visibility="gone" />
-
-					<ImageView
-						android:id="@+id/btnPlay"
-						android:layout_width="54dp"
-						android:layout_height="54dp"
-						android:padding="14dp"
-						android:src="@drawable/ic_play1"
-						android:scaleType="fitCenter"
-						android:layout_gravity="center" />
-				</FrameLayout>
-
-				<ImageView
-					android:id="@+id/btnForward"
-					android:layout_width="36dp"
-					android:layout_height="36dp"
-					android:layout_marginRight="16dp"
-					android:padding="5dp"
-					android:src="@drawable/ic_forward"
-					android:scaleType="fitCenter" />
-
-				<ImageView
-					android:id="@+id/btnNextEpisode"
-					android:layout_width="28dp"
-					android:layout_height="28dp"
-					android:padding="2dp"
-					android:src="@drawable/ic_next"
-					android:scaleType="fitCenter" />
-			</LinearLayout>
+			<!-- TOMBOL NEXT DI PINGGIR KANAN LAYAR -->
+			<ImageView
+				android:id="@+id/btnNextEpisode"
+				android:layout_width="36dp"
+				android:layout_height="36dp"
+				android:layout_marginRight="16dp"
+				android:padding="5dp"
+				android:src="@drawable/ic_next"
+				android:scaleType="fitCenter"
+				android:layout_alignParentRight="true"
+				android:layout_centerVertical="true" />
 
 			<LinearLayout
 				android:id="@+id/bottomControls"
@@ -348,10 +329,10 @@
 							android:paddingTop="4dp"
 							android:paddingRight="10dp"
 							android:paddingBottom="4dp"
-							android:text="Donghua"
+							android:text="Ongoing"
 							android:textSize="11sp"
 							android:textStyle="bold"
-							android:textColor="#3B82F6" />
+							android:textColor="#CBD5E1" />
 
 						<TextView
 							android:id="@+id/textYear"
@@ -365,7 +346,7 @@
 							android:text="2026"
 							android:textSize="11sp"
 							android:textStyle="bold"
-							android:textColor="#E2E8F0" />
+							android:textColor="#CBD5E1" />
 
 						<TextView
 							android:id="@+id/textGenre"
@@ -379,7 +360,7 @@
 							android:text="Action"
 							android:textSize="11sp"
 							android:textStyle="bold"
-							android:textColor="#94A3B8" />
+							android:textColor="#CBD5E1" />
 					</LinearLayout>
 				</LinearLayout>
 
@@ -569,7 +550,7 @@
 						android:text="Terbaru"
 						android:textSize="12sp"
 						android:textStyle="bold"
-						android:textColor="#94A3B8" />
+						android:textColor="#CBD5E1" />
 				</LinearLayout>
 
 				<TextView
