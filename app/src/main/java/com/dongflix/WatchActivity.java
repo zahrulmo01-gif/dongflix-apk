@@ -166,13 +166,15 @@ public class WatchActivity extends AppCompatActivity {
 					eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
 					if (eps != null && !eps.isEmpty()) {
 						Collections.reverse(eps);
-						recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
+						if (recyclerEpisode != null) {
+							recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
+						}
 						episodeList = eps;
 						currentEpisodeIndex = 0;
 
-						if (playerTextureView.isAvailable()) {
+						if (playerTextureView != null && playerTextureView.isAvailable()) {
 							playEpisodeByIndex(0);
-						} else {
+						} else if (playerTextureView != null) {
 							playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
 								@Override
 								public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
@@ -210,15 +212,17 @@ public class WatchActivity extends AppCompatActivity {
 										firstGenre = genresArray.optString(0);
 									}
 
-									textJudul.setText(title);
-									textSinopsis.setText(synopsis);
-									textGenre.setText(firstGenre);
+									if (textJudul != null) textJudul.setText(title);
+									if (textSinopsis != null) textSinopsis.setText(synopsis);
+									if (textGenre != null) textGenre.setText(firstGenre);
 
-									if (released.length() >= 4) {
+									if (released.length() >= 4 && textYear != null) {
 										textYear.setText(released.substring(released.length() - 4));
 									}
 
-									Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imagePoster);
+									if (imagePoster != null && !cover.isEmpty()) {
+										Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imagePoster);
+									}
 									break;
 								}
 							}
@@ -253,7 +257,9 @@ public class WatchActivity extends AppCompatActivity {
 		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
 		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
 
-		recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		if (recyclerEpisode != null) {
+			recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		}
 
 		_initPlayerViews();
 		applyCustomFonts();
@@ -375,9 +381,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// ========================================================
-	// DETEKSI KUALITAS JARINGAN & PILIH RESOLUSI AUTO TERBAIK
-	// ========================================================
 	public int getRecommendedQualityIndex() {
 		if (qualityNames == null || qualityNames.isEmpty()) return 0;
 
@@ -480,9 +483,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// ========================================================
-	// KONTROL VISIBILITAS OVERLAY
-	// ========================================================
 	public void resetControlsTimer() {
 		if (playerHandler != null && hideControlsRunnable != null) {
 			playerHandler.removeCallbacks(hideControlsRunnable);
@@ -820,9 +820,6 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
-	// ========================================================
-	// HELPER BOTTOM SHEET DIALOG MODERN (TANPA ABU-ABU DI SUDUT)
-	// ========================================================
 	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
 		sheetDialog.setContentView(contentView);
 		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
@@ -971,9 +968,6 @@ public class WatchActivity extends AppCompatActivity {
 		void onItemClick(int index);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: SEMUA EPISODE (GRID 5 KOLOM)
-	// ========================================================
 	public void showAllEpisodesBottomSheet() {
 		if (episodeList == null || episodeList.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
@@ -1105,9 +1099,6 @@ public class WatchActivity extends AppCompatActivity {
 		attachTransparentSheetContainer(sheetDialog, root);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: PILIH SERVER
-	// ========================================================
 	public void showServerDialog() {
 		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
@@ -1143,9 +1134,6 @@ public class WatchActivity extends AppCompatActivity {
 		);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: PILIH RESOLUSI (AUTO + MANUAL)
-	// ========================================================
 	public void showQualityDialog() {
 		if (qualityNames == null || qualityNames.isEmpty()) {
 			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
@@ -1208,9 +1196,6 @@ public class WatchActivity extends AppCompatActivity {
 		);
 	}
 
-	// ========================================================
-	// BOTTOM SHEET: KECEPATAN PUTAR
-	// ========================================================
 	public void showSpeedDialog() {
 		final ArrayList<String> speedLabels = new ArrayList<>();
 		speedLabels.add("0.5x");
@@ -1375,7 +1360,7 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable playCircle = new GradientDrawable();
 		playCircle.setShape(GradientDrawable.OVAL);
 		playCircle.setColor(0xFFFFFFFF);
-		btnPlay.setBackground(playCircle);
+		if (btnPlay != null) btnPlay.setBackground(playCircle);
 
 		final float density = getResources().getDisplayMetrics().density;
 		final int barHeight = (int) (4 * density);
@@ -1428,58 +1413,60 @@ public class WatchActivity extends AppCompatActivity {
 			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
 		};
 
-		playerSeekBar.setProgressDrawable(customTrackDrawable);
+		if (playerSeekBar != null) {
+			playerSeekBar.setProgressDrawable(customTrackDrawable);
 
-		final int normalThumbSize = (int) (12 * density);
-		final int activeThumbSize = (int) (16 * density);
+			final int normalThumbSize = (int) (12 * density);
+			final int activeThumbSize = (int) (16 * density);
 
-		final GradientDrawable customThumb = new GradientDrawable();
-		customThumb.setShape(GradientDrawable.OVAL);
-		customThumb.setColor(0xFF3B82F6);
-		customThumb.setSize(normalThumbSize, normalThumbSize);
+			final GradientDrawable customThumb = new GradientDrawable();
+			customThumb.setShape(GradientDrawable.OVAL);
+			customThumb.setColor(0xFF3B82F6);
+			customThumb.setSize(normalThumbSize, normalThumbSize);
 
-		playerSeekBar.setThumb(customThumb);
-		playerSeekBar.setThumbOffset(normalThumbSize / 2);
+			playerSeekBar.setThumb(customThumb);
+			playerSeekBar.setThumbOffset(normalThumbSize / 2);
 
-		playerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-			@Override
-			public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-				seekBar.invalidate();
-				if (fromUser) {
-					int curSec = (progress / 1000) % 60;
-					int curMin = (progress / (1000 * 60)) % 60;
-					int total = (mediaPlayer != null) ? mediaPlayer.getDuration() : 0;
-					int totSec = (total / 1000) % 60;
-					int totMin = (total / (1000 * 60)) % 60;
-					textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
+			playerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+				@Override
+				public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+					seekBar.invalidate();
+					if (fromUser && textTime != null) {
+						int curSec = (progress / 1000) % 60;
+						int curMin = (progress / (1000 * 60)) % 60;
+						int total = (mediaPlayer != null) ? mediaPlayer.getDuration() : 0;
+						int totSec = (total / 1000) % 60;
+						int totMin = (total / (1000 * 60)) % 60;
+						textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
+					}
 				}
-			}
 
-			@Override
-			public void onStartTrackingTouch(SeekBar seekBar) {
-				isUserTrackingSeekBar[0] = true;
-				customThumb.setSize(activeThumbSize, activeThumbSize);
-				seekBar.setThumb(customThumb);
-				seekBar.setThumbOffset(activeThumbSize / 2);
+				@Override
+				public void onStartTrackingTouch(SeekBar seekBar) {
+					isUserTrackingSeekBar[0] = true;
+					customThumb.setSize(activeThumbSize, activeThumbSize);
+					seekBar.setThumb(customThumb);
+					seekBar.setThumbOffset(activeThumbSize / 2);
 
-				if (playerHandler != null && hideControlsRunnable != null) {
-					playerHandler.removeCallbacks(hideControlsRunnable);
+					if (playerHandler != null && hideControlsRunnable != null) {
+						playerHandler.removeCallbacks(hideControlsRunnable);
+					}
 				}
-			}
 
-			@Override
-			public void onStopTrackingTouch(SeekBar seekBar) {
-				if (mediaPlayer != null) {
-					mediaPlayer.seekTo(seekBar.getProgress());
+				@Override
+				public void onStopTrackingTouch(SeekBar seekBar) {
+					if (mediaPlayer != null) {
+						mediaPlayer.seekTo(seekBar.getProgress());
+					}
+					customThumb.setSize(normalThumbSize, normalThumbSize);
+					seekBar.setThumb(customThumb);
+					seekBar.setThumbOffset(normalThumbSize / 2);
+
+					isUserTrackingSeekBar[0] = false;
+					resetControlsTimer();
 				}
-				customThumb.setSize(normalThumbSize, normalThumbSize);
-				seekBar.setThumb(customThumb);
-				seekBar.setThumbOffset(normalThumbSize / 2);
-
-				isUserTrackingSeekBar[0] = false;
-				resetControlsTimer();
-			}
-		});
+			});
+		}
 
 		hideControlsRunnable = new Runnable() {
 			@Override
@@ -1497,7 +1484,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			@Override
 			public boolean onDoubleTap(MotionEvent e) {
-				if (mediaPlayer == null) return false;
+				if (mediaPlayer == null || layoutPlayer == null) return false;
 
 				float touchX = e.getX();
 				int viewWidth = layoutPlayer.getWidth();
@@ -1505,14 +1492,18 @@ public class WatchActivity extends AppCompatActivity {
 				if (touchX < (viewWidth / 2f)) {
 					int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
 					mediaPlayer.seekTo(targetPos);
-					playerSeekBar.setProgress(targetPos);
-					playerSeekBar.invalidate();
+					if (playerSeekBar != null) {
+						playerSeekBar.setProgress(targetPos);
+						playerSeekBar.invalidate();
+					}
 					Toast.makeText(WatchActivity.this, "-10 detik", Toast.LENGTH_SHORT).show();
 				} else {
 					int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
 					mediaPlayer.seekTo(targetPos);
-					playerSeekBar.setProgress(targetPos);
-					playerSeekBar.invalidate();
+					if (playerSeekBar != null) {
+						playerSeekBar.setProgress(targetPos);
+						playerSeekBar.invalidate();
+					}
 					Toast.makeText(WatchActivity.this, "+10 detik", Toast.LENGTH_SHORT).show();
 				}
 				resetControlsTimer();
@@ -1525,43 +1516,49 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		});
 
-		layoutPlayer.setOnTouchListener(new View.OnTouchListener() {
-			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				return playerGestureDetector.onTouchEvent(event);
-			}
-		});
+		if (layoutPlayer != null) {
+			layoutPlayer.setOnTouchListener(new View.OnTouchListener() {
+				@Override
+				public boolean onTouch(View v, MotionEvent event) {
+					return playerGestureDetector.onTouchEvent(event);
+				}
+			});
+		}
 
-		playerControlsOverlay.setOnTouchListener(new View.OnTouchListener() {
-			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				return playerGestureDetector.onTouchEvent(event);
-			}
-		});
+		if (playerControlsOverlay != null) {
+			playerControlsOverlay.setOnTouchListener(new View.OnTouchListener() {
+				@Override
+				public boolean onTouch(View v, MotionEvent event) {
+					return playerGestureDetector.onTouchEvent(event);
+				}
+			});
+		}
 
-		playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-			@Override
-			public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
-				playerSurface = new Surface(surfaceTexture);
-				if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-					mediaPlayer.setSurface(playerSurface);
+		if (playerTextureView != null) {
+			playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+				@Override
+				public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
+					playerSurface = new Surface(surfaceTexture);
+					if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+						mediaPlayer.setSurface(playerSurface);
+					}
 				}
-			}
-			@Override public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
-			@Override
-			public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
-				if (playerSurface != null) {
-					playerSurface.release();
-					playerSurface = null;
+				@Override public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
+				@Override
+				public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+					if (playerSurface != null) {
+						playerSurface.release();
+						playerSurface = null;
+					}
+					if (mediaPlayer != null) {
+						mediaPlayer.release();
+						mediaPlayer = null;
+					}
+					return true;
 				}
-				if (mediaPlayer != null) {
-					mediaPlayer.release();
-					mediaPlayer = null;
-				}
-				return true;
-			}
-			@Override public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
-		});
+				@Override public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
+			});
+		}
 
 		progressLoop = new Runnable() {
 			@Override
@@ -1571,14 +1568,18 @@ public class WatchActivity extends AppCompatActivity {
 						int cur = mediaPlayer.getCurrentPosition();
 						int tot = mediaPlayer.getDuration();
 
-						playerSeekBar.setProgress(cur);
-						playerSeekBar.invalidate();
+						if (playerSeekBar != null) {
+							playerSeekBar.setProgress(cur);
+							playerSeekBar.invalidate();
+						}
 
-						int curSec = (cur / 1000) % 60;
-						int curMin = (cur / (1000 * 60)) % 60;
-						int totSec = (tot / 1000) % 60;
-						int totMin = (tot / (1000 * 60)) % 60;
-						textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
+						if (textTime != null) {
+							int curSec = (cur / 1000) % 60;
+							int curMin = (cur / (1000 * 60)) % 60;
+							int totSec = (tot / 1000) % 60;
+							int totMin = (tot / (1000 * 60)) % 60;
+							textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
+						}
 					}
 				} catch (Exception ignored) {}
 
@@ -1588,88 +1589,106 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		};
 
-		btnPlay.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				resetControlsTimer();
-				if (mediaPlayer != null) {
-					if (mediaPlayer.isPlaying()) {
-						mediaPlayer.pause();
-						btnPlay.setImageResource(R.drawable.ic_play1);
-						getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-						if (playerHandler != null && hideControlsRunnable != null) {
-							playerHandler.removeCallbacks(hideControlsRunnable);
+		if (btnPlay != null) {
+			btnPlay.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					if (mediaPlayer != null) {
+						if (mediaPlayer.isPlaying()) {
+							mediaPlayer.pause();
+							btnPlay.setImageResource(R.drawable.ic_play1);
+							getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+							if (playerHandler != null && hideControlsRunnable != null) {
+								playerHandler.removeCallbacks(hideControlsRunnable);
+							}
+						} else {
+							mediaPlayer.start();
+							btnPlay.setImageResource(R.drawable.ic_pause);
+							getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+							resetControlsTimer();
 						}
-					} else {
-						mediaPlayer.start();
-						btnPlay.setImageResource(R.drawable.ic_pause);
-						getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-						resetControlsTimer();
 					}
 				}
-			}
-		});
+			});
+		}
 
-		btnRewind.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				resetControlsTimer();
-				if (mediaPlayer != null) {
-					int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
-					mediaPlayer.seekTo(targetPos);
-					playerSeekBar.setProgress(targetPos);
-					playerSeekBar.invalidate();
+		if (btnRewind != null) {
+			btnRewind.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					if (mediaPlayer != null) {
+						int targetPos = Math.max(0, mediaPlayer.getCurrentPosition() - 10000);
+						mediaPlayer.seekTo(targetPos);
+						if (playerSeekBar != null) {
+							playerSeekBar.setProgress(targetPos);
+							playerSeekBar.invalidate();
+						}
+					}
 				}
-			}
-		});
+			});
+		}
 
-		btnForward.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				resetControlsTimer();
-				if (mediaPlayer != null) {
-					int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
-					mediaPlayer.seekTo(targetPos);
-					playerSeekBar.setProgress(targetPos);
-					playerSeekBar.invalidate();
+		if (btnForward != null) {
+			btnForward.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					if (mediaPlayer != null) {
+						int targetPos = Math.min(mediaPlayer.getDuration(), mediaPlayer.getCurrentPosition() + 10000);
+						mediaPlayer.seekTo(targetPos);
+						if (playerSeekBar != null) {
+							playerSeekBar.setProgress(targetPos);
+							playerSeekBar.invalidate();
+						}
+					}
 				}
-			}
-		});
+			});
+		}
 
-		btnPrevEpisode.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				resetControlsTimer();
-				if (currentEpisodeIndex > 0) {
-					playEpisodeByIndex(currentEpisodeIndex - 1);
+		if (btnPrevEpisode != null) {
+			btnPrevEpisode.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					if (currentEpisodeIndex > 0) {
+						playEpisodeByIndex(currentEpisodeIndex - 1);
+					}
 				}
-			}
-		});
+			});
+		}
 
-		btnNextEpisode.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				resetControlsTimer();
-				int totalItems = (recyclerEpisode.getAdapter() != null) ? recyclerEpisode.getAdapter().getItemCount() : 0;
-				if (currentEpisodeIndex < (totalItems - 1)) {
-					playEpisodeByIndex(currentEpisodeIndex + 1);
+		if (btnNextEpisode != null) {
+			btnNextEpisode.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					int totalItems = (recyclerEpisode != null && recyclerEpisode.getAdapter() != null) ? recyclerEpisode.getAdapter().getItemCount() : 0;
+					if (currentEpisodeIndex < (totalItems - 1)) {
+						playEpisodeByIndex(currentEpisodeIndex + 1);
+					}
 				}
-			}
-		});
+			});
+		}
 
-		btnQuality.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				showQualityDialog();
-			}
-		});
+		if (btnQuality != null) {
+			btnQuality.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showQualityDialog();
+				}
+			});
+		}
 
-		btnSpeed.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				showSpeedDialog();
-			}
-		});
+		if (btnSpeed != null) {
+			btnSpeed.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showSpeedDialog();
+				}
+			});
+		}
 
 		TextView btnSeeAllEpisodes = findViewById(R.id.textview85);
 		if (btnSeeAllEpisodes != null) {
@@ -1682,47 +1701,57 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		final boolean[] isFillMode = new boolean[]{false};
-		btnFill.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				resetControlsTimer();
-				isFillMode[0] = !isFillMode[0];
-				if (isFillMode[0]) {
-					playerTextureView.setScaleX(1.33f);
-					playerTextureView.setScaleY(1.33f);
-					Toast.makeText(WatchActivity.this, "Mode: Fill", Toast.LENGTH_SHORT).show();
-				} else {
-					playerTextureView.setScaleX(1.0f);
-					playerTextureView.setScaleY(1.0f);
-					Toast.makeText(WatchActivity.this, "Mode: Original", Toast.LENGTH_SHORT).show();
+		if (btnFill != null) {
+			btnFill.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					resetControlsTimer();
+					isFillMode[0] = !isFillMode[0];
+					if (playerTextureView != null) {
+						if (isFillMode[0]) {
+							playerTextureView.setScaleX(1.33f);
+							playerTextureView.setScaleY(1.33f);
+							Toast.makeText(WatchActivity.this, "Mode: Fill", Toast.LENGTH_SHORT).show();
+						} else {
+							playerTextureView.setScaleX(1.0f);
+							playerTextureView.setScaleY(1.0f);
+							Toast.makeText(WatchActivity.this, "Mode: Original", Toast.LENGTH_SHORT).show();
+						}
+					}
 				}
-			}
-		});
+			});
+		}
 
-		btnActionServer.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				showServerDialog();
-			}
-		});
+		if (btnActionServer != null) {
+			btnActionServer.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showServerDialog();
+				}
+			});
+		}
 
-		btnFullscreen.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				toggleFullscreen();
-			}
-		});
-
-		btnBack.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				if (isFullscreen) {
+		if (btnFullscreen != null) {
+			btnFullscreen.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
 					toggleFullscreen();
-				} else {
-					finish();
 				}
-			}
-		});
+			});
+		}
+
+		if (btnBack != null) {
+			btnBack.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (isFullscreen) {
+						toggleFullscreen();
+					} else {
+						finish();
+					}
+				}
+			});
+		}
 
 		updateEpisodeNavButtons();
 	}
