@@ -1,6 +1,7 @@
 package com.dongflix;
 
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -11,7 +12,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
@@ -92,9 +92,8 @@ public class WatchActivity extends AppCompatActivity {
 	public boolean isFullscreen = false;
 	public int savedSeekPosition = 0;
 
-	// State Adaptive Auto Quality
 	public boolean isAutoQualityMode = true;
-	public int selectedQualityIndex = 0; // Index pada qualityUrls (resolusi aktual yang diputar)
+	public int selectedQualityIndex = 0;
 	public float currentPlaybackSpeed = 1.0f;
 
 	public int currentEpisodeIndex = 0;
@@ -382,7 +381,7 @@ public class WatchActivity extends AppCompatActivity {
 	public int getRecommendedQualityIndex() {
 		if (qualityNames == null || qualityNames.isEmpty()) return 0;
 
-		int targetHeight = 480; // Default aman
+		int targetHeight = 480;
 		try {
 			ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
 			if (cm != null) {
@@ -411,12 +410,10 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		} catch (Exception ignored) {}
 
-		// Jika provider punya stream "Auto" (HLS m3u8), utamakan itu
 		for (int i = 0; i < qualityNames.size(); i++) {
 			if (qualityNames.get(i).equalsIgnoreCase("Auto")) return i;
 		}
 
-		// Cari resolusi yang paling mendekati targetHeight
 		int bestIdx = 0;
 		int smallestDiff = Integer.MAX_VALUE;
 		for (int i = 0; i < qualityNames.size(); i++) {
@@ -433,7 +430,6 @@ public class WatchActivity extends AppCompatActivity {
 		return bestIdx;
 	}
 
-	// Turunkan 1 tingkat resolusi saat buffering terlalu lama dalam mode Auto
 	public void triggerAutoDowngrade() {
 		if (!isAutoQualityMode || qualityNames == null || qualityNames.size() <= 1) return;
 
@@ -666,7 +662,6 @@ public class WatchActivity extends AppCompatActivity {
 				if (playerHandler != null && autoDowngradeRunnable != null) {
 					playerHandler.removeCallbacks(autoDowngradeRunnable);
 					if (isAutoQualityMode) {
-						// Jika loading awal terlalu lama (> 5 detik), otomatis turun resolusi
 						playerHandler.postDelayed(autoDowngradeRunnable, 5000);
 					}
 				}
@@ -734,7 +729,6 @@ public class WatchActivity extends AppCompatActivity {
 									btnPlay.setEnabled(false);
 									btnPlay.setAlpha(0.5f);
 								}
-								// Jika buffering saat menonton > 2.5 detik, otomatis turunkan resolusi
 								if (playerHandler != null && autoDowngradeRunnable != null && isAutoQualityMode) {
 									playerHandler.removeCallbacks(autoDowngradeRunnable);
 									playerHandler.postDelayed(autoDowngradeRunnable, 2500);
@@ -779,7 +773,6 @@ public class WatchActivity extends AppCompatActivity {
 							}
 							mp.start();
 
-							// Pertahankan kecepatan putar jika sebelumnya diubah
 							if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentPlaybackSpeed != 1.0f) {
 								try {
 									PlaybackParams params = mp.getPlaybackParams();
@@ -828,8 +821,27 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	// ========================================================
-	// HELPER BOTTOM SHEET DIALOG MODERN (SERVER, RESOLUSI, SPEED)
+	// HELPER BOTTOM SHEET DIALOG MODERN (TANPA ABU-ABU DI SUDUT)
 	// ========================================================
+	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
+		sheetDialog.setContentView(contentView);
+		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
+			@Override
+			public void onShow(DialogInterface dialog) {
+				BottomSheetDialog d = (BottomSheetDialog) dialog;
+				FrameLayout bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					bottomSheet.setBackgroundTintList(null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+						bottomSheet.setElevation(0f);
+					}
+				}
+			}
+		});
+		sheetDialog.show();
+	}
+
 	private void showModernBottomSheet(String title, String subtitle, ArrayList<String> optionTitles, ArrayList<String> optionBadges, int activeIdx, final OnSheetItemClickListener listener) {
 		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
 		float d = getResources().getDisplayMetrics().density;
@@ -843,7 +855,6 @@ public class WatchActivity extends AppCompatActivity {
 		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
-		// Drag handle pill di tengah atas
 		View handle = new View(this);
 		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -855,7 +866,6 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		// Header Title & Subtitle
 		TextView tvTitle = new TextView(this);
 		tvTitle.setText(title);
 		tvTitle.setTextColor(Color.WHITE);
@@ -874,7 +884,6 @@ public class WatchActivity extends AppCompatActivity {
 			tvTitle.setPadding(0, 0, 0, (int)(14 * d));
 		}
 
-		// Scrollable list container
 		ScrollView scrollView = new ScrollView(this);
 		scrollView.setVerticalScrollBarEnabled(false);
 		LinearLayout listContainer = new LinearLayout(this);
@@ -955,16 +964,145 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		root.addView(scrollView);
-		sheetDialog.setContentView(root);
-		if (sheetDialog.getWindow() != null) {
-			sheetDialog.getWindow().findViewById(com.google.android.material.R.id.design_bottom_sheet)
-				.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-		}
-		sheetDialog.show();
+		attachTransparentSheetContainer(sheetDialog, root);
 	}
 
 	private interface OnSheetItemClickListener {
 		void onItemClick(int index);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: SEMUA EPISODE (GRID 5 KOLOM)
+	// ========================================================
+	public void showAllEpisodesBottomSheet() {
+		if (episodeList == null || episodeList.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#0F172A"));
+		sheetBg.setCornerRadii(new float[]{24 * d, 24 * d, 24 * d, 24 * d, 0, 0, 0, 0});
+		root.setBackground(sheetBg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(40 * d), (int)(4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int)(16 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#334155"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		LinearLayout headerRow = new LinearLayout(this);
+		headerRow.setOrientation(LinearLayout.HORIZONTAL);
+		headerRow.setGravity(Gravity.CENTER_VERTICAL);
+		headerRow.setPadding(0, 0, 0, (int)(16 * d));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Semua Episode");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(18f);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		headerRow.addView(tvTitle);
+
+		TextView tvCount = new TextView(this);
+		tvCount.setText(episodeList.size() + " Episode");
+		tvCount.setTextColor(Color.parseColor("#3B82F6"));
+		tvCount.setTextSize(13f);
+		tvCount.setTypeface(null, Typeface.BOLD);
+		headerRow.addView(tvCount);
+
+		root.addView(headerRow);
+
+		ScrollView scrollView = new ScrollView(this);
+		scrollView.setVerticalScrollBarEnabled(false);
+
+		LinearLayout gridContainer = new LinearLayout(this);
+		gridContainer.setOrientation(LinearLayout.VERTICAL);
+		scrollView.addView(gridContainer);
+
+		int columns = 5;
+		int total = episodeList.size();
+		int rows = (int) Math.ceil((double) total / columns);
+
+		for (int r = 0; r < rows; r++) {
+			LinearLayout rowLayout = new LinearLayout(this);
+			rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int)(10 * d);
+			rowLayout.setLayoutParams(rowLp);
+
+			for (int c = 0; c < columns; c++) {
+				final int epIdx = (r * columns) + c;
+				LinearLayout.LayoutParams cellLp = new LinearLayout.LayoutParams(0, (int)(48 * d), 1f);
+				if (c < columns - 1) cellLp.rightMargin = (int)(8 * d);
+
+				if (epIdx < total) {
+					boolean isActive = (epIdx == currentEpisodeIndex);
+					HashMap<String, Object> itemData = episodeList.get(epIdx);
+
+					String epLabel = String.valueOf(epIdx + 1);
+					if (itemData.containsKey("episode") && itemData.get("episode") != null) {
+						epLabel = itemData.get("episode").toString().replace("Ep ", "").replace("Eps ", "").trim();
+					} else if (itemData.containsKey("title") && itemData.get("title") != null) {
+						String parsedNum = itemData.get("title").toString().replaceAll("[^0-9]", "").trim();
+						if (!parsedNum.isEmpty()) epLabel = parsedNum;
+					}
+
+					TextView cellBtn = new TextView(this);
+					cellBtn.setLayoutParams(cellLp);
+					cellBtn.setGravity(Gravity.CENTER);
+					cellBtn.setText(epLabel);
+					cellBtn.setTextSize(14f);
+					cellBtn.setTypeface(null, isActive ? Typeface.BOLD : Typeface.NORMAL);
+					cellBtn.setTextColor(isActive ? Color.WHITE : Color.parseColor("#94A3B8"));
+
+					GradientDrawable cellBg = new GradientDrawable();
+					cellBg.setCornerRadius(12 * d);
+					if (isActive) {
+						cellBg.setColor(Color.parseColor("#3B82F6"));
+					} else {
+						cellBg.setColor(Color.parseColor("#1E293B"));
+						cellBg.setStroke((int)(1 * d), Color.parseColor("#334155"));
+					}
+					cellBtn.setBackground(cellBg);
+
+					cellBtn.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							sheetDialog.dismiss();
+							if (currentEpisodeIndex != epIdx || mediaPlayer == null || !mediaPlayer.isPlaying()) {
+								playEpisodeByIndex(epIdx);
+							}
+						}
+					});
+
+					rowLayout.addView(cellBtn);
+				} else {
+					View spacer = new View(this);
+					spacer.setLayoutParams(cellLp);
+					rowLayout.addView(spacer);
+				}
+			}
+			gridContainer.addView(rowLayout);
+		}
+
+		root.addView(scrollView);
+		attachTransparentSheetContainer(sheetDialog, root);
 	}
 
 	// ========================================================
@@ -1017,7 +1155,6 @@ public class WatchActivity extends AppCompatActivity {
 		ArrayList<String> titles = new ArrayList<>();
 		ArrayList<String> badges = new ArrayList<>();
 
-		// Opsi pertama selalu "Auto"
 		String currentActiveRes = qualityNames.get(selectedQualityIndex);
 		titles.add("Auto");
 		badges.add(currentActiveRes.equalsIgnoreCase("Auto") ? "Otomatis" : "Aktif: " + currentActiveRes);
@@ -1050,7 +1187,6 @@ public class WatchActivity extends AppCompatActivity {
 					}
 
 					if (which == 0) {
-						// Pilih Auto
 						isAutoQualityMode = true;
 						int recIdx = getRecommendedQualityIndex();
 						boolean needReload = (recIdx != selectedQualityIndex);
@@ -1061,7 +1197,6 @@ public class WatchActivity extends AppCompatActivity {
 							playVideoUrl(qualityUrls.get(recIdx), currentPos);
 						}
 					} else {
-						// Pilih Resolusi Manual
 						isAutoQualityMode = false;
 						int realIdx = which - 1;
 						selectedQualityIndex = realIdx;
@@ -1534,6 +1669,16 @@ public class WatchActivity extends AppCompatActivity {
 				showSpeedDialog();
 			}
 		});
+
+		TextView btnSeeAllEpisodes = findViewById(R.id.textview85);
+		if (btnSeeAllEpisodes != null) {
+			btnSeeAllEpisodes.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showAllEpisodesBottomSheet();
+				}
+			});
+		}
 
 		final boolean[] isFillMode = new boolean[]{false};
 		btnFill.setOnClickListener(new View.OnClickListener() {
