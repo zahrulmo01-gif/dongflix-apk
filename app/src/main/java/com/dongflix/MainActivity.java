@@ -43,7 +43,6 @@ public class MainActivity extends AppCompatActivity {
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
 	private Intent i = new Intent();
 	
-	// Deklarasi Komponen View Layout Utama
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular;
 	private TextView textHeroTitle, textHeroDesc;
@@ -127,13 +126,9 @@ public class MainActivity extends AppCompatActivity {
 							int itemHeight = item.getMeasuredHeight();
 							int totalRows = (int) Math.ceil((double) adapter.getCount() / 3.0);
 							
-							int verticalSpacing = 0;
-							if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN) {
-								verticalSpacing = gridview1.getVerticalSpacing();
-							}
-							
+							int verticalSpacing = (int)(12 * getResources().getDisplayMetrics().density);
 							android.view.ViewGroup.LayoutParams params = gridview1.getLayoutParams();
-							params.height = (itemHeight * totalRows) + (verticalSpacing * (totalRows - 1));
+							params.height = (itemHeight * totalRows) + (verticalSpacing * rows) + (int)(30 * getResources().getDisplayMetrics().density);
 							gridview1.setLayoutParams(params);
 							gridview1.requestLayout();
 						}
@@ -332,7 +327,20 @@ public class MainActivity extends AppCompatActivity {
 			window.setStatusBarColor(Color.TRANSPARENT);
 		}
 		
-		// Setup Gradasi Atas (Header Shadow)
+		View topHeaderBar = findViewById(R.id.relativelayout69);
+		if (topHeaderBar != null) {
+			int statusBarHeight = 0;
+			int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+			if (resourceId > 0) {
+				statusBarHeight = getResources().getDimensionPixelSize(resourceId);
+			}
+			float density = getResources().getDisplayMetrics().density;
+			int horizontalPadding = (int)(16 * density);
+			int topPadding = statusBarHeight + (int)(8 * density);
+			int bottomPadding = (int)(10 * density);
+			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
+		}
+		
 		View headerShadow = findViewById(R.id.header_shadow);
 		if (headerShadow != null) {
 			GradientDrawable topGradient = new GradientDrawable(
@@ -342,7 +350,6 @@ public class MainActivity extends AppCompatActivity {
 			headerShadow.setBackground(topGradient);
 		}
 		
-		// Setup Gradasi Bawah (Hero Shadow)
 		View heroShadow = findViewById(R.id.hero_shadow);
 		if (heroShadow != null) {
 			GradientDrawable bottomGradient = new GradientDrawable(
@@ -352,7 +359,6 @@ public class MainActivity extends AppCompatActivity {
 			heroShadow.setBackground(bottomGradient);
 		}
 		
-		// Setup Floating Navbar Rounded
 		LinearLayout navbar = findViewById(R.id.navbar);
 		if (navbar != null) {
 			GradientDrawable navbarBg = new GradientDrawable();
@@ -438,7 +444,8 @@ public class MainActivity extends AppCompatActivity {
 		}
 		
 		ViewGroup.LayoutParams params = gridView.getLayoutParams();
-		params.height = totalHeight + (rows * (int)(12 * getResources().getDisplayMetrics().density)) + (int)(40 * getResources().getDisplayMetrics().density);
+		int verticalSpacing = (int)(12 * getResources().getDisplayMetrics().density);
+		params.height = totalHeight + (rows * verticalSpacing) + (int)(40 * getResources().getDisplayMetrics().density);
 		gridView.setLayoutParams(params);
 		gridView.requestLayout();
 	}
