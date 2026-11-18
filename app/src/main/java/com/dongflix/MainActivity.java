@@ -168,7 +168,7 @@ public class MainActivity extends AppCompatActivity {
 							HashMap<String, Object> heroItem = listMap.get(pos);
 							
 							String heroTitle = heroItem.get("title") != null ? heroItem.get("title").toString() : "";
-							String heroSynopsis = heroItem.get("synopsis") != null ? heroItem.get("synopsis").toString() : "";
+							String heroSynopsis = heroItem.get("synopsis") != null ? cleanText(heroItem.get("synopsis").toString()) : "";
 							String heroCover = heroItem.get("cover") != null ? heroItem.get("cover").toString().trim() : "";
 							final String heroLink = heroItem.get("link") != null ? heroItem.get("link").toString() : "";
 							
@@ -233,6 +233,11 @@ public class MainActivity extends AppCompatActivity {
 				final String _message = _param2;
 			}
 		};
+	}
+	
+	private String cleanText(String input) {
+		if (input == null) return "";
+		return input.replaceAll("\\[[^\\x20-\\x7E]+\\]", "").replaceAll("[^\\x20-\\x7E\\n]", "").trim();
 	}
 	
 	private void initializeLogic() {
@@ -419,10 +424,9 @@ public class MainActivity extends AppCompatActivity {
 		int rows = (int) Math.ceil((double) items / columns);
 		float density = getResources().getDisplayMetrics().density;
 		
-		// Tinggi card 165dp + margin judul 6dp + tinggi teks judul 34dp + padding 4dp = 209dp
-		int itemHeightPx = (int) (209 * density);
+		int itemHeightPx = (int) (222 * density);
 		int verticalSpacingPx = (int) (12 * density);
-		int paddingBottomPx = (int) (16 * density);
+		int paddingBottomPx = (int) (20 * density);
 		
 		ViewGroup.LayoutParams params = gridView.getLayoutParams();
 		params.height = (itemHeightPx * rows) + (verticalSpacingPx * Math.max(0, rows - 1)) + paddingBottomPx;
@@ -471,7 +475,7 @@ public class MainActivity extends AppCompatActivity {
 			} else {
 				if (textPopularStatus != null) textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
 				if (textPopularTitle != null) textPopularTitle.setText(_data.get(_position).get("title").toString());
-				if (textPopularDesc != null) textPopularDesc.setText(_data.get(_position).get("synopsis").toString());
+				if (textPopularDesc != null) textPopularDesc.setText(cleanText(_data.get(_position).get("synopsis").toString()));
 				if (textPopularGenre != null) textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
 				
 				if (textPopularStatus != null) {
@@ -597,7 +601,7 @@ public class MainActivity extends AppCompatActivity {
 			
 			if (textPopularStatus != null) textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
 			if (textPopularTitle != null) textPopularTitle.setText(_data.get(_position).get("title").toString());
-			if (textPopularDesc != null) textPopularDesc.setText(_data.get(_position).get("synopsis").toString());
+			if (textPopularDesc != null) textPopularDesc.setText(cleanText(_data.get(_position).get("synopsis").toString()));
 			if (textPopularGenre != null) textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
 			
 			if (textPopularStatus != null) {
