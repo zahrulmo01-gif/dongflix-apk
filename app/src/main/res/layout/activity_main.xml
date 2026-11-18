@@ -241,7 +241,7 @@
 				android:paddingLeft="16dp"
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="8dp">
+				android:paddingBottom="4dp">
 				
 				<TextView
 					android:id="@+id/text_title_popular"
@@ -273,7 +273,7 @@
 				android:paddingLeft="16dp"
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="8dp">
+				android:paddingBottom="4dp">
 				
 				<TextView
 					android:id="@+id/textview77"
@@ -320,7 +320,7 @@
 				android:paddingLeft="16dp"
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="8dp">
+				android:paddingBottom="4dp">
 				
 				<TextView
 					android:id="@+id/text_popular"
