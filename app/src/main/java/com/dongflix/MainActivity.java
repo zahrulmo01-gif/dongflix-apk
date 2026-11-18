@@ -34,7 +34,6 @@ import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
 	
-	// Tanpa View Binding, menggunakan findViewById murni
 	private String cover = "";
 	
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
@@ -44,7 +43,7 @@ public class MainActivity extends AppCompatActivity {
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
 	private Intent i = new Intent();
 	
-	// Deklarasi komponen layout utama
+	// Deklarasi Komponen View Layout Utama
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular;
 	private TextView textHeroTitle, textHeroDesc;
@@ -55,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
 	@Override
 	protected void onCreate(Bundle _savedInstanceState) {
 		super.onCreate(_savedInstanceState);
-		setContentView(R.layout.activity_main); // Menggunakan layout XML standar
+		setContentView(R.layout.activity_main);
 		initialize(_savedInstanceState);
 		initializeLogic();
 	}
@@ -156,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
 						btnHeroPlay.setEnabled(true);
 					}
 					if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.VISIBLE);
+					if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.VISIBLE);
 					
 					final float density = getResources().getDisplayMetrics().density;
 					final int activeWidth = (int) (16 * density);
@@ -304,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
 		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
 		
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
-
+		
 		if (recyclerPopular != null) {
 			LinearLayoutManager layoutManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
 			recyclerPopular.setLayoutManager(layoutManager);
@@ -330,6 +330,40 @@ public class MainActivity extends AppCompatActivity {
 				View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
 			);
 			window.setStatusBarColor(Color.TRANSPARENT);
+		}
+		
+		// Setup Gradasi Atas (Header Shadow)
+		View headerShadow = findViewById(R.id.header_shadow);
+		if (headerShadow != null) {
+			GradientDrawable topGradient = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[] { Color.parseColor("#E6000000"), Color.TRANSPARENT }
+			);
+			headerShadow.setBackground(topGradient);
+		}
+		
+		// Setup Gradasi Bawah (Hero Shadow)
+		View heroShadow = findViewById(R.id.hero_shadow);
+		if (heroShadow != null) {
+			GradientDrawable bottomGradient = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[] { Color.TRANSPARENT, Color.parseColor("#FF000000") }
+			);
+			heroShadow.setBackground(bottomGradient);
+		}
+		
+		// Setup Floating Navbar Rounded
+		LinearLayout navbar = findViewById(R.id.navbar);
+		if (navbar != null) {
+			GradientDrawable navbarBg = new GradientDrawable();
+			navbarBg.setShape(GradientDrawable.RECTANGLE);
+			navbarBg.setColor(Color.parseColor("#111111"));
+			navbarBg.setCornerRadius(100f);
+			navbarBg.setStroke(2, Color.parseColor("#333B82F6"));
+			navbar.setBackground(navbarBg);
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+				navbar.setElevation(20f);
+			}
 		}
 	}
 	
@@ -404,7 +438,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		
 		ViewGroup.LayoutParams params = gridView.getLayoutParams();
-		params.height = totalHeight + (rows * (int)(8 * getResources().getDisplayMetrics().density)) + (int)(100 * getResources().getDisplayMetrics().density);
+		params.height = totalHeight + (rows * (int)(12 * getResources().getDisplayMetrics().density)) + (int)(40 * getResources().getDisplayMetrics().density);
 		gridView.setLayoutParams(params);
 		gridView.requestLayout();
 	}
