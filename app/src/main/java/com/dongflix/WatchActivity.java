@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -52,6 +53,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -427,6 +429,110 @@ public class WatchActivity extends AppCompatActivity {
 		updateEpisodeNavButtons();
 	}
 
+	// ========================================================
+	// HELPER: HEADER BOTTOM SHEET DENGAN TOMBOL TUTUP BULAT (✕)
+	// ========================================================
+	private LinearLayout buildSheetHeader(String titleText, final BottomSheetDialog sheetDialog) {
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout header = new LinearLayout(this);
+		header.setOrientation(LinearLayout.HORIZONTAL);
+		header.setGravity(Gravity.CENTER_VERTICAL);
+		header.setPadding(0, 0, 0, (int)(16 * d));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText(titleText);
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(19f);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		header.addView(tvTitle);
+
+		TextView btnClose = new TextView(this);
+		LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int)(32 * d), (int)(32 * d));
+		btnClose.setLayoutParams(closeLp);
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setText("✕");
+		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+		btnClose.setTextSize(14f);
+		btnClose.setTypeface(null, Typeface.BOLD);
+
+		GradientDrawable closeBg = new GradientDrawable();
+		closeBg.setShape(GradientDrawable.OVAL);
+		closeBg.setColor(Color.parseColor("#252936"));
+		btnClose.setBackground(closeBg);
+
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheetDialog.dismiss();
+			}
+		});
+		header.addView(btnClose);
+
+		return header;
+	}
+
+	// ========================================================
+	// HELPER: ATTACH & PERBAIKI BOTTOM SHEET SAAT FULLSCREEN
+	// ========================================================
+	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
+		sheetDialog.setContentView(contentView);
+		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
+			@Override
+			public void onShow(DialogInterface dialog) {
+				BottomSheetDialog d = (BottomSheetDialog) dialog;
+				FrameLayout bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					bottomSheet.setBackgroundTintList(null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+						bottomSheet.setElevation(0f);
+					}
+
+					// Paksa langsung expanded penuh & atur lebar agar rapi saat Fullscreen / Landscape
+					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behavior.setSkipCollapsed(true);
+					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+
+					int orientation = getResources().getConfiguration().orientation;
+					if (isFullscreen || orientation == Configuration.ORIENTATION_LANDSCAPE) {
+						float density = getResources().getDisplayMetrics().density;
+						ViewGroup.LayoutParams lp = bottomSheet.getLayoutParams();
+						lp.width = (int) (460 * density);
+						if (lp instanceof FrameLayout.LayoutParams) {
+							((FrameLayout.LayoutParams) lp).gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+						} else if (lp instanceof androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) {
+							((androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams) lp).gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+						}
+						bottomSheet.setLayoutParams(lp);
+					}
+				}
+			}
+		});
+
+		sheetDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+			@Override
+			public void onDismiss(DialogInterface dialog) {
+				if (isFullscreen) {
+					getWindow().getDecorView().setSystemUiVisibility(
+						View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+						| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+						| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+						| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+						| View.SYSTEM_UI_FLAG_FULLSCREEN
+						| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+					);
+				}
+			}
+		});
+
+		sheetDialog.show();
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: SINOPSIS & DETAIL
+	// ========================================================
 	public void showDetailBottomSheet() {
 		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
 		float d = getResources().getDisplayMetrics().density;
@@ -443,7 +549,7 @@ public class WatchActivity extends AppCompatActivity {
 		View handle = new View(this);
 		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-		handleLp.bottomMargin = (int)(14 * d);
+		handleLp.bottomMargin = (int)(12 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
 		handleBg.setColor(Color.parseColor("#2D313E"));
@@ -451,32 +557,7 @@ public class WatchActivity extends AppCompatActivity {
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		LinearLayout topHeader = new LinearLayout(this);
-		topHeader.setOrientation(LinearLayout.HORIZONTAL);
-		topHeader.setGravity(Gravity.CENTER_VERTICAL);
-		topHeader.setPadding(0, 0, 0, (int)(18 * d));
-
-		TextView tvHeader = new TextView(this);
-		tvHeader.setText("Sinopsis");
-		tvHeader.setTextColor(Color.WHITE);
-		tvHeader.setTextSize(20f);
-		tvHeader.setTypeface(null, Typeface.BOLD);
-		tvHeader.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-		topHeader.addView(tvHeader);
-
-		TextView btnClose = new TextView(this);
-		btnClose.setText("✕");
-		btnClose.setTextColor(Color.WHITE);
-		btnClose.setTextSize(20f);
-		btnClose.setPadding((int)(10 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
-		btnClose.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				sheetDialog.dismiss();
-			}
-		});
-		topHeader.addView(btnClose);
-		root.addView(topHeader);
+		root.addView(buildSheetHeader("Sinopsis", sheetDialog));
 
 		ScrollView scrollView = new ScrollView(this);
 		scrollView.setVerticalScrollBarEnabled(false);
@@ -600,6 +681,384 @@ public class WatchActivity extends AppCompatActivity {
 
 		root.addView(scrollView);
 		attachTransparentSheetContainer(sheetDialog, root);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET BERSIH (KUALITAS, KECEPATAN, SERVER)
+	// ========================================================
+	private void showCleanOptionBottomSheet(String title, ArrayList<String> optionTitles, int activeIdx, final OnSheetItemClickListener listener) {
+		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
+		root.setBackground(sheetBg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int)(12 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		root.addView(buildSheetHeader(title, sheetDialog));
+
+		ScrollView scrollView = new ScrollView(this);
+		scrollView.setVerticalScrollBarEnabled(false);
+		LinearLayout listContainer = new LinearLayout(this);
+		listContainer.setOrientation(LinearLayout.VERTICAL);
+		scrollView.addView(listContainer);
+
+		for (int i = 0; i < optionTitles.size(); i++) {
+			final int index = i;
+			boolean isSelected = (i == activeIdx);
+
+			LinearLayout itemRow = new LinearLayout(this);
+			itemRow.setOrientation(LinearLayout.HORIZONTAL);
+			itemRow.setGravity(Gravity.CENTER_VERTICAL);
+			itemRow.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
+
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int)(4 * d);
+			itemRow.setLayoutParams(rowLp);
+
+			if (isSelected) {
+				GradientDrawable selectedBg = new GradientDrawable();
+				selectedBg.setCornerRadius(12 * d);
+				selectedBg.setColor(Color.parseColor("#263B5E"));
+				itemRow.setBackground(selectedBg);
+			} else {
+				itemRow.setBackgroundColor(Color.TRANSPARENT);
+			}
+
+			TextView tvName = new TextView(this);
+			tvName.setText(optionTitles.get(i));
+			tvName.setTextColor(isSelected ? Color.WHITE : Color.parseColor("#E5E7EB"));
+			tvName.setTextSize(15f);
+			tvName.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
+			LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+			tvName.setLayoutParams(nameLp);
+			itemRow.addView(tvName);
+
+			if (isSelected) {
+				TextView checkCircle = new TextView(this);
+				LinearLayout.LayoutParams checkLp = new LinearLayout.LayoutParams((int)(20 * d), (int)(20 * d));
+				checkCircle.setLayoutParams(checkLp);
+				checkCircle.setGravity(Gravity.CENTER);
+				checkCircle.setText("✓");
+				checkCircle.setTextColor(Color.parseColor("#14161D"));
+				checkCircle.setTextSize(11f);
+				checkCircle.setTypeface(null, Typeface.BOLD);
+
+				GradientDrawable circleBg = new GradientDrawable();
+				circleBg.setShape(GradientDrawable.OVAL);
+				circleBg.setColor(Color.parseColor("#38BDF8"));
+				checkCircle.setBackground(circleBg);
+
+				itemRow.addView(checkCircle);
+			}
+
+			itemRow.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheetDialog.dismiss();
+					listener.onItemClick(index);
+				}
+			});
+
+			listContainer.addView(itemRow);
+		}
+
+		root.addView(scrollView);
+		attachTransparentSheetContainer(sheetDialog, root);
+	}
+
+	private interface OnSheetItemClickListener {
+		void onItemClick(int index);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: SEMUA EPISODE (GRID 5 KOLOM + TOMBOL TUTUP)
+	// ========================================================
+	public void showAllEpisodesBottomSheet() {
+		if (episodeList == null || episodeList.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+		float d = getResources().getDisplayMetrics().density;
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
+		root.setBackground(sheetBg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int)(12 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		root.addView(buildSheetHeader("Semua Episode (" + episodeList.size() + ")", sheetDialog));
+
+		ScrollView scrollView = new ScrollView(this);
+		scrollView.setVerticalScrollBarEnabled(false);
+
+		LinearLayout gridContainer = new LinearLayout(this);
+		gridContainer.setOrientation(LinearLayout.VERTICAL);
+		scrollView.addView(gridContainer);
+
+		int columns = 5;
+		int total = episodeList.size();
+		int rows = (int) Math.ceil((double) total / columns);
+
+		for (int r = 0; r < rows; r++) {
+			LinearLayout rowLayout = new LinearLayout(this);
+			rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int)(10 * d);
+			rowLayout.setLayoutParams(rowLp);
+
+			for (int c = 0; c < columns; c++) {
+				final int epIdx = (r * columns) + c;
+				LinearLayout.LayoutParams cellLp = new LinearLayout.LayoutParams(0, (int)(48 * d), 1f);
+				if (c < columns - 1) cellLp.rightMargin = (int)(8 * d);
+
+				if (epIdx < total) {
+					boolean isActive = (epIdx == currentEpisodeIndex);
+					HashMap<String, Object> itemData = episodeList.get(epIdx);
+
+					String epLabel = String.valueOf(epIdx + 1);
+					if (itemData.containsKey("episode") && itemData.get("episode") != null) {
+						epLabel = itemData.get("episode").toString().replace("Ep ", "").replace("Eps ", "").trim();
+					} else if (itemData.containsKey("title") && itemData.get("title") != null) {
+						String parsedNum = itemData.get("title").toString().replaceAll("[^0-9]", "").trim();
+						if (!parsedNum.isEmpty()) epLabel = parsedNum;
+					}
+
+					TextView cellBtn = new TextView(this);
+					cellBtn.setLayoutParams(cellLp);
+					cellBtn.setGravity(Gravity.CENTER);
+					cellBtn.setText(epLabel);
+					cellBtn.setTextSize(14f);
+					cellBtn.setTypeface(null, isActive ? Typeface.BOLD : Typeface.NORMAL);
+					cellBtn.setTextColor(isActive ? Color.WHITE : Color.parseColor("#CBD5E1"));
+
+					GradientDrawable cellBg = new GradientDrawable();
+					cellBg.setCornerRadius(10 * d);
+					cellBg.setColor(isActive ? Color.parseColor("#3B82F6") : Color.parseColor("#1E212B"));
+					cellBtn.setBackground(cellBg);
+
+					cellBtn.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							sheetDialog.dismiss();
+							if (currentEpisodeIndex != epIdx || mediaPlayer == null || !mediaPlayer.isPlaying()) {
+								playEpisodeByIndex(epIdx);
+							}
+						}
+					});
+
+					rowLayout.addView(cellBtn);
+				} else {
+					View spacer = new View(this);
+					spacer.setLayoutParams(cellLp);
+					rowLayout.addView(spacer);
+				}
+			}
+			gridContainer.addView(rowLayout);
+		}
+
+		root.addView(scrollView);
+		attachTransparentSheetContainer(sheetDialog, root);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: PILIH SERVER
+	// ========================================================
+	public void showServerDialog() {
+		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		showCleanOptionBottomSheet(
+			"Server",
+			currentEpisodeServerNames,
+			selectedServerIndex,
+			new OnSheetItemClickListener() {
+				@Override
+				public void onItemClick(int which) {
+					selectedServerIndex = which;
+					String chosenName = currentEpisodeServerNames.get(which);
+					String chosenUrl = currentEpisodeServerUrls.get(which);
+
+					if (textActionServer != null) {
+						textActionServer.setText(chosenName);
+					}
+					extractStream(chosenName, chosenUrl);
+				}
+			}
+		);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: KUALITAS (TANPA PREMIUM, SESUAI GAMBAR)
+	// ========================================================
+	public void showQualityDialog() {
+		if (qualityNames == null || qualityNames.isEmpty()) {
+			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
+			return;
+		}
+
+		ArrayList<String> titles = new ArrayList<>();
+		String currentActiveRes = qualityNames.get(selectedQualityIndex);
+
+		if (currentActiveRes.equalsIgnoreCase("Auto") || currentActiveRes.equalsIgnoreCase("Default")) {
+			titles.add("Auto");
+		} else {
+			titles.add("Auto (" + currentActiveRes.toLowerCase() + ")");
+		}
+
+		for (String q : qualityNames) {
+			if (!q.equalsIgnoreCase("Auto")) {
+				titles.add(q.toLowerCase());
+			}
+		}
+
+		int activeSheetIdx = 0;
+		if (!isAutoQualityMode) {
+			String chosenLabel = qualityNames.get(selectedQualityIndex).toLowerCase();
+			for (int i = 1; i < titles.size(); i++) {
+				if (titles.get(i).equalsIgnoreCase(chosenLabel)) {
+					activeSheetIdx = i;
+					break;
+				}
+			}
+		}
+
+		final ArrayList<String> finalTitles = titles;
+
+		showCleanOptionBottomSheet(
+			"Kualitas",
+			finalTitles,
+			activeSheetIdx,
+			new OnSheetItemClickListener() {
+				@Override
+				public void onItemClick(int which) {
+					int currentPos = 0;
+					if (mediaPlayer != null) {
+						try {
+							currentPos = mediaPlayer.getCurrentPosition();
+						} catch (Exception ignored) {}
+					}
+
+					if (which == 0) {
+						isAutoQualityMode = true;
+						int recIdx = getRecommendedQualityIndex();
+						boolean needReload = (recIdx != selectedQualityIndex);
+						selectedQualityIndex = recIdx;
+						updateQualityBadgeText();
+
+						if (needReload) {
+							playVideoUrl(qualityUrls.get(recIdx), currentPos);
+						}
+					} else {
+						isAutoQualityMode = false;
+						String targetRes = finalTitles.get(which);
+						int realIdx = 0;
+						for (int k = 0; k < qualityNames.size(); k++) {
+							if (qualityNames.get(k).equalsIgnoreCase(targetRes)) {
+								realIdx = k;
+								break;
+							}
+						}
+						selectedQualityIndex = realIdx;
+						updateQualityBadgeText();
+						playVideoUrl(qualityUrls.get(realIdx), currentPos);
+					}
+				}
+			}
+		);
+	}
+
+	// ========================================================
+	// BOTTOM SHEET: KECEPATAN PUTAR (SESUAI GAMBAR)
+	// ========================================================
+	public void showSpeedDialog() {
+		final ArrayList<String> speedLabels = new ArrayList<>();
+		speedLabels.add("0.5x");
+		speedLabels.add("0.75x");
+		speedLabels.add("Normal (1x)");
+		speedLabels.add("1.25x");
+		speedLabels.add("1.5x");
+		speedLabels.add("1.75x");
+		speedLabels.add("2x");
+
+		final float[] speedVals = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f};
+		int activeIdx = 2;
+		for (int i = 0; i < speedVals.length; i++) {
+			if (Math.abs(speedVals[i] - currentPlaybackSpeed) < 0.01f) {
+				activeIdx = i;
+				break;
+			}
+		}
+
+		showCleanOptionBottomSheet(
+			"Kecepatan Putar",
+			speedLabels,
+			activeIdx,
+			new OnSheetItemClickListener() {
+				@Override
+				public void onItemClick(int which) {
+					float selectedSpeed = speedVals[which];
+					currentPlaybackSpeed = selectedSpeed;
+					String label = (which == 2) ? "1x" : speedLabels.get(which);
+
+					if (btnSpeed != null) {
+						btnSpeed.setText(label);
+					}
+
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+						if (mediaPlayer != null) {
+							try {
+								boolean isPlaying = mediaPlayer.isPlaying();
+								PlaybackParams params = mediaPlayer.getPlaybackParams();
+								if (params == null) params = new PlaybackParams();
+								params.setSpeed(selectedSpeed);
+								mediaPlayer.setPlaybackParams(params);
+								if (!isPlaying) mediaPlayer.pause();
+							} catch (Exception ignored) {}
+						}
+					}
+				}
+			}
+		);
 	}
 
 	@Override
@@ -1090,431 +1549,6 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
-	private void attachTransparentSheetContainer(final BottomSheetDialog sheetDialog, View contentView) {
-		sheetDialog.setContentView(contentView);
-		sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
-			@Override
-			public void onShow(DialogInterface dialog) {
-				BottomSheetDialog d = (BottomSheetDialog) dialog;
-				FrameLayout bottomSheet = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
-				if (bottomSheet != null) {
-					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
-					bottomSheet.setBackgroundTintList(null);
-					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-						bottomSheet.setElevation(0f);
-					}
-				}
-			}
-		});
-		sheetDialog.show();
-	}
-
-	private void showModernBottomSheet(String title, String subtitle, ArrayList<String> optionTitles, ArrayList<String> optionBadges, int activeIdx, final OnSheetItemClickListener listener) {
-		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
-		float d = getResources().getDisplayMetrics().density;
-
-		LinearLayout root = new LinearLayout(this);
-		root.setOrientation(LinearLayout.VERTICAL);
-		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
-
-		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#14161D"));
-		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
-		root.setBackground(sheetBg);
-
-		View handle = new View(this);
-		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
-		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-		handleLp.bottomMargin = (int)(16 * d);
-		handle.setLayoutParams(handleLp);
-		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#2D313E"));
-		handleBg.setCornerRadius(100f);
-		handle.setBackground(handleBg);
-		root.addView(handle);
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText(title);
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(18f);
-		tvTitle.setTypeface(null, Typeface.BOLD);
-		root.addView(tvTitle);
-
-		if (subtitle != null && !subtitle.isEmpty()) {
-			TextView tvSub = new TextView(this);
-			tvSub.setText(subtitle);
-			tvSub.setTextColor(Color.parseColor("#9CA3AF"));
-			tvSub.setTextSize(12f);
-			tvSub.setPadding(0, (int)(2 * d), 0, (int)(14 * d));
-			root.addView(tvSub);
-		} else {
-			tvTitle.setPadding(0, 0, 0, (int)(14 * d));
-		}
-
-		ScrollView scrollView = new ScrollView(this);
-		scrollView.setVerticalScrollBarEnabled(false);
-		LinearLayout listContainer = new LinearLayout(this);
-		listContainer.setOrientation(LinearLayout.VERTICAL);
-		scrollView.addView(listContainer);
-
-		for (int i = 0; i < optionTitles.size(); i++) {
-			final int index = i;
-			boolean isSelected = (i == activeIdx);
-
-			LinearLayout itemRow = new LinearLayout(this);
-			itemRow.setOrientation(LinearLayout.HORIZONTAL);
-			itemRow.setGravity(Gravity.CENTER_VERTICAL);
-			itemRow.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
-
-			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			rowLp.bottomMargin = (int)(10 * d);
-			itemRow.setLayoutParams(rowLp);
-
-			GradientDrawable rowBg = new GradientDrawable();
-			rowBg.setCornerRadius(12 * d);
-			rowBg.setColor(isSelected ? Color.parseColor("#252936") : Color.parseColor("#1E212B"));
-			itemRow.setBackground(rowBg);
-
-			TextView tvName = new TextView(this);
-			tvName.setText(optionTitles.get(i));
-			tvName.setTextColor(isSelected ? Color.WHITE : Color.parseColor("#D1D5DB"));
-			tvName.setTextSize(15f);
-			tvName.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
-			LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-			tvName.setLayoutParams(nameLp);
-			itemRow.addView(tvName);
-
-			if (optionBadges != null && i < optionBadges.size() && !optionBadges.get(i).isEmpty()) {
-				TextView tvBadge = new TextView(this);
-				tvBadge.setText(optionBadges.get(i));
-				tvBadge.setTextSize(11f);
-				tvBadge.setTypeface(null, Typeface.BOLD);
-				tvBadge.setTextColor(isSelected ? Color.parseColor("#60A5FA") : Color.parseColor("#9CA3AF"));
-				tvBadge.setPadding((int)(8 * d), (int)(3 * d), (int)(8 * d), (int)(3 * d));
-				GradientDrawable bBg = new GradientDrawable();
-				bBg.setCornerRadius(6 * d);
-				bBg.setColor(Color.parseColor("#14161D"));
-				tvBadge.setBackground(bBg);
-				LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-				bLp.rightMargin = (int)(10 * d);
-				tvBadge.setLayoutParams(bLp);
-				itemRow.addView(tvBadge);
-			}
-
-			if (isSelected) {
-				TextView tvCheck = new TextView(this);
-				tvCheck.setText("✓");
-				tvCheck.setTextColor(Color.parseColor("#3B82F6"));
-				tvCheck.setTextSize(16f);
-				tvCheck.setTypeface(null, Typeface.BOLD);
-				itemRow.addView(tvCheck);
-			}
-
-			itemRow.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					sheetDialog.dismiss();
-					listener.onItemClick(index);
-				}
-			});
-
-			listContainer.addView(itemRow);
-		}
-
-		root.addView(scrollView);
-		attachTransparentSheetContainer(sheetDialog, root);
-	}
-
-	private interface OnSheetItemClickListener {
-		void onItemClick(int index);
-	}
-
-	public void showAllEpisodesBottomSheet() {
-		if (episodeList == null || episodeList.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
-			return;
-		}
-
-		final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
-		float d = getResources().getDisplayMetrics().density;
-
-		LinearLayout root = new LinearLayout(this);
-		root.setOrientation(LinearLayout.VERTICAL);
-		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
-
-		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#14161D"));
-		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
-		root.setBackground(sheetBg);
-
-		View handle = new View(this);
-		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int)(38 * d), (int)(4 * d));
-		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-		handleLp.bottomMargin = (int)(16 * d);
-		handle.setLayoutParams(handleLp);
-		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#2D313E"));
-		handleBg.setCornerRadius(100f);
-		handle.setBackground(handleBg);
-		root.addView(handle);
-
-		LinearLayout headerRow = new LinearLayout(this);
-		headerRow.setOrientation(LinearLayout.HORIZONTAL);
-		headerRow.setGravity(Gravity.CENTER_VERTICAL);
-		headerRow.setPadding(0, 0, 0, (int)(16 * d));
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Semua Episode (" + (isNewestFirst ? "Terbaru" : "Terlama") + ")");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(17f);
-		tvTitle.setTypeface(null, Typeface.BOLD);
-		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-		headerRow.addView(tvTitle);
-
-		TextView tvCount = new TextView(this);
-		tvCount.setText(episodeList.size() + " Ep");
-		tvCount.setTextColor(Color.parseColor("#3B82F6"));
-		tvCount.setTextSize(13f);
-		tvCount.setTypeface(null, Typeface.BOLD);
-		headerRow.addView(tvCount);
-
-		root.addView(headerRow);
-
-		ScrollView scrollView = new ScrollView(this);
-		scrollView.setVerticalScrollBarEnabled(false);
-
-		LinearLayout gridContainer = new LinearLayout(this);
-		gridContainer.setOrientation(LinearLayout.VERTICAL);
-		scrollView.addView(gridContainer);
-
-		int columns = 5;
-		int total = episodeList.size();
-		int rows = (int) Math.ceil((double) total / columns);
-
-		for (int r = 0; r < rows; r++) {
-			LinearLayout rowLayout = new LinearLayout(this);
-			rowLayout.setOrientation(LinearLayout.HORIZONTAL);
-			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			rowLp.bottomMargin = (int)(10 * d);
-			rowLayout.setLayoutParams(rowLp);
-
-			for (int c = 0; c < columns; c++) {
-				final int epIdx = (r * columns) + c;
-				LinearLayout.LayoutParams cellLp = new LinearLayout.LayoutParams(0, (int)(48 * d), 1f);
-				if (c < columns - 1) cellLp.rightMargin = (int)(8 * d);
-
-				if (epIdx < total) {
-					boolean isActive = (epIdx == currentEpisodeIndex);
-					HashMap<String, Object> itemData = episodeList.get(epIdx);
-
-					String epLabel = String.valueOf(epIdx + 1);
-					if (itemData.containsKey("episode") && itemData.get("episode") != null) {
-						epLabel = itemData.get("episode").toString().replace("Ep ", "").replace("Eps ", "").trim();
-					} else if (itemData.containsKey("title") && itemData.get("title") != null) {
-						String parsedNum = itemData.get("title").toString().replaceAll("[^0-9]", "").trim();
-						if (!parsedNum.isEmpty()) epLabel = parsedNum;
-					}
-
-					TextView cellBtn = new TextView(this);
-					cellBtn.setLayoutParams(cellLp);
-					cellBtn.setGravity(Gravity.CENTER);
-					cellBtn.setText(epLabel);
-					cellBtn.setTextSize(14f);
-					cellBtn.setTypeface(null, isActive ? Typeface.BOLD : Typeface.NORMAL);
-					cellBtn.setTextColor(isActive ? Color.WHITE : Color.parseColor("#CBD5E1"));
-
-					GradientDrawable cellBg = new GradientDrawable();
-					cellBg.setCornerRadius(10 * d);
-					cellBg.setColor(isActive ? Color.parseColor("#3B82F6") : Color.parseColor("#1E212B"));
-					cellBtn.setBackground(cellBg);
-
-					cellBtn.setOnClickListener(new View.OnClickListener() {
-						@Override
-						public void onClick(View v) {
-							sheetDialog.dismiss();
-							if (currentEpisodeIndex != epIdx || mediaPlayer == null || !mediaPlayer.isPlaying()) {
-								playEpisodeByIndex(epIdx);
-							}
-						}
-					});
-
-					rowLayout.addView(cellBtn);
-				} else {
-					View spacer = new View(this);
-					spacer.setLayoutParams(cellLp);
-					rowLayout.addView(spacer);
-				}
-			}
-			gridContainer.addView(rowLayout);
-		}
-
-		root.addView(scrollView);
-		attachTransparentSheetContainer(sheetDialog, root);
-	}
-
-	public void showServerDialog() {
-		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
-			return;
-		}
-
-		ArrayList<String> badges = new ArrayList<>();
-		for (String s : currentEpisodeServerNames) {
-			if (s.toLowerCase().contains("ok")) badges.add("Rekomendasi");
-			else if (s.toLowerCase().contains("daily")) badges.add("Multi-Res");
-			else badges.add("Mirror");
-		}
-
-		showModernBottomSheet(
-			"Pilih Server Streaming",
-			"Ganti server jika video terasa lambat atau gagal dimuat",
-			currentEpisodeServerNames,
-			badges,
-			selectedServerIndex,
-			new OnSheetItemClickListener() {
-				@Override
-				public void onItemClick(int which) {
-					selectedServerIndex = which;
-					String chosenName = currentEpisodeServerNames.get(which);
-					String chosenUrl = currentEpisodeServerUrls.get(which);
-
-					if (textActionServer != null) {
-						textActionServer.setText(chosenName);
-					}
-					extractStream(chosenName, chosenUrl);
-				}
-			}
-		);
-	}
-
-	public void showQualityDialog() {
-		if (qualityNames == null || qualityNames.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
-			return;
-		}
-
-		ArrayList<String> titles = new ArrayList<>();
-		ArrayList<String> badges = new ArrayList<>();
-
-		String currentActiveRes = qualityNames.get(selectedQualityIndex);
-		titles.add("Auto");
-		badges.add(currentActiveRes.equalsIgnoreCase("Auto") ? "Otomatis" : "Aktif: " + currentActiveRes);
-
-		for (String q : qualityNames) {
-			titles.add(q);
-			if (q.contains("1080")) badges.add("Full HD");
-			else if (q.contains("720")) badges.add("HD");
-			else if (q.contains("480")) badges.add("SD");
-			else if (q.contains("360") || q.contains("240") || q.contains("144")) badges.add("Hemat Kuota");
-			else badges.add("");
-		}
-
-		int activeSheetIdx = isAutoQualityMode ? 0 : (selectedQualityIndex + 1);
-
-		showModernBottomSheet(
-			"Kualitas Video",
-			"Auto menyesuaikan resolusi secara otomatis dengan kecepatan jaringan",
-			titles,
-			badges,
-			activeSheetIdx,
-			new OnSheetItemClickListener() {
-				@Override
-				public void onItemClick(int which) {
-					int currentPos = 0;
-					if (mediaPlayer != null) {
-						try {
-							currentPos = mediaPlayer.getCurrentPosition();
-						} catch (Exception ignored) {}
-					}
-
-					if (which == 0) {
-						isAutoQualityMode = true;
-						int recIdx = getRecommendedQualityIndex();
-						boolean needReload = (recIdx != selectedQualityIndex);
-						selectedQualityIndex = recIdx;
-						updateQualityBadgeText();
-
-						if (needReload) {
-							playVideoUrl(qualityUrls.get(recIdx), currentPos);
-						}
-					} else {
-						isAutoQualityMode = false;
-						int realIdx = which - 1;
-						selectedQualityIndex = realIdx;
-						updateQualityBadgeText();
-						playVideoUrl(qualityUrls.get(realIdx), currentPos);
-					}
-				}
-			}
-		);
-	}
-
-	public void showSpeedDialog() {
-		final ArrayList<String> speedLabels = new ArrayList<>();
-		speedLabels.add("0.5x");
-		speedLabels.add("0.75x");
-		speedLabels.add("1.0x (Normal)");
-		speedLabels.add("1.25x");
-		speedLabels.add("1.5x");
-		speedLabels.add("2.0x");
-
-		final ArrayList<String> speedBadges = new ArrayList<>();
-		speedBadges.add("Lambat");
-		speedBadges.add("");
-		speedBadges.add("Default");
-		speedBadges.add("");
-		speedBadges.add("Cepat");
-		speedBadges.add("Sangat Cepat");
-
-		final float[] speedVals = new float[]{0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
-		int activeIdx = 2;
-		for (int i = 0; i < speedVals.length; i++) {
-			if (Math.abs(speedVals[i] - currentPlaybackSpeed) < 0.01f) {
-				activeIdx = i;
-				break;
-			}
-		}
-
-		showModernBottomSheet(
-			"Kecepatan Pemutaran",
-			"Atur tempo pemutaran video sesuai kenyamananmu",
-			speedLabels,
-			speedBadges,
-			activeIdx,
-			new OnSheetItemClickListener() {
-				@Override
-				public void onItemClick(int which) {
-					float selectedSpeed = speedVals[which];
-					currentPlaybackSpeed = selectedSpeed;
-					String label = (which == 2) ? "1x" : speedLabels.get(which);
-
-					if (btnSpeed != null) {
-						btnSpeed.setText(label);
-					}
-
-					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-						if (mediaPlayer != null) {
-							try {
-								boolean isPlaying = mediaPlayer.isPlaying();
-								PlaybackParams params = mediaPlayer.getPlaybackParams();
-								if (params == null) params = new PlaybackParams();
-								params.setSpeed(selectedSpeed);
-								mediaPlayer.setPlaybackParams(params);
-								if (!isPlaying) mediaPlayer.pause();
-							} catch (Exception ignored) {}
-						}
-					}
-				}
-			}
-		);
-	}
-
 	public void toggleFullscreen() {
 		final Window window = getWindow();
 		final View decorView = window.getDecorView();
@@ -1558,7 +1592,6 @@ public class WatchActivity extends AppCompatActivity {
 				textPlayerTitle.setVisibility(View.VISIBLE);
 			}
 
-			// Tombol Prev & Next di paling pinggir layar (Landscape)
 			int sideMarginFull = (int) (36 * density);
 			if (btnPrevEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
@@ -1576,7 +1609,6 @@ public class WatchActivity extends AppCompatActivity {
 				btnNextEpisode.setLayoutParams(lp);
 			}
 
-			// Tombol Play & Loading di tengah layar
 			if (playContainer != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) playContainer.getLayoutParams();
 				lp.width = (int) (84 * density);
