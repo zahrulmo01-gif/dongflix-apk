@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout
 	xmlns:android="http://schemas.android.com/apk/res/android"
-	xmlns:app="http://schemas.android.com/apk/res-auto"
 	android:id="@+id/chat_root"
 	android:layout_width="match_parent"
 	android:layout_height="match_parent"
-	android:background="#000000">
+	android:background="#050608">
 
-	<!-- Area Pesan Fullscreen di Belakang Header & Input Blur -->
+	<!-- Daftar Pesan (Fullscreen di bawah Header & Input Bar) -->
 	<ScrollView
 		android:id="@+id/chat_scroll_view"
 		android:layout_width="match_parent"
@@ -27,7 +26,7 @@
 			android:orientation="vertical" />
 	</ScrollView>
 
-	<!-- Header Floating Glass (Tanpa angka 46, judul Live Chat, status online) -->
+	<!-- Header Floating Solid Glass-Style (Tanpa BlurView, tanpa angka 46) -->
 	<LinearLayout
 		android:id="@+id/chat_header"
 		android:layout_width="match_parent"
@@ -46,12 +45,6 @@
 			android:layout_height="42dp"
 			android:layout_marginEnd="10dp">
 
-			<eightbitlab.com.blurview.BlurView
-				android:id="@+id/back_blur_bg"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#66141824" />
-
 			<TextView
 				android:id="@+id/text_chat_back_arrow"
 				android:layout_width="match_parent"
@@ -62,49 +55,37 @@
 				android:textSize="22sp" />
 		</FrameLayout>
 
-		<FrameLayout
+		<LinearLayout
 			android:id="@+id/chat_header_pill"
 			android:layout_width="0dp"
-			android:layout_height="44dp"
-			android:layout_weight="1">
+			android:layout_height="46dp"
+			android:layout_weight="1"
+			android:gravity="center"
+			android:orientation="vertical"
+			android:paddingLeft="16dp"
+			android:paddingRight="16dp">
 
-			<eightbitlab.com.blurview.BlurView
-				android:id="@+id/header_blur_bg"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#66141824" />
+			<TextView
+				android:id="@+id/text_chat_title"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="Live Chat"
+				android:textColor="#FFFFFF"
+				android:textSize="15sp"
+				android:textStyle="bold" />
 
-			<LinearLayout
-				android:id="@+id/chat_header_titles"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:gravity="center"
-				android:orientation="vertical"
-				android:paddingLeft="14dp"
-				android:paddingRight="14dp">
-
-				<TextView
-					android:id="@+id/text_chat_title"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:text="Live Chat"
-					android:textColor="#FFFFFF"
-					android:textSize="14.5sp"
-					android:textStyle="bold" />
-
-				<TextView
-					android:id="@+id/text_online_status"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:text="online"
-					android:textColor="#22C55E"
-					android:textSize="11sp"
-					android:textStyle="bold" />
-			</LinearLayout>
+			<TextView
+				android:id="@+id/text_online_status"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="online"
+				android:textColor="#22C55E"
+				android:textSize="11sp"
+				android:textStyle="bold" />
 		</FrameLayout>
 	</LinearLayout>
 
-	<!-- Area Input Bawah dengan Blur Latar Belakang -->
+	<!-- Area Input Bawah (Naik Otomatis Mengikuti Keyboard) -->
 	<LinearLayout
 		android:id="@+id/chat_bottom_bar"
 		android:layout_width="match_parent"
@@ -114,7 +95,7 @@
 		android:clipToPadding="false"
 		android:orientation="vertical"
 		android:paddingLeft="14dp"
-		android:paddingTop="8dp"
+		android:paddingTop="6dp"
 		android:paddingRight="14dp"
 		android:paddingBottom="14dp">
 
@@ -124,13 +105,12 @@
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:layout_marginBottom="6dp"
-			android:background="#B3111827"
 			android:gravity="center_vertical"
 			android:orientation="horizontal"
 			android:paddingLeft="12dp"
-			android:paddingTop="7dp"
+			android:paddingTop="8dp"
 			android:paddingRight="12dp"
-			android:paddingBottom="7dp"
+			android:paddingBottom="8dp"
 			android:visibility="gone">
 
 			<LinearLayout
@@ -203,75 +183,63 @@
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:layout_marginBottom="6dp"
-			android:background="#CC0B1329"
 			android:orientation="vertical"
 			android:padding="6dp"
 			android:visibility="gone" />
 
-		<!-- Baris Input Ketik Pesan + Stiker + Kirim dengan Blur Belakang -->
-		<FrameLayout
-			android:id="@+id/chat_input_glass_wrapper"
+		<!-- Bar Ketik Pesan + Stiker + Kirim (Tanpa Blur) -->
+		<LinearLayout
+			android:id="@+id/chat_input_row"
 			android:layout_width="match_parent"
-			android:layout_height="52dp">
+			android:layout_height="52dp"
+			android:gravity="center_vertical"
+			android:orientation="horizontal"
+			android:paddingLeft="16dp"
+			android:paddingRight="6dp">
 
-			<eightbitlab.com.blurview.BlurView
-				android:id="@+id/input_blur_bg"
-				android:layout_width="match_parent"
+			<EditText
+				android:id="@+id/chat_input"
+				android:layout_width="0dp"
 				android:layout_height="match_parent"
-				app:blurOverlayColor="#66141824" />
+				android:layout_weight="1"
+				android:background="@android:color/transparent"
+				android:hint="Kirim pesan..."
+				android:inputType="textCapSentences|text"
+				android:singleLine="true"
+				android:textColor="#FFFFFF"
+				android:textColorHint="#8A94A6"
+				android:textSize="14sp" />
 
-			<LinearLayout
-				android:id="@+id/chat_input_row"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:gravity="center_vertical"
-				android:orientation="horizontal"
-				android:paddingLeft="16dp"
-				android:paddingRight="6dp">
+			<FrameLayout
+				android:id="@+id/btn_open_sticker"
+				android:layout_width="38dp"
+				android:layout_height="38dp"
+				android:layout_marginEnd="6dp">
 
-				<EditText
-					android:id="@+id/chat_input"
-					android:layout_width="0dp"
+				<TextView
+					android:layout_width="match_parent"
 					android:layout_height="match_parent"
-					android:layout_weight="1"
-					android:background="@android:color/transparent"
-					android:hint="Kirim pesan... (ketik @ untuk tag)"
-					android:inputType="text"
-					android:singleLine="true"
-					android:textColor="#FFFFFF"
-					android:textColorHint="#94A3B8"
-					android:textSize="14sp" />
+					android:gravity="center"
+					android:text="☺"
+					android:textColor="#E2E8F0"
+					android:textSize="17sp" />
+			</FrameLayout>
 
-				<FrameLayout
-					android:id="@+id/btn_open_sticker"
-					android:layout_width="38dp"
-					android:layout_height="38dp"
-					android:layout_marginEnd="6dp">
+			<FrameLayout
+				android:id="@+id/btn_send_chat"
+				android:layout_width="40dp"
+				android:layout_height="40dp">
 
-					<TextView
-						android:layout_width="match_parent"
-						android:layout_height="match_parent"
-						android:gravity="center"
-						android:text="☺"
-						android:textColor="#E2E8F0"
-						android:textSize="17sp" />
-				</FrameLayout>
-
-				<FrameLayout
-					android:id="@+id/btn_send_chat"
-					android:layout_width="40dp"
-					android:layout_height="40dp">
-
-					<TextView
-						android:layout_width="match_parent"
-						android:layout_height="match_parent"
-						android:gravity="center"
-						android:text="➤"
-						android:textColor="#FFFFFF"
-						android:textSize="14sp" />
-				</FrameLayout>
-			</LinearLayout>
-		</FrameLayout>
+				<TextView
+					android:layout_width="match_parent"
+					android:layout_height="match_parent"
+					android:gravity="center"
+					android:text="➤"
+					android:textColor="#08101E"
+					android:textSize="13sp"
+					android:textStyle="bold" />
+			</FrameLayout>
+		</LinearLayout>
 
 		<!-- Panel Stiker & GIF -->
 		<LinearLayout
@@ -279,7 +247,6 @@
 			android:layout_width="match_parent"
 			android:layout_height="wrap_content"
 			android:layout_marginTop="8dp"
-			android:background="#D90B0F1A"
 			android:orientation="vertical"
 			android:padding="12dp"
 			android:visibility="gone">
@@ -296,7 +263,8 @@
 			<HorizontalScrollView
 				android:id="@+id/sticker_scroll_view"
 				android:layout_width="match_parent"
-				android:layout_height="wrap_content">
+				android:layout_height="wrap_content"
+				android:scrollbars="none">
 
 				<LinearLayout
 					android:id="@+id/sticker_grid_container"
