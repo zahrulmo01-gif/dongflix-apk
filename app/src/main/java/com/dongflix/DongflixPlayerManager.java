@@ -10,8 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
-import android.graphics.RenderEffect;
-import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -233,6 +231,7 @@ public class DongflixPlayerManager {
 
 	public void stopAndCloseEverything(Context ctx) {
 		isMiniPlayerActive = false;
+		isScrolledDownCompact = false;
 		clearCache();
 		if (sharedMediaPlayer != null) {
 			try {
@@ -247,6 +246,9 @@ public class DongflixPlayerManager {
 
 		if (ctx instanceof Activity) {
 			removeMiniPlayerFromActivity((Activity) ctx);
+			if (ctx instanceof MainActivity) {
+				((MainActivity) ctx).resetNavbarToExpanded();
+			}
 		}
 	}
 
@@ -264,11 +266,13 @@ public class DongflixPlayerManager {
 	}
 
 	public void setCompactScrollMode(Activity activity, boolean compact) {
+		if (!isMiniPlayerActive || sharedMediaPlayer == null) {
+			isScrolledDownCompact = false;
+			return;
+		}
 		if (isScrolledDownCompact == compact) return;
 		isScrolledDownCompact = compact;
-		if (isMiniPlayerActive && sharedMediaPlayer != null) {
-			attachMiniPlayerToActivity(activity);
-		}
+		attachMiniPlayerToActivity(activity);
 	}
 
 	private View buildMiniPlayerPillView(final Activity activity, final boolean isInlineCompact) {
@@ -277,23 +281,14 @@ public class DongflixPlayerManager {
 		final FrameLayout glassRoot = new FrameLayout(activity);
 		glassRoot.setTag("DONGFLIX_MINI_PLAYER");
 
-		// Lapisan kaca buram (Liquid Glass)
-		View blurLayer = new View(activity);
-		blurLayer.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT,
-			ViewGroup.LayoutParams.MATCH_PARENT
-		));
+		// Frosted glass universal (tanpa RenderEffect agar kompati di semua versi Android)
 		GradientDrawable glassBg = new GradientDrawable(
 			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#E6161922"), Color.parseColor("#F00C0E14")}
+			new int[]{Color.parseColor("#E6141822"), Color.parseColor("#F20A0C12")}
 		);
 		glassBg.setCornerRadius(100f);
 		glassBg.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
-		blurLayer.setBackground(glassBg);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-			blurLayer.setRenderEffect(RenderEffect.createBlurEffect(20f, 20f, Shader.TileMode.CLAMP));
-		}
-		glassRoot.addView(blurLayer);
+		glassRoot.setBackground(glassBg);
 
 		LinearLayout row = new LinearLayout(activity);
 		row.setOrientation(LinearLayout.HORIZONTAL);
@@ -303,7 +298,6 @@ public class DongflixPlayerManager {
 		row.setPadding(hPad, vPad, hPad, vPad);
 		glassRoot.addView(row);
 
-		// Thumbnail video live sudut membulat
 		androidx.cardview.widget.CardView thumbCard = new androidx.cardview.widget.CardView(activity);
 		int thumbW = isInlineCompact ? (int)(44 * d) : (int)(56 * d);
 		int thumbH = isInlineCompact ? (int)(44 * d) : (int)(44 * d);
@@ -333,7 +327,6 @@ public class DongflixPlayerManager {
 		thumbCard.addView(miniTexture);
 		row.addView(thumbCard);
 
-		// Judul & Episode
 		LinearLayout infoCol = new LinearLayout(activity);
 		infoCol.setOrientation(LinearLayout.VERTICAL);
 		LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -359,7 +352,6 @@ public class DongflixPlayerManager {
 
 		row.addView(infoCol);
 
-		// Tombol Play / Pause PUTIH TERANG (fix tombol hitam)
 		final ImageView btnMiniPlay = new ImageView(activity);
 		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int)(34 * d), (int)(34 * d));
 		btnMiniPlay.setLayoutParams(playLp);
@@ -389,7 +381,6 @@ public class DongflixPlayerManager {
 		});
 		row.addView(btnMiniPlay);
 
-		// Tombol Tutup (✕)
 		if (!isInlineCompact) {
 			TextView btnClose = new TextView(activity);
 			LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int)(30 * d), (int)(30 * d));
@@ -432,7 +423,6 @@ public class DongflixPlayerManager {
 		FrameLayout inlineSlot = activity.findViewById(R.id.mini_player_inline_slot);
 		View bottomNav = activity.findViewById(R.id.navbar_wrapper);
 
-		// Jika sedang scroll ke bawah dan berada di MainActivity (punya mini_player_inline_slot) -> taruh di TENGAH navbar
 		if (isScrolledDownCompact && inlineSlot != null) {
 			inlineSlot.setVisibility(View.VISIBLE);
 			View inlinePill = buildMiniPlayerPillView(activity, true);
@@ -443,7 +433,6 @@ public class DongflixPlayerManager {
 			return;
 		}
 
-		// Jika di paling atas / scroll ke atas -> taruh melayang DI ATAS navbar
 		ViewGroup contentRoot = activity.findViewById(android.R.id.content);
 		if (contentRoot == null) return;
 
