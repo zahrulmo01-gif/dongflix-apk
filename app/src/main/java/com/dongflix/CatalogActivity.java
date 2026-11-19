@@ -236,7 +236,7 @@ public class CatalogActivity extends AppCompatActivity {
 			} else {
 				bg.setColor(Color.parseColor("#141822"));
 				bg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
-				tv.setTextColor(Color.CBD5E1);
+				tv.setTextColor(Color.parseColor("#CBD5E1"));
 			}
 			tv.setBackground(bg);
 		}
