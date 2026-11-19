@@ -270,7 +270,7 @@
 				</RelativeLayout>
 			</RelativeLayout>
 
-			<!-- LANJUTKAN MENONTON (DI ATAS POPULER HARI INI) -->
+			<!-- LANJUTKAN MENONTON -->
 			<LinearLayout
 				android:id="@+id/layout_section_continue"
 				android:layout_width="match_parent"
@@ -623,10 +623,11 @@
 			android:layout_weight="1"
 			android:layout_marginRight="10dp">
 
-			<View
+			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/navbar_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent" />
+				android:layout_height="match_parent"
+				app:blurOverlayColor="#9910131C" />
 
 			<LinearLayout
 				android:layout_width="match_parent"
@@ -721,10 +722,11 @@
 			android:layout_height="58dp"
 			android:visibility="gone">
 
-			<View
+			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/compact_home_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent" />
+				android:layout_height="match_parent"
+				app:blurOverlayColor="#9910131C" />
 
 			<ImageView
 				android:layout_width="23dp"
@@ -748,10 +750,11 @@
 			android:layout_width="64dp"
 			android:layout_height="64dp">
 
-			<View
+			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/search_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent" />
+				android:layout_height="match_parent"
+				app:blurOverlayColor="#9910131C" />
 
 			<ImageView
 				android:id="@+id/img_search"
