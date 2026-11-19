@@ -32,6 +32,10 @@
     android:name=".WatchActivity"
     android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
     android:exported="false" />
+<activity
+    android:name=".ChatActivity"
+    android:exported="false"
+    android:windowSoftInputMode="adjustResize" />
 
 
         
