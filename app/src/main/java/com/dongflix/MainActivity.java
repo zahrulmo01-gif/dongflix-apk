@@ -20,6 +20,7 @@ import android.util.*;
 import android.view.*;
 import android.view.View.*;
 import android.view.animation.*;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.*;
 import android.widget.*;
 import androidx.annotation.*;
@@ -46,15 +47,14 @@ public class MainActivity extends AppCompatActivity {
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
 	private Intent i = new Intent();
 
-	private GridView gridview1, gridSearchResult;
-	private RecyclerView recyclerPopular, listPopular;
-	private TextView textHeroTitle, textHeroDesc, textSeeAll;
+	private GridView gridview1;
+	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
+	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
 	private ImageView imgHeroBanner, imgPlayIcon;
-	private LinearLayout btnHeroPlay, indicatorCapsule;
+	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
-	// Liquid Glass Navbar Views
 	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
 	private LinearLayout tabBeranda, tabPustaka, tabAkun;
 	private ImageView imgHome, imgFavorite, imgProfile, imgSearch;
@@ -84,10 +84,33 @@ public class MainActivity extends AppCompatActivity {
 
 	private void openWatchBySlug(String slug) {
 		if (slug == null || slug.trim().isEmpty()) return;
+		hideKeyboard();
 		Intent intent = new Intent(MainActivity.this, WatchActivity.class);
 		intent.putExtra("slug", slug.trim());
 		startActivity(intent);
 		overridePendingTransition(R.anim.slide_up_enter, R.anim.no_anim);
+	}
+
+	private void showKeyboardOnSearch() {
+		if (inputSearch == null) return;
+		inputSearch.requestFocus();
+		inputSearch.postDelayed(new Runnable() {
+			@Override
+			public void run() {
+				InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+				if (imm != null) {
+					imm.showSoftInput(inputSearch, InputMethodManager.SHOW_IMPLICIT);
+				}
+			}
+		}, 120);
+	}
+
+	private void hideKeyboard() {
+		if (inputSearch == null) return;
+		InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+		if (imm != null) {
+			imm.hideSoftInputFromWindow(inputSearch.getWindowToken(), 0);
+		}
 	}
 
 	private Drawable createMainShimmerDrawable(final float cornerRadiusPx) {
@@ -207,10 +230,14 @@ public class MainActivity extends AppCompatActivity {
 		dongflix_req = new RequestNetwork(this);
 
 		gridview1 = findViewById(R.id.gridview1);
-		gridSearchResult = findViewById(R.id.grid_search_result);
-		inputSearch = findViewById(R.id.input_search);
 		recyclerPopular = findViewById(R.id.recyclerPopular);
 		listPopular = findViewById(R.id.listPopular);
+		recyclerSearchList = findViewById(R.id.recycler_search_list);
+		searchBarContainer = findViewById(R.id.search_bar_container);
+		inputSearch = findViewById(R.id.input_search);
+		btnClearSearch = findViewById(R.id.btn_clear_search);
+		textSearchSectionLabel = findViewById(R.id.text_search_section_label);
+
 		textHeroTitle = findViewById(R.id.text_hero_title);
 		textHeroDesc = findViewById(R.id.text_hero_desc);
 		textSeeAll = findViewById(R.id.text_see_all);
@@ -247,7 +274,7 @@ public class MainActivity extends AppCompatActivity {
 			});
 		}
 
-		// SEMUA LIST KETIKA DIKLIK LANGSUNG BUKA WATCHACTIVITY (TIDAK PAKAI DETAILACTIVITY LAGI)
+		// SEMUA LIST LANGSUNG BUKA WATCHACTIVITY
 		if (gridview1 != null) {
 			gridview1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 				@Override
@@ -262,16 +289,14 @@ public class MainActivity extends AppCompatActivity {
 			});
 		}
 
-		if (gridSearchResult != null) {
-			gridSearchResult.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+		// SEARCH BAR INTERAKSI REAL-TIME + TOMBOL X CLEAR
+		if (btnClearSearch != null) {
+			btnClearSearch.setOnClickListener(new View.OnClickListener() {
 				@Override
-				public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-					if (gridSearchResult.getAdapter() instanceof Gridview1Adapter) {
-						HashMap<String, Object> item = ((Gridview1Adapter) gridSearchResult.getAdapter()).getItem(position);
-						if (item != null && !item.containsKey("is_loading")) {
-							String slug = item.get("slug") != null ? item.get("slug").toString() : "";
-							openWatchBySlug(slug);
-						}
+				public void onClick(View v) {
+					if (inputSearch != null) {
+						inputSearch.setText("");
+						showKeyboardOnSearch();
 					}
 				}
 			});
@@ -282,15 +307,34 @@ public class MainActivity extends AppCompatActivity {
 				@Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 				@Override public void onTextChanged(CharSequence s, int start, int before, int count) {
 					String q = s.toString().trim().toLowerCase();
-					ArrayList<HashMap<String, Object>> filtered = new ArrayList<>();
-					for (HashMap<String, Object> item : fullCatalogList) {
-						String title = item.get("title") != null ? item.get("title").toString().toLowerCase() : "";
-						if (q.isEmpty() || title.contains(q)) {
-							filtered.add(item);
-						}
+					if (btnClearSearch != null) {
+						btnClearSearch.setVisibility(q.isEmpty() ? View.GONE : View.VISIBLE);
 					}
-					if (gridSearchResult != null) {
-						gridSearchResult.setAdapter(new Gridview1Adapter(filtered));
+
+					if (q.isEmpty()) {
+						// Jika belum disearch -> tampilkan list Populer dulu
+						if (textSearchSectionLabel != null) {
+							textSearchSectionLabel.setVisibility(View.VISIBLE);
+							textSearchSectionLabel.setText("Populer");
+						}
+						if (recyclerSearchList != null) {
+							recyclerSearchList.setAdapter(new ListPopularAdapter(listMap));
+						}
+					} else {
+						if (textSearchSectionLabel != null) {
+							textSearchSectionLabel.setVisibility(View.GONE);
+						}
+						ArrayList<HashMap<String, Object>> filtered = new ArrayList<>();
+						for (HashMap<String, Object> item : fullCatalogList) {
+							String title = item.get("title") != null ? item.get("title").toString().toLowerCase() : "";
+							String genres = item.get("genres") != null ? item.get("genres").toString().toLowerCase() : "";
+							if (title.contains(q) || genres.contains(q)) {
+								filtered.add(item);
+							}
+						}
+						if (recyclerSearchList != null) {
+							recyclerSearchList.setAdapter(new ListPopularAdapter(filtered));
+						}
 					}
 				}
 				@Override public void afterTextChanged(Editable s) {}
@@ -318,8 +362,9 @@ public class MainActivity extends AppCompatActivity {
 					setGridViewHeightBasedOnChildren(gridview1, 3);
 				}
 
-				if (gridSearchResult != null) {
-					gridSearchResult.setAdapter(new Gridview1Adapter(fullCatalogList));
+				// Default isi halaman Search sebelum disearch: list Populer
+				if (recyclerSearchList != null) {
+					recyclerSearchList.setAdapter(new ListPopularAdapter(listMap));
 				}
 
 				if (listMap != null && listMap.size() >= 3) {
@@ -498,24 +543,26 @@ public class MainActivity extends AppCompatActivity {
 			listPopular.setAdapter(new RecyclerPopularAdapter(dummyList));
 		}
 
+		if (recyclerSearchList != null) {
+			recyclerSearchList.setLayoutManager(new LinearLayoutManager(this));
+			recyclerSearchList.setAdapter(new RecyclerPopularAdapter(dummyList));
+		}
+
 		startMainShimmer();
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
-	private void applyLiquidGlassStyle(View blurTarget, View containerTarget) {
+	// Frosted Glass universal (tanpa RenderEffect agar kompati di semua versi Android dan sudut tidak bocor)
+	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
 		float d = getResources().getDisplayMetrics().density;
 		if (blurTarget != null) {
 			GradientDrawable glass = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#CC14171F"), Color.parseColor("#E60B0D12")}
+				new int[]{Color.parseColor("#D913161F"), Color.parseColor("#EB0A0C12")}
 			);
 			glass.setCornerRadius(100f);
 			glass.setStroke((int)(1 * d), Color.parseColor("#2EFFFFFF"));
 			blurTarget.setBackground(glass);
-
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-				blurTarget.setRenderEffect(RenderEffect.createBlurEffect(22f, 22f, Shader.TileMode.CLAMP));
-			}
 		}
 		if (containerTarget != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			containerTarget.setElevation(20f);
@@ -533,18 +580,39 @@ public class MainActivity extends AppCompatActivity {
 			window.setStatusBarColor(Color.TRANSPARENT);
 		}
 
+		int statusBarHeight = 0;
+		int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+		if (resourceId > 0) {
+			statusBarHeight = getResources().getDimensionPixelSize(resourceId);
+		}
+		float density = getResources().getDisplayMetrics().density;
+
 		View topHeaderBar = findViewById(R.id.relativelayout69);
 		if (topHeaderBar != null) {
-			int statusBarHeight = 0;
-			int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-			if (resourceId > 0) {
-				statusBarHeight = getResources().getDimensionPixelSize(resourceId);
-			}
-			float density = getResources().getDisplayMetrics().density;
 			int horizontalPadding = (int)(16 * density);
 			int topPadding = statusBarHeight + (int)(8 * density);
 			int bottomPadding = (int)(10 * density);
 			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
+		}
+
+		// Sesuaikan margin atas searchBarContainer agar pas di bawah status bar
+		if (searchBarContainer != null) {
+			LinearLayout.LayoutParams sbLp = (LinearLayout.LayoutParams) searchBarContainer.getLayoutParams();
+			sbLp.topMargin = statusBarHeight + (int)(12 * density);
+			searchBarContainer.setLayoutParams(sbLp);
+
+			GradientDrawable sbBg = new GradientDrawable();
+			sbBg.setColor(Color.parseColor("#12141A"));
+			sbBg.setCornerRadius(100f);
+			sbBg.setStroke((int)(1 * density), Color.parseColor("#26FFFFFF"));
+			searchBarContainer.setBackground(sbBg);
+		}
+
+		if (btnClearSearch != null) {
+			GradientDrawable clearBg = new GradientDrawable();
+			clearBg.setShape(GradientDrawable.OVAL);
+			clearBg.setColor(Color.parseColor("#252936"));
+			btnClearSearch.setBackground(clearBg);
 		}
 
 		View headerShadow = findViewById(R.id.header_shadow);
@@ -565,28 +633,27 @@ public class MainActivity extends AppCompatActivity {
 			heroShadow.setBackground(bottomGradient);
 		}
 
-		// Terapkan Liquid Glass + Blur pada Navbar Expanded, Compact Home, dan Search Circle
-		applyLiquidGlassStyle(findViewById(R.id.navbar_blur_bg), navbarExpanded);
-		applyLiquidGlassStyle(findViewById(R.id.compact_home_blur_bg), btnCompactHome);
-		applyLiquidGlassStyle(findViewById(R.id.search_blur_bg), btnCircleSearch);
+		applyUniversalGlassStyle(findViewById(R.id.navbar_blur_bg), navbarExpanded);
+		applyUniversalGlassStyle(findViewById(R.id.compact_home_blur_bg), btnCompactHome);
+		applyUniversalGlassStyle(findViewById(R.id.search_blur_bg), btnCircleSearch);
 	}
 
-	// ========================================================
-	// SCROLL LISTENER: ATAS/SCROLL UP -> MINI PLAYER DI ATAS NAVBAR
-	//                  SCROLL DOWN -> MINI PLAYER DI TENGAH NAVBAR
-	// ========================================================
 	private void setupScrollResponsiveNavbar() {
 		NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
 		if (mainScroll != null) {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
 				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+					// Jika tidak ada Mini Player yang aktif, tampilan navbar tetap sama saat discroll
+					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
+						resetNavbarToExpanded();
+						return;
+					}
+
 					int dy = scrollY - oldScrollY;
 					if (scrollY <= 20 || dy < -12) {
-						// Paling atas atau sedang scroll ke atas -> Expanded Navbar + Mini Player di atasnya
 						setNavbarCompactState(false);
 					} else if (dy > 14 && scrollY > 80) {
-						// Sedang scroll ke bawah -> Compact Navbar + Mini Player di tengah
 						setNavbarCompactState(true);
 					}
 				}
@@ -594,7 +661,14 @@ public class MainActivity extends AppCompatActivity {
 		}
 	}
 
+	public void resetNavbarToExpanded() {
+		setNavbarCompactState(false);
+	}
+
 	private void setNavbarCompactState(boolean compact) {
+		if (compact && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
+			compact = false;
+		}
 		if (isNavbarCompact == compact) return;
 		isNavbarCompact = compact;
 
@@ -647,17 +721,20 @@ public class MainActivity extends AppCompatActivity {
 				if (txtProfile != null) txtProfile.setTextColor(colorInactive);
 
 				if ((tabBeranda != null && id == tabBeranda.getId()) || (btnCompactHome != null && id == btnCompactHome.getId())) {
+					hideKeyboard();
 					if (pageHome != null) pageHome.setVisibility(View.VISIBLE);
 					if (tabBeranda != null) tabBeranda.setBackground(activeTabPill);
 					if (imgHome != null) imgHome.setColorFilter(colorActive);
 					if (txtHome != null) txtHome.setTextColor(colorActive);
 					setNavbarCompactState(false);
 				} else if (tabPustaka != null && id == tabPustaka.getId()) {
+					hideKeyboard();
 					if (pageFavorite != null) pageFavorite.setVisibility(View.VISIBLE);
 					tabPustaka.setBackground(activeTabPill);
 					if (imgFavorite != null) imgFavorite.setColorFilter(colorActive);
 					if (txtFavorite != null) txtFavorite.setTextColor(colorActive);
 				} else if (tabAkun != null && id == tabAkun.getId()) {
+					hideKeyboard();
 					if (pageProfile != null) pageProfile.setVisibility(View.VISIBLE);
 					tabAkun.setBackground(activeTabPill);
 					if (imgProfile != null) imgProfile.setColorFilter(colorActive);
@@ -665,6 +742,8 @@ public class MainActivity extends AppCompatActivity {
 				} else if (btnCircleSearch != null && id == btnCircleSearch.getId()) {
 					if (pageSearch != null) pageSearch.setVisibility(View.VISIBLE);
 					if (imgSearch != null) imgSearch.setColorFilter(colorActive);
+					// Otomatis fokus ke searchbar dan buka keyboard
+					showKeyboardOnSearch();
 				}
 			}
 		};
