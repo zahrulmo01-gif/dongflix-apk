@@ -1,0 +1,370 @@
+package com.dongflix;
+
+import android.app.Activity;
+import android.app.Application;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Color;
+import android.graphics.SurfaceTexture;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.media.MediaPlayer;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.Surface;
+import android.view.TextureView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import androidx.core.app.NotificationCompat;
+import com.bumptech.glide.Glide;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+public class DongflixPlayerManager {
+
+	public static final String CHANNEL_ID = "dongflix_playback_channel";
+	public static final int NOTIF_ID = 7788;
+	public static final String ACTION_TOGGLE_PLAY = "com.dongflix.ACTION_TOGGLE_PLAY";
+	public static final String ACTION_CLOSE_PLAYER = "com.dongflix.ACTION_CLOSE_PLAYER";
+
+	private static DongflixPlayerManager instance;
+
+	public MediaPlayer sharedMediaPlayer;
+	public boolean isMiniPlayerActive = false;
+
+	// State episode & video aktif agar bisa lanjut mulus saat kembali ke WatchActivity
+	public String activeSlug = "";
+	public String activeTitle = "";
+	public String activeEpisodeLabel = "";
+	public String activeCoverUrl = "";
+	public String activeStreamUrl = "";
+	public int activeEpisodeIndex = 0;
+	public ArrayList<HashMap<String, Object>> activeEpisodeList = new ArrayList<>();
+
+	private boolean isReceiverRegistered = false;
+	private Application appContext;
+
+	public static synchronized DongflixPlayerManager getInstance() {
+		if (instance == null) {
+			instance = new DongflixPlayerManager();
+		}
+		return instance;
+	}
+
+	/**
+	 * Panggil sekali di onCreate MainActivity untuk mendaftarkan lifecycle otomatis
+	 * agar Mini Player selalu muncul di SEMUA halaman kecuali WatchActivity.
+	 */
+	public void initWithApplication(Application app) {
+		if (appContext != null) return;
+		appContext = app;
+		createNotificationChannel(app);
+		registerNotificationReceiver(app);
+
+		app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+			@Override
+			public void onActivityResumed(Activity activity) {
+				if (activity instanceof WatchActivity) {
+					removeMiniPlayerFromActivity(activity);
+				} else if (isMiniPlayerActive && sharedMediaPlayer != null) {
+					attachMiniPlayerToActivity(activity);
+					updatePlaybackNotification(activity);
+				}
+			}
+
+			@Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {}
+			@Override public void onActivityStarted(Activity activity) {}
+			@Override public void onActivityPaused(Activity activity) {}
+			@Override public void onActivityStopped(Activity activity) {}
+			@Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
+			@Override public void onActivityDestroyed(Activity activity) {}
+		});
+	}
+
+	private void createNotificationChannel(Context ctx) {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			NotificationChannel channel = new NotificationChannel(
+				CHANNEL_ID,
+				"Pemutar Video Dongflix",
+				NotificationManager.IMPORTANCE_LOW
+			);
+			channel.setDescription("Kontrol pemutaran Dongflix di latar belakang");
+			channel.setShowBadge(false);
+			NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+			if (nm != null) nm.createNotificationChannel(channel);
+		}
+	}
+
+	private void registerNotificationReceiver(Context ctx) {
+		if (isReceiverRegistered) return;
+		IntentFilter filter = new IntentFilter();
+		filter.addAction(ACTION_TOGGLE_PLAY);
+		filter.addAction(ACTION_CLOSE_PLAYER);
+
+		BroadcastReceiver receiver = new BroadcastReceiver() {
+			@Override
+			public void onReceive(Context context, Intent intent) {
+				String action = intent.getAction();
+				if (ACTION_TOGGLE_PLAY.equals(action)) {
+					if (sharedMediaPlayer != null) {
+						try {
+							if (sharedMediaPlayer.isPlaying()) {
+								sharedMediaPlayer.pause();
+							} else {
+								sharedMediaPlayer.start();
+							}
+							updatePlaybackNotification(context);
+						} catch (Exception ignored) {}
+					}
+				} else if (ACTION_CLOSE_PLAYER.equals(action)) {
+					stopAndCloseEverything(context);
+				}
+			}
+		};
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+			ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+		} else {
+			ctx.registerReceiver(receiver, filter);
+		}
+		isReceiverRegistered = true;
+	}
+
+	public void updatePlaybackNotification(Context ctx) {
+		if (!isMiniPlayerActive || sharedMediaPlayer == null) return;
+
+		boolean isPlaying = false;
+		try {
+			isPlaying = sharedMediaPlayer.isPlaying();
+		} catch (Exception ignored) {}
+
+		Intent openWatchIntent = new Intent(ctx, WatchActivity.class);
+		openWatchIntent.putExtra("slug", activeSlug);
+		openWatchIntent.putExtra("resume_mini_player", true);
+		openWatchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+		int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+			? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+			: PendingIntent.FLAG_UPDATE_CURRENT;
+
+		PendingIntent contentPi = PendingIntent.getActivity(ctx, 100, openWatchIntent, flags);
+
+		PendingIntent togglePi = PendingIntent.getBroadcast(
+			ctx, 101, new Intent(ACTION_TOGGLE_PLAY).setPackage(ctx.getPackageName()), flags
+		);
+		PendingIntent closePi = PendingIntent.getBroadcast(
+			ctx, 102, new Intent(ACTION_CLOSE_PLAYER).setPackage(ctx.getPackageName()), flags
+		);
+
+		String subText = activeEpisodeLabel.isEmpty() ? "Sedang memutar" : "Episode " + activeEpisodeLabel;
+
+		NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
+			.setSmallIcon(R.drawable.ic_play1)
+			.setContentTitle(activeTitle.isEmpty() ? "Dongflix" : activeTitle)
+			.setContentText(subText)
+			.setContentIntent(contentPi)
+			.setOngoing(isPlaying)
+			.setOnlyAlertOnce(true)
+			.setPriority(NotificationCompat.PRIORITY_LOW)
+			.addAction(
+				isPlaying ? R.drawable.ic_pause : R.drawable.ic_play1,
+				isPlaying ? "Jeda" : "Putar",
+				togglePi
+			)
+			.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Tutup", closePi);
+
+		NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+		if (nm != null) {
+			nm.notify(NOTIF_ID, builder.build());
+		}
+	}
+
+	public void stopAndCloseEverything(Context ctx) {
+		isMiniPlayerActive = false;
+		if (sharedMediaPlayer != null) {
+			try {
+				if (sharedMediaPlayer.isPlaying()) sharedMediaPlayer.stop();
+				sharedMediaPlayer.reset();
+				sharedMediaPlayer.release();
+			} catch (Exception ignored) {}
+			sharedMediaPlayer = null;
+		}
+		NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+		if (nm != null) nm.cancel(NOTIF_ID);
+
+		if (ctx instanceof Activity) {
+			removeMiniPlayerFromActivity((Activity) ctx);
+		}
+	}
+
+	public void removeMiniPlayerFromActivity(Activity activity) {
+		ViewGroup decor = (ViewGroup) activity.getWindow().getDecorView();
+		View existing = decor.findViewWithTag("DONGFLIX_MINI_PLAYER");
+		if (existing != null && existing.getParent() instanceof ViewGroup) {
+			((ViewGroup) existing.getParent()).removeView(existing);
+		}
+	}
+
+	public void attachMiniPlayerToActivity(final Activity activity) {
+		if (!isMiniPlayerActive || sharedMediaPlayer == null) return;
+
+		ViewGroup contentRoot = activity.findViewById(android.R.id.content);
+		if (contentRoot == null) return;
+
+		View existing = contentRoot.findViewWithTag("DONGFLIX_MINI_PLAYER");
+		if (existing != null) contentRoot.removeView(existing);
+
+		float d = activity.getResources().getDisplayMetrics().density;
+
+		// Container Mini Player Mengambang di Bawah (ala YouTube)
+		final LinearLayout miniBar = new LinearLayout(activity);
+		miniBar.setTag("DONGFLIX_MINI_PLAYER");
+		miniBar.setOrientation(LinearLayout.VERTICAL);
+
+		GradientDrawable barBg = new GradientDrawable();
+		barBg.setColor(Color.parseColor("#0E1117"));
+		barBg.setCornerRadius(12 * d);
+		barBg.setStroke((int)(1 * d), Color.parseColor("#1E2430"));
+		miniBar.setBackground(barBg);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			miniBar.setElevation(12 * d);
+		}
+
+		FrameLayout.LayoutParams rootLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		rootLp.gravity = Gravity.BOTTOM;
+		rootLp.setMargins((int)(10 * d), 0, (int)(10 * d), (int)(12 * d));
+		miniBar.setLayoutParams(rootLp);
+
+		LinearLayout row = new LinearLayout(activity);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setGravity(Gravity.CENTER_VERTICAL);
+		row.setPadding((int)(8 * d), (int)(8 * d), (int)(10 * d), (int)(8 * d));
+		miniBar.addView(row);
+
+		// Thumbnail / Live Video Preview 16:9 di Kiri
+		FrameLayout videoThumbBox = new FrameLayout(activity);
+		LinearLayout.LayoutParams thumbLp = new LinearLayout.LayoutParams((int)(108 * d), (int)(60 * d));
+		videoThumbBox.setLayoutParams(thumbLp);
+		videoThumbBox.setBackgroundColor(Color.BLACK);
+
+		TextureView miniTexture = new TextureView(activity);
+		miniTexture.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		miniTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+			@Override
+			public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+				if (sharedMediaPlayer != null) {
+					try {
+						sharedMediaPlayer.setSurface(new Surface(surface));
+					} catch (Exception ignored) {}
+				}
+			}
+			@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
+			@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
+			@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+		});
+		videoThumbBox.addView(miniTexture);
+		row.addView(videoThumbBox);
+
+		// Judul & Episode di Tengah
+		LinearLayout infoCol = new LinearLayout(activity);
+		infoCol.setOrientation(LinearLayout.VERTICAL);
+		LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+		infoLp.setMargins((int)(12 * d), 0, (int)(8 * d), 0);
+		infoCol.setLayoutParams(infoLp);
+
+		TextView tvTitle = new TextView(activity);
+		tvTitle.setText(activeTitle.isEmpty() ? "Dongflix" : activeTitle);
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(13.5f);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		tvTitle.setMaxLines(1);
+		tvTitle.setEllipsize(TextUtils.TruncateAt.END);
+		infoCol.addView(tvTitle);
+
+		TextView tvSub = new TextView(activity);
+		tvSub.setText(activeEpisodeLabel.isEmpty() ? "Sedang memutar" : "Episode " + activeEpisodeLabel);
+		tvSub.setTextColor(Color.parseColor("#9CA3AF"));
+		tvSub.setTextSize(11.5f);
+		tvSub.setMaxLines(1);
+		infoCol.addView(tvSub);
+
+		row.addView(infoCol);
+
+		// Tombol Play / Pause
+		final ImageView btnMiniPlay = new ImageView(activity);
+		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int)(36 * d), (int)(36 * d));
+		playLp.rightMargin = (int)(6 * d);
+		btnMiniPlay.setLayoutParams(playLp);
+		btnMiniPlay.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
+		boolean playingNow = false;
+		try { playingNow = sharedMediaPlayer.isPlaying(); } catch (Exception ignored) {}
+		btnMiniPlay.setImageResource(playingNow ? R.drawable.ic_pause : R.drawable.ic_play1);
+
+		btnMiniPlay.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (sharedMediaPlayer != null) {
+					try {
+						if (sharedMediaPlayer.isPlaying()) {
+							sharedMediaPlayer.pause();
+							btnMiniPlay.setImageResource(R.drawable.ic_play1);
+						} else {
+							sharedMediaPlayer.start();
+							btnMiniPlay.setImageResource(R.drawable.ic_pause);
+						}
+						updatePlaybackNotification(activity);
+					} catch (Exception ignored) {}
+				}
+			}
+		});
+		row.addView(btnMiniPlay);
+
+		// Tombol Close (✕)
+		TextView btnClose = new TextView(activity);
+		btnClose.setLayoutParams(new LinearLayout.LayoutParams((int)(32 * d), (int)(32 * d)));
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setText("✕");
+		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+		btnClose.setTextSize(14f);
+		btnClose.setTypeface(null, Typeface.BOLD);
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				stopAndCloseEverything(activity);
+			}
+		});
+		row.addView(btnClose);
+
+		// Klik Mini Player -> Buka Kembali WatchActivity Tanpa Reload Video
+		miniBar.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				Intent intent = new Intent(activity, WatchActivity.class);
+				intent.putExtra("slug", activeSlug);
+				intent.putExtra("resume_mini_player", true);
+				activity.startActivity(intent);
+			}
+		});
+
+		contentRoot.addView(miniBar);
+	}
+}
