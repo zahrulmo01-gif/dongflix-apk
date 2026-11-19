@@ -102,6 +102,29 @@
 				android:textColor="#FFFFFF" />
 		</LinearLayout>
 
+		<LinearLayout
+			android:id="@+id/pillSpeedHold"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_gravity="top|center_horizontal"
+			android:layout_marginTop="16dp"
+			android:paddingLeft="14dp"
+			android:paddingTop="6dp"
+			android:paddingRight="14dp"
+			android:paddingBottom="6dp"
+			android:gravity="center"
+			android:orientation="horizontal"
+			android:visibility="gone">
+
+			<TextView
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:text="2x »"
+				android:textSize="13sp"
+				android:textStyle="bold"
+				android:textColor="#FFFFFF" />
+		</LinearLayout>
+
 		<RelativeLayout
 			android:id="@+id/playerControlsOverlay"
 			android:layout_width="match_parent"
@@ -215,7 +238,7 @@
 						android:src="@drawable/ic_cast"
 						android:scaleType="fitCenter" />
 
-										<ImageView
+					<ImageView
 						android:id="@+id/btnLock"
 						android:layout_width="24dp"
 						android:layout_height="24dp"
@@ -223,7 +246,6 @@
 						android:src="@drawable/ic_lock"
 						android:scaleType="fitCenter"
 						android:visibility="gone" />
-
 
 					<ImageView
 						android:id="@+id/btnSettings"
@@ -389,11 +411,25 @@
 		</RelativeLayout>
 	</FrameLayout>
 
+	<!-- GARIS PEMBATAS BIASA (MUNCUL SAAT KONTROL OVERLAY TAMPIL) -->
 	<View
 		android:id="@+id/view139"
 		android:layout_width="match_parent"
 		android:layout_height="1dp"
-		android:background="#0B0D11" />
+		android:background="#0B0D11"
+		android:visibility="visible" />
+
+	<!-- GARIS PROGRESSBAR MINI (MUNCUL MENGGANTIKAN GARIS BIASA SAAT KONTROL HILANG DI PORTRAIT) -->
+	<ProgressBar
+		android:id="@+id/miniVideoProgressBar"
+		style="?android:attr/progressBarStyleHorizontal"
+		android:layout_width="match_parent"
+		android:layout_height="2.5dp"
+		android:max="1000"
+		android:progress="0"
+		android:progressTint="#3B82F6"
+		android:progressBackgroundTint="#141824"
+		android:visibility="gone" />
 
 	<androidx.core.widget.NestedScrollView
 		android:id="@+id/vscroll16"
