@@ -1,15 +1,11 @@
 package com.dongflix;
 
-import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Patterns;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,23 +17,28 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.AuthResult;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
-import org.json.JSONObject;
 
 public class LoginActivity extends AppCompatActivity {
 
-	private static final String FIREBASE_API_KEY = "AIzaSyAddo6FcJmixeNsGN3XACI_ghqGYzigMds";[span_7](start_span)[span_7](end_span)
-	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";[span_8](start_span)[span_8](end_span)
-	private static final String AUTH_SIGN_IN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + FIREBASE_API_KEY;
-	private static final String AUTH_SIGN_UP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + FIREBASE_API_KEY;
+	private static final String DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";[span_3](start_span)[span_3](end_span)
+
+	private FirebaseAuth mAuth;
+	private DatabaseReference usersRef;
 
 	private FrameLayout logoBadgeBox, btnSubmitAuth;
 	private LinearLayout tabSwitchContainer, authFormCard, groupRegisterFields;
@@ -47,14 +48,16 @@ public class LoginActivity extends AppCompatActivity {
 
 	private boolean isRegisterMode = false;
 	private boolean isProcessing = false;
-	private SharedPreferences sessionPrefs;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		sessionPrefs = getSharedPreferences("dongflix_session", Context.MODE_PRIVATE);
-		if (sessionPrefs.getBoolean("is_logged_in", false)) {
+		mAuth = FirebaseAuth.getInstance();
+		usersRef = FirebaseDatabase.getInstance(DB_URL).getReference("users");[span_4](start_span)[span_4](end_span)
+
+		// Jika sudah login di FirebaseAuth, langsung masuk ke MainActivity
+		if (mAuth.getCurrentUser() != null) {
 			goToMainActivity();
 			return;
 		}
@@ -236,39 +239,16 @@ public class LoginActivity extends AppCompatActivity {
 		return email.trim().toLowerCase().replace(".", ",");
 	}
 
-	private String parseAuthError(String errJson) {
-		try {
-			JSONObject obj = new JSONObject(errJson);
-			String msg = obj.optJSONObject("error").optString("message", "");
-			if (msg.contains("EMAIL_NOT_FOUND") || msg.contains("INVALID_LOGIN_CREDENTIALS")) {
-				return "Email atau password salah";
-			}
-			if (msg.contains("INVALID_PASSWORD")) {
-				return "Password salah";
-			}
-			if (msg.contains("EMAIL_EXISTS")) {
-				return "Email sudah terdaftar di Authentication";
-			}
-			if (msg.contains("WEAK_PASSWORD")) {
-				return "Password minimal 6 karakter";
-			}
-			if (msg.contains("TOO_MANY_ATTEMPTS_TRY_LATER")) {
-				return "Terlalu banyak percobaan, coba lagi nanti";
-			}
-		} catch (Exception ignored) {}
-		return "Autentikasi gagal";
-	}
-
 	private void handleAuthSubmit() {
-		final String rawEmail = inputAuthEmail != null ? inputAuthEmail.getText().toString().trim().toLowerCase() : "";
-		final String rawPassword = inputAuthPassword != null ? inputAuthPassword.getText().toString() : "";
+		final String email = inputAuthEmail != null ? inputAuthEmail.getText().toString().trim().toLowerCase() : "";
+		final String password = inputAuthPassword != null ? inputAuthPassword.getText().toString() : "";
 
-		if (rawEmail.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(rawEmail).matches()) {
+		if (email.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
 			Toast.makeText(this, "Masukkan alamat email yang valid", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
-		if (rawPassword.length() < 6) {
+		if (password.length() < 6) {
 			Toast.makeText(this, "Password minimal 6 karakter", Toast.LENGTH_SHORT).show();
 			return;
 		}
@@ -288,110 +268,86 @@ public class LoginActivity extends AppCompatActivity {
 		}
 
 		setLoadingState(true);
-		final String userKey = emailToFirebaseKey(rawEmail);
 
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				try {
-					JSONObject payload = new JSONObject();
-					payload.put("email", rawEmail);
-					payload.put("password", rawPassword);
-					payload.put("returnSecureToken", true);
-
-					String endpoint = isRegisterMode ? AUTH_SIGN_UP_URL : AUTH_SIGN_IN_URL;
-					String authResponse = httpPostJson(endpoint, payload.toString());
-					JSONObject authJson = new JSONObject(authResponse);
-					String idToken = authJson.optString("idToken", "");
-
-					String encodedKey = URLEncoder.encode(userKey, "UTF-8");
-					String dbUserUrl = FIREBASE_DB_URL + "/users/" + encodedKey + ".json"
-						+ (idToken.isEmpty() ? "" : "?auth=" + URLEncoder.encode(idToken, "UTF-8"));
-
-					if (!isRegisterMode) {
-						// Baca data profil dari node users di Realtime Database
-						String existingDb = httpGet(dbUserUrl);
-						String name = rawEmail.split("@")[0];
-						String username = rawEmail.split("@")[0];
-						String bio = "Dongflix Member";
-						String photoURL = "";
-						int exp = 0;
-
-						if (existingDb != null && !existingDb.trim().equals("null") && !existingDb.trim().isEmpty()) {
-							JSONObject userObj = new JSONObject(existingDb);
-							name = userObj.optString("name", name);
-							username = userObj.optString("username", username);
-							bio = userObj.optString("bio", bio);
-							photoURL = userObj.optString("photoURL", "");
-							exp = userObj.optInt("exp", 0);
-						}
-
-						saveSessionAndProceed(rawEmail, userKey, idToken, name, username, bio, photoURL, exp);
-					} else {
-						// Daftar baru: simpan profil ke node users di Realtime Database
-						String cleanUsername = regUsername.replaceAll("[^a-z0-9_]", "");
-						if (cleanUsername.isEmpty()) cleanUsername = rawEmail.split("@")[0];
-
-						JSONObject newUser = new JSONObject();
-						newUser.put("email", rawEmail);
-						newUser.put("name", regName);
-						newUser.put("username", cleanUsername);
-						newUser.put("bio", "Dongflix — Streaming Donghua Sub Indo");
-						newUser.put("exp", 100);
-						newUser.put("followersCount", 0);
-						newUser.put("followingCount", 0);
-						newUser.put("photoURL", "");
-						newUser.put("updatedAt", System.currentTimeMillis());
-
-						httpPutJson(dbUserUrl, newUser.toString());
-
-						saveSessionAndProceed(
-							rawEmail,
-							userKey,
-							idToken,
-							regName,
-							cleanUsername,
-							"Dongflix — Streaming Donghua Sub Indo",
-							"",
-							100
-						);
-					}
-				} catch (final Exception e) {
-					runOnUiThread(new Runnable() {
-						@Override
-						public void run() {
+		if (!isRegisterMode) {
+			// 1. Login dengan Email & Password ke Firebase Authentication
+			mAuth.signInWithEmailAndPassword(email, password)
+				.addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
+					@Override
+					public void onComplete(@NonNull Task<AuthResult> task) {
+						if (!task.isSuccessful()) {
 							setLoadingState(false);
-							Toast.makeText(LoginActivity.this, parseAuthError(e.getMessage()), Toast.LENGTH_SHORT).show();
+							String err = task.getException() != null ? task.getException().getMessage() : "Login gagal";
+							Toast.makeText(LoginActivity.this, err, Toast.LENGTH_SHORT).show();
+							return;
 						}
-					});
-				}
-			}
-		}).start();
-	}
 
-	private void saveSessionAndProceed(final String email, final String userKey, final String idToken,
-									   final String name, final String username, final String bio,
-									   final String photoURL, final int exp) {
-		sessionPrefs.edit()
-			.putBoolean("is_logged_in", true)
-			.putString("email", email)
-			.putString("user_key", userKey)
-			.putString("id_token", idToken)
-			.putString("name", name)
-			.putString("username", username)
-			.putString("bio", bio)
-			.putString("photoURL", photoURL)
-			.putInt("exp", exp)
-			.apply();
+						FirebaseUser user = mAuth.getCurrentUser();
+						String userEmail = (user != null && user.getEmail() != null) ? user.getEmail() : email;
+						String userKey = emailToFirebaseKey(userEmail);
 
-		new Handler(Looper.getMainLooper()).post(new Runnable() {
-			@Override
-			public void run() {
-				setLoadingState(false);
-				Toast.makeText(LoginActivity.this, "Selamat datang, " + name + "!", Toast.LENGTH_SHORT).show();
-				goToMainActivity();
-			}
-		});
+						// 2. Baca profil dari node users/{email_dengan_koma} di Realtime Database
+						usersRef.child(userKey).addListenerForSingleValueEvent(new ValueEventListener() {
+							@Override
+							public void onDataChange(@NonNull DataSnapshot snapshot) {
+								String displayName = userEmail.split("@")[0];
+								if (snapshot.exists() && snapshot.child("name").getValue() != null) {
+									displayName = snapshot.child("name").getValue().toString();
+								}
+								setLoadingState(false);
+								Toast.makeText(LoginActivity.this, "Selamat datang, " + displayName + "!", Toast.LENGTH_SHORT).show();
+								goToMainActivity();
+							}
+
+							@Override
+							public void onCancelled(@NonNull DatabaseError error) {
+								setLoadingState(false);
+								goToMainActivity();
+							}
+						});
+					}
+				});
+		} else {
+			// 1. Daftar akun baru ke Firebase Authentication
+			mAuth.createUserWithEmailAndPassword(email, password)
+				.addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
+					@Override
+					public void onComplete(@NonNull Task<AuthResult> task) {
+						if (!task.isSuccessful()) {
+							setLoadingState(false);
+							String err = task.getException() != null ? task.getException().getMessage() : "Pendaftaran gagal";
+							Toast.makeText(LoginActivity.this, err, Toast.LENGTH_SHORT).show();
+							return;
+						}
+
+						String cleanUsername = regUsername.replaceAll("[^a-z0-9_]", "");
+						if (cleanUsername.isEmpty()) cleanUsername = email.split("@")[0];
+						String userKey = emailToFirebaseKey(email);
+
+						// 2. Simpan data profil ke node users/{email_dengan_koma}
+						HashMap<String, Object> profileMap = new HashMap<>();
+						profileMap.put("email", email);
+						profileMap.put("name", regName);
+						profileMap.put("username", cleanUsername);
+						profileMap.put("bio", "Dongflix — Streaming Donghua Sub Indo");
+						profileMap.put("exp", 100);
+						profileMap.put("followersCount", 0);
+						profileMap.put("followingCount", 0);
+						profileMap.put("photoURL", "");
+						profileMap.put("updatedAt", System.currentTimeMillis());
+
+						usersRef.child(userKey).setValue(profileMap)
+							.addOnCompleteListener(new OnCompleteListener<Void>() {
+								@Override
+								public void onComplete(@NonNull Task<Void> dbTask) {
+									setLoadingState(false);
+									Toast.makeText(LoginActivity.this, "Akun berhasil dibuat, selamat datang " + regName + "!", Toast.LENGTH_SHORT).show();
+									goToMainActivity();
+								}
+							});
+					}
+				});
+		}
 	}
 
 	private void goToMainActivity() {
@@ -399,72 +355,6 @@ public class LoginActivity extends AppCompatActivity {
 		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 		startActivity(intent);
 		finish();
-	}
-
-	private String httpGet(String urlStr) throws Exception {
-		URL url = new URL(urlStr);
-		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-		conn.setRequestMethod("GET");
-		conn.setConnectTimeout(10000);
-		conn.setReadTimeout(10000);
-		BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = br.readLine()) != null) {
-			sb.append(line);
-		}
-		br.close();
-		conn.disconnect();
-		return sb.toString();
-	}
-
-	private String httpPostJson(String urlStr, String jsonBody) throws Exception {
-		URL url = new URL(urlStr);
-		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-		conn.setRequestMethod("POST");
-		conn.setConnectTimeout(10000);
-		conn.setReadTimeout(10000);
-		conn.setDoOutput(true);
-		conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-
-		OutputStream os = conn.getOutputStream();
-		os.write(jsonBody.getBytes("UTF-8"));
-		os.flush();
-		os.close();
-
-		int code = conn.getResponseCode();
-		BufferedReader br = new BufferedReader(new InputStreamReader(
-			code >= 400 ? conn.getErrorStream() : conn.getInputStream(), "UTF-8"
-		));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = br.readLine()) != null) {
-			sb.append(line);
-		}
-		br.close();
-		conn.disconnect();
-
-		if (code >= 400) {
-			throw new Exception(sb.toString());
-		}
-		return sb.toString();
-	}
-
-	private void httpPutJson(String urlStr, String jsonBody) throws Exception {
-		URL url = new URL(urlStr);
-		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-		conn.setRequestMethod("PUT");
-		conn.setConnectTimeout(10000);
-		conn.setReadTimeout(10000);
-		conn.setDoOutput(true);
-		conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-
-		OutputStream os = conn.getOutputStream();
-		os.write(jsonBody.getBytes("UTF-8"));
-		os.flush();
-		os.close();
-		conn.getResponseCode();
-		conn.disconnect();
 	}
 
 	private void applyCustomFonts() {
