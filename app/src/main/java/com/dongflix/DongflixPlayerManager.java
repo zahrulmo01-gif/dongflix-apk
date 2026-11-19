@@ -14,7 +14,6 @@ import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -26,10 +25,8 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.core.app.NotificationCompat;
-import com.bumptech.glide.Glide;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -45,7 +42,6 @@ public class DongflixPlayerManager {
 	public MediaPlayer sharedMediaPlayer;
 	public boolean isMiniPlayerActive = false;
 
-	// State episode & video aktif agar bisa lanjut mulus saat kembali ke WatchActivity
 	public String activeSlug = "";
 	public String activeTitle = "";
 	public String activeEpisodeLabel = "";
@@ -64,10 +60,6 @@ public class DongflixPlayerManager {
 		return instance;
 	}
 
-	/**
-	 * Panggil sekali di onCreate MainActivity untuk mendaftarkan lifecycle otomatis
-	 * agar Mini Player selalu muncul di SEMUA halaman kecuali WatchActivity.
-	 */
 	public void initWithApplication(Application app) {
 		if (appContext != null) return;
 		appContext = app;
@@ -229,18 +221,23 @@ public class DongflixPlayerManager {
 
 		float d = activity.getResources().getDisplayMetrics().density;
 
-		// Container Mini Player Mengambang di Bawah (ala YouTube)
+		// Deteksi apakah activity punya bottom navbar (@id/navbar) seperti MainActivity
+		View bottomNav = activity.findViewById(R.id.navbar);
+		int bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
+			? (int) (86 * d)
+			: (int) (14 * d);
+
 		final LinearLayout miniBar = new LinearLayout(activity);
 		miniBar.setTag("DONGFLIX_MINI_PLAYER");
 		miniBar.setOrientation(LinearLayout.VERTICAL);
 
 		GradientDrawable barBg = new GradientDrawable();
 		barBg.setColor(Color.parseColor("#0E1117"));
-		barBg.setCornerRadius(12 * d);
-		barBg.setStroke((int)(1 * d), Color.parseColor("#1E2430"));
+		barBg.setCornerRadius(14 * d);
+		barBg.setStroke((int)(1 * d), Color.parseColor("#263B82F6"));
 		miniBar.setBackground(barBg);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			miniBar.setElevation(12 * d);
+			miniBar.setElevation(24 * d);
 		}
 
 		FrameLayout.LayoutParams rootLp = new FrameLayout.LayoutParams(
@@ -248,7 +245,7 @@ public class DongflixPlayerManager {
 			ViewGroup.LayoutParams.WRAP_CONTENT
 		);
 		rootLp.gravity = Gravity.BOTTOM;
-		rootLp.setMargins((int)(10 * d), 0, (int)(10 * d), (int)(12 * d));
+		rootLp.setMargins((int)(14 * d), 0, (int)(14 * d), bottomMarginPx);
 		miniBar.setLayoutParams(rootLp);
 
 		LinearLayout row = new LinearLayout(activity);
@@ -257,9 +254,8 @@ public class DongflixPlayerManager {
 		row.setPadding((int)(8 * d), (int)(8 * d), (int)(10 * d), (int)(8 * d));
 		miniBar.addView(row);
 
-		// Thumbnail / Live Video Preview 16:9 di Kiri
 		FrameLayout videoThumbBox = new FrameLayout(activity);
-		LinearLayout.LayoutParams thumbLp = new LinearLayout.LayoutParams((int)(108 * d), (int)(60 * d));
+		LinearLayout.LayoutParams thumbLp = new LinearLayout.LayoutParams((int)(104 * d), (int)(58 * d));
 		videoThumbBox.setLayoutParams(thumbLp);
 		videoThumbBox.setBackgroundColor(Color.BLACK);
 
@@ -284,7 +280,6 @@ public class DongflixPlayerManager {
 		videoThumbBox.addView(miniTexture);
 		row.addView(videoThumbBox);
 
-		// Judul & Episode di Tengah
 		LinearLayout infoCol = new LinearLayout(activity);
 		infoCol.setOrientation(LinearLayout.VERTICAL);
 		LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -309,7 +304,6 @@ public class DongflixPlayerManager {
 
 		row.addView(infoCol);
 
-		// Tombol Play / Pause
 		final ImageView btnMiniPlay = new ImageView(activity);
 		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int)(36 * d), (int)(36 * d));
 		playLp.rightMargin = (int)(6 * d);
@@ -338,7 +332,6 @@ public class DongflixPlayerManager {
 		});
 		row.addView(btnMiniPlay);
 
-		// Tombol Close (✕)
 		TextView btnClose = new TextView(activity);
 		btnClose.setLayoutParams(new LinearLayout.LayoutParams((int)(32 * d), (int)(32 * d)));
 		btnClose.setGravity(Gravity.CENTER);
@@ -354,7 +347,6 @@ public class DongflixPlayerManager {
 		});
 		row.addView(btnClose);
 
-		// Klik Mini Player -> Buka Kembali WatchActivity Tanpa Reload Video
 		miniBar.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
