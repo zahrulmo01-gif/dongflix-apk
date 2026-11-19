@@ -129,33 +129,18 @@ public class MainActivity extends AppCompatActivity {
 		loadLocalDownloads();
 	}
 
-	private Bitmap createBlueCircleProfileBitmap(int sizePx) {
-		Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-		Canvas canvas = new Canvas(bmp);
-
-		Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		bgPaint.setColor(Color.parseColor("#38BDF8"));
-		canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, bgPaint);
-
-		Drawable icon = androidx.core.content.ContextCompat.getDrawable(this, R.drawable.ic_profile);
-		if (icon != null) {
-			Drawable copy = icon.mutate();
-			androidx.core.graphics.drawable.DrawableCompat.setTint(copy, Color.parseColor("#041E3A"));
-			int pad = (int) (sizePx * 0.24f);
-			copy.setBounds(pad, pad, sizePx - pad, sizePx - pad);
-			copy.draw(canvas);
-		}
-		return bmp;
-	}
-
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
 		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
 		int sizePx = Math.max((int) (46 * d), target.getWidth() > 0 ? target.getWidth() : (int) (46 * d));
-		Bitmap fallbackBmp = createBlueCircleProfileBitmap(sizePx);
 
 		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
 			String cleanUrl = photoUrl.trim();
+			target.setPadding(0, 0, 0, 0);
+			target.clearColorFilter();
+			target.setBackground(null);
+			target.setScaleType(ImageView.ScaleType.CENTER_CROP);
+
 			if (cleanUrl.startsWith("data:image")) {
 				try {
 					String base64Part = cleanUrl.substring(cleanUrl.indexOf(",") + 1);
@@ -172,13 +157,20 @@ public class MainActivity extends AppCompatActivity {
 				Glide.with(getApplicationContext())
 					.load(Uri.parse(cleanUrl))
 					.circleCrop()
-					.placeholder(new BitmapDrawable(getResources(), fallbackBmp))
-					.error(new BitmapDrawable(getResources(), fallbackBmp))
+					.placeholder(R.drawable.ic_profile)
+					.error(R.drawable.ic_profile)
 					.into(target);
 				return;
 			}
 		}
-		target.setImageBitmap(fallbackBmp);
+
+		// Jika tidak ada profil: tanpa background biru, ic_profile lebih besar & warna putih
+		int pad = (int) (3 * d);
+		target.setBackground(null);
+		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		target.setPadding(pad, pad, pad, pad);
+		target.setImageResource(R.drawable.ic_profile);
+		target.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 	}
 
 	private Bitmap cropCenterSquare(Bitmap src) {
@@ -268,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
 			recyclerContinue.setNestedScrollingEnabled(false);
 			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT,
-				(int) (124 * d)
+				(int) (132 * d)
 			));
 		}
 
@@ -607,8 +599,8 @@ public class MainActivity extends AppCompatActivity {
 
 			FrameLayout card = new FrameLayout(parent.getContext());
 			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
-				(int) (235 * d),
-				(int) (116 * d)
+				(int) (245 * d),
+				(int) (124 * d)
 			);
 			lp.rightMargin = (int) (12 * d);
 			card.setLayoutParams(lp);
@@ -626,7 +618,7 @@ public class MainActivity extends AppCompatActivity {
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 			));
 			thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			thumb.setAlpha(0.55f);
+			thumb.setAlpha(0.65f);
 			thumb.setTag("thumb");
 			card.addView(thumb);
 
@@ -635,23 +627,25 @@ public class MainActivity extends AppCompatActivity {
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 			));
 			scrim.setBackground(new GradientDrawable(
-				GradientDrawable.Orientation.LEFT_RIGHT,
-				new int[]{Color.parseColor("#B3051224"), Color.parseColor("#66051224"), Color.parseColor("#33000000")}
+				GradientDrawable.Orientation.BOTTOM_TOP,
+				new int[]{Color.parseColor("#D9040E1C"), Color.parseColor("#55040E1C"), Color.TRANSPARENT}
 			));
 			card.addView(scrim);
 
-			LinearLayout content = new LinearLayout(parent.getContext());
-			content.setOrientation(LinearLayout.HORIZONTAL);
-			content.setGravity(Gravity.CENTER_VERTICAL);
-			content.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (14 * d));
-			content.setLayoutParams(new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-			));
+			// Judul & Episode di bagian bawah kartu (seperti contoh)
+			LinearLayout bottomRow = new LinearLayout(parent.getContext());
+			bottomRow.setOrientation(LinearLayout.HORIZONTAL);
+			bottomRow.setGravity(Gravity.CENTER_VERTICAL);
+			bottomRow.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
+			FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
+			);
+			bottomRow.setLayoutParams(bottomLp);
 
 			FrameLayout playCircle = new FrameLayout(parent.getContext());
-			int playSize = (int) (36 * d);
+			int playSize = (int) (34 * d);
 			LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(playSize, playSize);
-			playLp.rightMargin = (int) (12 * d);
+			playLp.rightMargin = (int) (10 * d);
 			playCircle.setLayoutParams(playLp);
 			GradientDrawable playBg = new GradientDrawable();
 			playBg.setShape(GradientDrawable.OVAL);
@@ -661,7 +655,7 @@ public class MainActivity extends AppCompatActivity {
 			TextView playGlyph = new TextView(parent.getContext());
 			playGlyph.setText("▶");
 			playGlyph.setTextColor(Color.parseColor("#041E3A"));
-			playGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+			playGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
 			playGlyph.setGravity(Gravity.CENTER);
 			playCircle.addView(playGlyph, new FrameLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
@@ -675,28 +669,28 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView tvTitle = new TextView(parent.getContext());
 			tvTitle.setTextColor(Color.WHITE);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
 			tvTitle.setTypeface(null, Typeface.BOLD);
 			tvTitle.setMaxLines(2);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 			tvTitle.setTag("title");
 
 			TextView tvEp = new TextView(parent.getContext());
-			tvEp.setTextColor(Color.parseColor("#BAE6FD"));
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+			tvEp.setTextColor(Color.parseColor("#CBD5E1"));
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 			tvEp.setTypeface(null, Typeface.BOLD);
 			tvEp.setTag("ep");
 
 			textCol.addView(tvTitle);
 			textCol.addView(tvEp);
 
-			content.addView(playCircle);
-			content.addView(textCol);
-			card.addView(content);
+			bottomRow.addView(playCircle);
+			bottomRow.addView(textCol);
+			card.addView(bottomRow);
 
 			View progressBar = new View(parent.getContext());
 			FrameLayout.LayoutParams progLp = new FrameLayout.LayoutParams(
-				(int) (135 * d), (int) (3 * d), Gravity.BOTTOM | Gravity.START
+				(int) (145 * d), (int) (3 * d), Gravity.BOTTOM | Gravity.START
 			);
 			progressBar.setLayoutParams(progLp);
 			progressBar.setBackgroundColor(Color.parseColor("#38BDF8"));
@@ -1365,12 +1359,7 @@ public class MainActivity extends AppCompatActivity {
 			btnTopChat.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					try {
-						Class<?> chatCls = Class.forName("com.dongflix.ChatActivity");
-						startActivity(new Intent(MainActivity.this, chatCls));
-					} catch (Exception e) {
-						Toast.makeText(MainActivity.this, "Membuka Obrolan Komunitas", Toast.LENGTH_SHORT).show();
-					}
+					startActivity(new Intent(MainActivity.this, ChatActivity.class));
 				}
 			});
 		}
