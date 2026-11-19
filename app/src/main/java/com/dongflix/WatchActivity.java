@@ -315,15 +315,6 @@ public class WatchActivity extends AppCompatActivity {
 		};
 	}
 
-	private int getSystemStatusBarHeight() {
-		int result = 0;
-		int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-		if (resourceId > 0) {
-			result = getResources().getDimensionPixelSize(resourceId);
-		}
-		return result;
-	}
-
 	private void initializeLogic() {
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -336,7 +327,11 @@ public class WatchActivity extends AppCompatActivity {
 
 		View rootWatch = findViewById(R.id.rootWatchLayout);
 		if (rootWatch != null) {
-			rootWatch.setPadding(0, getSystemStatusBarHeight(), 0, 0);
+			rootWatch.setPadding(0, 0, 0, 0);
+		}
+
+		if (btnLock != null) {
+			btnLock.setVisibility(View.GONE);
 		}
 
 		_WatchUI();
@@ -458,9 +453,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// ========================================================
-	// RASIO ASLI VIDEO (MENCEGAH VIDEO GEPENG / MELAR)
-	// ========================================================
 	public void adjustVideoAspectRatio() {
 		if (playerTextureView == null || layoutPlayer == null) return;
 		if (currentVideoWidth <= 0 || currentVideoHeight <= 0) return;
@@ -648,6 +640,23 @@ public class WatchActivity extends AppCompatActivity {
 						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 							bottomSheet.setElevation(0f);
 						}
+
+						View decor = getWindow().getDecorView();
+						int totalHeight = decor.getHeight();
+						int playerBottom = 0;
+						if (layoutPlayer != null) {
+							int[] loc = new int[2];
+							layoutPlayer.getLocationInWindow(loc);
+							playerBottom = loc[1] + layoutPlayer.getHeight();
+						}
+
+						int targetSheetHeight = totalHeight - playerBottom;
+						if (targetSheetHeight > (int)(200 * getResources().getDisplayMetrics().density)) {
+							ViewGroup.LayoutParams sheetLp = bottomSheet.getLayoutParams();
+							sheetLp.height = targetSheetHeight;
+							bottomSheet.setLayoutParams(sheetLp);
+						}
+
 						BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
 						behavior.setSkipCollapsed(true);
 						behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
@@ -1980,6 +1989,10 @@ public class WatchActivity extends AppCompatActivity {
 				textPlayerTitle.setVisibility(View.VISIBLE);
 			}
 
+			if (btnLock != null) {
+				btnLock.setVisibility(View.VISIBLE);
+			}
+
 			if (btnFullscreenEpisodes != null) {
 				btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 				btnFullscreenEpisodes.setVisibility(View.VISIBLE);
@@ -2068,7 +2081,7 @@ public class WatchActivity extends AppCompatActivity {
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
 			if (rootWatch != null) {
-				rootWatch.setPadding(0, getSystemStatusBarHeight(), 0, 0);
+				rootWatch.setPadding(0, 0, 0, 0);
 			}
 
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -2091,6 +2104,7 @@ public class WatchActivity extends AppCompatActivity {
 			if (scrollContent != null) scrollContent.setVisibility(View.VISIBLE);
 			if (dividerLine != null) dividerLine.setVisibility(View.VISIBLE);
 			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
+			if (btnLock != null) btnLock.setVisibility(View.GONE);
 			if (btnFullscreenEpisodes != null) btnFullscreenEpisodes.setVisibility(View.GONE);
 
 			int sideMarginNormal = (int) (12 * density);
@@ -2719,7 +2733,7 @@ public class WatchActivity extends AppCompatActivity {
 		conn.setReadTimeout(10000);
 		conn.setDoOutput(true);
 		conn.setRequestProperty("Content-Type", "application/json");
-		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
 
 		OutputStream os = conn.getOutputStream();
 		os.write(jsonPayload.getBytes("UTF-8"));
