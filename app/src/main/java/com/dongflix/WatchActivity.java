@@ -243,123 +243,11 @@ public class WatchActivity extends AppCompatActivity {
 				final String _tag = _param1;
 				final String _response = _param2;
 				if (_tag.equals("slug")) {
-					isEpisodesLoading = false;
-					eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
-					if (eps != null && !eps.isEmpty()) {
-						Collections.reverse(eps);
-						isNewestFirst = true;
-						if (textSortEpisodes != null) textSortEpisodes.setText("Terbaru");
-
-						if (recyclerEpisode != null) {
-							recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
-						}
-						episodeList = eps;
-
-						if (isResumingFromMiniPlayer && mediaPlayer != null) {
-							DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
-							currentEpisodeIndex = mgr.activeEpisodeIndex;
-							if (recyclerEpisode != null) {
-								recyclerEpisode.scrollToPosition(currentEpisodeIndex);
-								if (recyclerEpisode.getAdapter() != null) {
-									recyclerEpisode.getAdapter().notifyDataSetChanged();
-								}
-							}
-							updateEpisodeNavButtons();
-						} else {
-							currentEpisodeIndex = 0;
-							if (playerTextureView != null && playerTextureView.isAvailable()) {
-								playEpisodeByIndex(0);
-							} else if (playerTextureView != null) {
-								playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-									@Override
-									public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-										playerSurface = new Surface(st);
-										playEpisodeByIndex(0);
-									}
-									@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
-									@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-									@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
-								});
-							}
-						}
-					}
-					checkStopShimmerIfDone();
+					DongflixPlayerManager.getInstance().cachedEpisodesJson = _response;
+					handleEpisodesJson(_response, false);
 				} else {
-					isDetailLoading = false;
-					isRekomLoading = false;
-					clearDetailShimmer();
-
-					String targetSlug = getIntent().getStringExtra("slug");
-					if (targetSlug != null && !targetSlug.isEmpty()) {
-						try {
-							JSONArray jsonArray = new JSONArray(_response);
-							for (int i = 0; i < jsonArray.length(); i++) {
-								JSONObject obj = jsonArray.getJSONObject(i);
-								if (targetSlug.equals(obj.optString("slug"))) {
-									detailTitle = obj.optString("title");
-									detailSynopsis = obj.optString("synopsis")
-											.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
-											.replaceAll("[^\\x20-\\x7E\\n]", "")
-											.trim();
-									detailStatus = obj.optString("status", "Ongoing");
-									if (detailStatus.isEmpty()) detailStatus = "Ongoing";
-
-									detailCover = obj.optString("cover").trim();
-									if (detailCover.contains("i.ibb.co.com")) {
-										detailCover = detailCover.replace("i.ibb.co.com", "i.ibb.co");
-									}
-									if (detailCover.startsWith("http://")) {
-										detailCover = detailCover.replace("http://", "https://");
-									}
-									String released = obj.optString("released");
-
-									detailFirstGenre = "-";
-									currentGenresList.clear();
-									StringBuilder allGenresSb = new StringBuilder();
-									JSONArray genresArray = obj.optJSONArray("genres");
-									if (genresArray != null && genresArray.length() > 0) {
-										detailFirstGenre = genresArray.optString(0);
-										for (int g = 0; g < genresArray.length(); g++) {
-											String gStr = genresArray.optString(g).trim();
-											if (!gStr.isEmpty()) {
-												currentGenresList.add(gStr.toLowerCase());
-												if (allGenresSb.length() > 0) allGenresSb.append(", ");
-												allGenresSb.append(gStr);
-											}
-										}
-									}
-									detailAllGenres = allGenresSb.length() > 0 ? allGenresSb.toString() : detailFirstGenre;
-
-									if (released.length() >= 4) {
-										detailYear = released.substring(released.length() - 4);
-									}
-
-									if (textJudul != null) textJudul.setText(detailTitle);
-									if (textRating != null) textRating.setText(detailStatus);
-									if (textYear != null) textYear.setText(detailYear);
-									if (textGenre != null) textGenre.setText(detailFirstGenre);
-
-									if (imagePoster != null && !detailCover.isEmpty()) {
-										Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(imagePoster);
-									}
-
-									DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
-									mgr.activeTitle = detailTitle;
-									mgr.activeCoverUrl = detailCover;
-									break;
-								}
-							}
-
-							ArrayList<HashMap<String, Object>> allList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
-							if (allList != null && recyclerRekomendasi != null) {
-								ArrayList<HashMap<String, Object>> smartRekomList = getSmartRecommendations(allList, targetSlug, 6);
-								recyclerRekomendasi.setAdapter(new RecyclerRekomendasiAdapter(smartRekomList));
-							}
-						} catch (Exception e) {
-							e.printStackTrace();
-						}
-					}
-					checkStopShimmerIfDone();
+					DongflixPlayerManager.getInstance().cachedAllCatalogJson = _response;
+					handleCatalogJson(_response);
 				}
 			}
 
@@ -374,6 +262,128 @@ public class WatchActivity extends AppCompatActivity {
 				checkStopShimmerIfDone();
 			}
 		};
+	}
+
+	private void handleEpisodesJson(String _response, boolean fromCache) {
+		isEpisodesLoading = false;
+		eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
+		if (eps != null && !eps.isEmpty()) {
+			Collections.reverse(eps);
+			isNewestFirst = true;
+			if (textSortEpisodes != null) textSortEpisodes.setText("Terbaru");
+
+			if (recyclerEpisode != null) {
+				recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
+			}
+			episodeList = eps;
+
+			if (fromCache || (isResumingFromMiniPlayer && mediaPlayer != null)) {
+				DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
+				currentEpisodeIndex = mgr.activeEpisodeIndex;
+				if (recyclerEpisode != null) {
+					recyclerEpisode.scrollToPosition(currentEpisodeIndex);
+					if (recyclerEpisode.getAdapter() != null) {
+						recyclerEpisode.getAdapter().notifyDataSetChanged();
+					}
+				}
+				updateEpisodeNavButtons();
+			} else {
+				currentEpisodeIndex = 0;
+				if (playerTextureView != null && playerTextureView.isAvailable()) {
+					playEpisodeByIndex(0);
+				} else if (playerTextureView != null) {
+					playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+						@Override
+						public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+							playerSurface = new Surface(st);
+							playEpisodeByIndex(0);
+						}
+						@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
+						@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
+						@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+					});
+				}
+			}
+		}
+		checkStopShimmerIfDone();
+	}
+
+	private void handleCatalogJson(String _response) {
+		isDetailLoading = false;
+		isRekomLoading = false;
+		clearDetailShimmer();
+
+		String targetSlug = getIntent().getStringExtra("slug");
+		if (targetSlug != null && !targetSlug.isEmpty()) {
+			try {
+				JSONArray jsonArray = new JSONArray(_response);
+				for (int i = 0; i < jsonArray.length(); i++) {
+					JSONObject obj = jsonArray.getJSONObject(i);
+					if (targetSlug.equals(obj.optString("slug"))) {
+						detailTitle = obj.optString("title");
+						detailSynopsis = obj.optString("synopsis")
+								.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
+								.replaceAll("[^\\x20-\\x7E\\n]", "")
+								.trim();
+						detailStatus = obj.optString("status", "Ongoing");
+						if (detailStatus.isEmpty()) detailStatus = "Ongoing";
+
+						detailCover = obj.optString("cover").trim();
+						if (detailCover.contains("i.ibb.co.com")) {
+							detailCover = detailCover.replace("i.ibb.co.com", "i.ibb.co");
+						}
+						if (detailCover.startsWith("http://")) {
+							detailCover = detailCover.replace("http://", "https://");
+						}
+						String released = obj.optString("released");
+
+						detailFirstGenre = "-";
+						currentGenresList.clear();
+						StringBuilder allGenresSb = new StringBuilder();
+						JSONArray genresArray = obj.optJSONArray("genres");
+						if (genresArray != null && genresArray.length() > 0) {
+							detailFirstGenre = genresArray.optString(0);
+							for (int g = 0; g < genresArray.length(); g++) {
+								String gStr = genresArray.optString(g).trim();
+								if (!gStr.isEmpty()) {
+									currentGenresList.add(gStr.toLowerCase());
+									if (allGenresSb.length() > 0) allGenresSb.append(", ");
+									allGenresSb.append(gStr);
+								}
+							}
+						}
+						detailAllGenres = allGenresSb.length() > 0 ? allGenresSb.toString() : detailFirstGenre;
+
+						if (released.length() >= 4) {
+							detailYear = released.substring(released.length() - 4);
+						}
+
+						if (textJudul != null) textJudul.setText(detailTitle);
+						if (textRating != null) textRating.setText(detailStatus);
+						if (textYear != null) textYear.setText(detailYear);
+						if (textGenre != null) textGenre.setText(detailFirstGenre);
+
+						if (imagePoster != null && !detailCover.isEmpty()) {
+							Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(imagePoster);
+						}
+
+						DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
+						mgr.activeTitle = detailTitle;
+						mgr.activeCoverUrl = detailCover;
+						break;
+					}
+				}
+
+				ArrayList<HashMap<String, Object>> allList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
+				if (allList != null && recyclerRekomendasi != null) {
+					ArrayList<HashMap<String, Object>> smartRekomList = getSmartRecommendations(allList, targetSlug, 6);
+					recyclerRekomendasi.setAdapter(new RecyclerRekomendasiAdapter(smartRekomList));
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		checkStopShimmerIfDone();
 	}
 
 	private Set<String> extractKeywords(String text) {
@@ -631,28 +641,58 @@ public class WatchActivity extends AppCompatActivity {
 			recyclerRekomendasi.setNestedScrollingEnabled(false);
 		}
 
-		startLoadingShimmer();
-
 		String slug = getIntent().getStringExtra("slug");
 		if (slug == null) slug = "";
 
 		DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
 		boolean resumeFlag = getIntent().getBooleanExtra("resume_mini_player", false);
+
 		if ((resumeFlag || (mgr.isMiniPlayerActive && slug.equals(mgr.activeSlug))) && mgr.sharedMediaPlayer != null) {
+			// LANJUTKAN DARI MINI PLAYER TANPA REFRESH API MAUPUN RE-BUFFERING VIDEO
 			isResumingFromMiniPlayer = true;
 			mediaPlayer = mgr.sharedMediaPlayer;
 			mgr.isMiniPlayerActive = false;
+
 			currentPlayingUrl = mgr.activeStreamUrl;
 			currentEpisodeIndex = mgr.activeEpisodeIndex;
+			selectedServerIndex = mgr.activeSelectedServerIndex;
+			selectedQualityIndex = mgr.activeSelectedQualityIndex;
+			isAutoQualityMode = mgr.activeIsAutoQuality;
+
 			if (!mgr.activeEpisodeList.isEmpty()) {
 				episodeList = new ArrayList<>(mgr.activeEpisodeList);
 			}
+			if (!mgr.activeServerNames.isEmpty()) {
+				currentEpisodeServerNames = new ArrayList<>(mgr.activeServerNames);
+				currentEpisodeServerUrls = new ArrayList<>(mgr.activeServerUrls);
+			}
+			if (!mgr.activeQualityNames.isEmpty()) {
+				qualityNames = new ArrayList<>(mgr.activeQualityNames);
+				qualityUrls = new ArrayList<>(mgr.activeQualityUrls);
+				updateQualityBadgeText();
+			}
+			if (textActionServer != null && !mgr.activeServerName.isEmpty()) {
+				textActionServer.setText(mgr.activeServerName);
+			}
+
+			// Gunakan JSON yang sudah di-cache supaya langsung tampil instan tanpa shimmer
+			if (!mgr.cachedAllCatalogJson.isEmpty()) {
+				handleCatalogJson(mgr.cachedAllCatalogJson);
+			} else {
+				req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
+			}
+
+			if (!mgr.cachedEpisodesJson.isEmpty()) {
+				handleEpisodesJson(mgr.cachedEpisodesJson, true);
+			} else {
+				req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
+			}
 		} else {
 			mgr.stopAndCloseEverything(this);
+			startLoadingShimmer();
+			req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
+			req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
 		}
-
-		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
-		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
 
 		_initPlayerViews();
 		applyCustomFonts();
@@ -1670,6 +1710,15 @@ public class WatchActivity extends AppCompatActivity {
 			mgr.activeEpisodeIndex = currentEpisodeIndex;
 			mgr.activeEpisodeList = new ArrayList<>(episodeList);
 
+			mgr.activeServerName = (textActionServer != null) ? textActionServer.getText().toString() : "";
+			mgr.activeSelectedServerIndex = selectedServerIndex;
+			mgr.activeServerNames = new ArrayList<>(currentEpisodeServerNames);
+			mgr.activeServerUrls = new ArrayList<>(currentEpisodeServerUrls);
+			mgr.activeQualityNames = new ArrayList<>(qualityNames);
+			mgr.activeQualityUrls = new ArrayList<>(qualityUrls);
+			mgr.activeSelectedQualityIndex = selectedQualityIndex;
+			mgr.activeIsAutoQuality = isAutoQualityMode;
+
 			if (episodeList != null && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.size()) {
 				Object epObj = episodeList.get(currentEpisodeIndex).get("episode");
 				mgr.activeEpisodeLabel = epObj != null ? epObj.toString().replace("Ep ", "").replace("Eps ", "").trim() : String.valueOf(currentEpisodeIndex + 1);
@@ -1679,6 +1728,7 @@ public class WatchActivity extends AppCompatActivity {
 			mediaPlayer = null;
 		}
 		finish();
+		overridePendingTransition(R.anim.no_anim, R.anim.slide_down_exit);
 	}
 
 	@Override
@@ -1695,7 +1745,6 @@ public class WatchActivity extends AppCompatActivity {
 			playerHandler.removeCallbacksAndMessages(null);
 		}
 
-		// Hanya release mediaPlayer jika tidak sedang dipindahkan ke Mini Player
 		if (mediaPlayer != null && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 			try {
 				if (mediaPlayer.isPlaying()) {
