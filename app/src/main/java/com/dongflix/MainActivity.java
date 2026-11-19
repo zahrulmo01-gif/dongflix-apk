@@ -72,15 +72,16 @@ public class MainActivity extends AppCompatActivity {
 	private EditText inputSearch;
 
 	// Lanjutkan Menonton (di atas Populer Hari Ini)
-	private LinearLayout continueWatchingContainer;
-	private RecyclerView recyclerContinueWatching;
+	private LinearLayout layoutSectionContinue;
+	private TextView textTitleContinue, textContinueSeeAll;
+	private RecyclerView recyclerContinue;
 
 	// Pustaka (Riwayat, Daftarku, Unduhan)
 	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
 	private View linePustakaRiwayat, linePustakaDaftarku, linePustakaUnduhan;
 	private TextView textPustakaSectionLabel;
 	private RecyclerView recyclerPustakaList;
-	private int activePustakaTab = 0; // 0 = Riwayat, 1 = Daftarku, 2 = Unduhan
+	private int activePustakaTab = 0;
 
 	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
 	private LinearLayout tabBeranda, tabPustaka, tabAkun;
@@ -128,27 +129,7 @@ public class MainActivity extends AppCompatActivity {
 		loadLocalDownloads();
 	}
 
-	private String extractTwoInitials(String nameOrEmail) {
-		if (nameOrEmail == null || nameOrEmail.trim().isEmpty()) return "DF";
-		String clean = nameOrEmail.trim();
-		if (clean.contains("@")) {
-			clean = clean.substring(0, clean.indexOf("@"));
-		}
-		String[] parts = clean.split("[\\s._-]+");
-		StringBuilder initials = new StringBuilder();
-		for (String part : parts) {
-			if (!part.isEmpty()) {
-				initials.append(Character.toUpperCase(part.charAt(0)));
-				if (initials.length() == 2) break;
-			}
-		}
-		if (initials.length() == 1 && clean.length() >= 2) {
-			initials.append(Character.toUpperCase(clean.charAt(1)));
-		}
-		return initials.length() > 0 ? initials.toString() : "DF";
-	}
-
-	private Bitmap createInitialsAvatarBitmap(String text, int sizePx) {
+	private Bitmap createBlueCircleProfileBitmap(int sizePx) {
 		Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
 		Canvas canvas = new Canvas(bmp);
 
@@ -156,31 +137,22 @@ public class MainActivity extends AppCompatActivity {
 		bgPaint.setColor(Color.parseColor("#38BDF8"));
 		canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, bgPaint);
 
-		Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		borderPaint.setStyle(Paint.Style.STROKE);
-		borderPaint.setStrokeWidth(Math.max(2f, sizePx * 0.05f));
-		borderPaint.setColor(Color.parseColor("#BAE6FD"));
-		canvas.drawCircle(sizePx / 2f, sizePx / 2f, (sizePx / 2f) - (borderPaint.getStrokeWidth() / 2f), borderPaint);
-
-		Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		textPaint.setColor(Color.parseColor("#041E3A"));
-		textPaint.setTextAlign(Paint.Align.CENTER);
-		textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-		textPaint.setTextSize(sizePx * 0.4f);
-
-		Paint.FontMetrics fm = textPaint.getFontMetrics();
-		float yCenter = (sizePx / 2f) - ((fm.ascent + fm.descent) / 2f);
-		canvas.drawText(text, sizePx / 2f, yCenter, textPaint);
-
+		Drawable icon = androidx.core.content.ContextCompat.getDrawable(this, R.drawable.ic_profile);
+		if (icon != null) {
+			Drawable copy = icon.mutate();
+			androidx.core.graphics.drawable.DrawableCompat.setTint(copy, Color.parseColor("#041E3A"));
+			int pad = (int) (sizePx * 0.24f);
+			copy.setBounds(pad, pad, sizePx - pad, sizePx - pad);
+			copy.draw(canvas);
+		}
 		return bmp;
 	}
 
-	private void applyCircularAvatar(ImageView target, String photoUrl, String displayName) {
+	private void applyCircularAvatar(ImageView target, String photoUrl) {
 		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		int sizePx = Math.max((int) (38 * d), target.getWidth() > 0 ? target.getWidth() : (int) (38 * d));
-		String initials = extractTwoInitials(displayName);
-		Bitmap fallbackBmp = createInitialsAvatarBitmap(initials, sizePx);
+		int sizePx = Math.max((int) (46 * d), target.getWidth() > 0 ? target.getWidth() : (int) (46 * d));
+		Bitmap fallbackBmp = createBlueCircleProfileBitmap(sizePx);
 
 		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
 			String cleanUrl = photoUrl.trim();
@@ -242,7 +214,8 @@ public class MainActivity extends AppCompatActivity {
 		TextView tvProfileName = findViewById(R.id.textview65);
 		if (tvProfileName != null) tvProfileName.setText(fallbackName);
 
-		applyCircularAvatar(imgUserAvatar, "", fallbackName);
+		String initialPhoto = currentUser.getPhotoUrl() != null ? currentUser.getPhotoUrl().toString() : "";
+		applyCircularAvatar(imgUserAvatar, initialPhoto);
 
 		currentUserKey = email.replace(".", ",");
 		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
@@ -251,7 +224,10 @@ public class MainActivity extends AppCompatActivity {
 			.addListenerForSingleValueEvent(new ValueEventListener() {
 				@Override
 				public void onDataChange(@NonNull DataSnapshot snapshot) {
-					if (!snapshot.exists()) return;
+					if (!snapshot.exists()) {
+						applyCircularAvatar(imgUserAvatar, "");
+						return;
+					}
 
 					String resolvedName = fallbackName;
 					Object nameObj = snapshot.child("name").getValue();
@@ -268,78 +244,45 @@ public class MainActivity extends AppCompatActivity {
 						photoUrl = photoObj.toString().trim();
 					}
 
-					applyCircularAvatar(imgUserAvatar, photoUrl, resolvedName);
+					applyCircularAvatar(imgUserAvatar, photoUrl);
 				}
 
 				@Override
-				public void onCancelled(@NonNull DatabaseError error) {}
+				public void onCancelled(@NonNull DatabaseError error) {
+					applyCircularAvatar(imgUserAvatar, "");
+				}
 			});
 	}
 
 	private void setupContinueWatchingSection() {
-		if (recyclerPopular == null || !(recyclerPopular.getParent() instanceof ViewGroup)) return;
-		ViewGroup parent = (ViewGroup) recyclerPopular.getParent();
-		int idx = parent.indexOfChild(recyclerPopular);
-		if (idx < 0) return;
+		layoutSectionContinue = findViewById(R.id.layout_section_continue);
+		textTitleContinue = findViewById(R.id.text_title_continue);
+		textContinueSeeAll = findViewById(R.id.text_continue_see_all);
+		recyclerContinue = findViewById(R.id.recyclerContinue);
 
-		float d = getResources().getDisplayMetrics().density;
+		if (recyclerContinue != null) {
+			float d = getResources().getDisplayMetrics().density;
+			recyclerContinue.setLayoutManager(
+				new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+			);
+			recyclerContinue.setNestedScrollingEnabled(false);
+			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				(int) (124 * d)
+			));
+		}
 
-		continueWatchingContainer = new LinearLayout(this);
-		continueWatchingContainer.setOrientation(LinearLayout.VERTICAL);
-		continueWatchingContainer.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT,
-			ViewGroup.LayoutParams.WRAP_CONTENT
-		));
-		continueWatchingContainer.setPadding(0, (int) (8 * d), 0, (int) (18 * d));
-		continueWatchingContainer.setVisibility(View.GONE);
-
-		LinearLayout headerRow = new LinearLayout(this);
-		headerRow.setOrientation(LinearLayout.HORIZONTAL);
-		headerRow.setGravity(Gravity.CENTER_VERTICAL);
-		headerRow.setPadding((int) (16 * d), 0, (int) (16 * d), (int) (12 * d));
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Lanjutkan Menonton");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-		tvTitle.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
-			0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-		);
-		tvTitle.setLayoutParams(titleLp);
-
-		TextView tvSeeAll = new TextView(this);
-		tvSeeAll.setText("Lihat Semua >");
-		tvSeeAll.setTextColor(Color.parseColor("#94A3B8"));
-		tvSeeAll.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		tvSeeAll.setTypeface(null, Typeface.BOLD);
-		tvSeeAll.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				if (tabPustaka != null) {
-					activePustakaTab = 0;
-					tabPustaka.performClick();
+		if (textContinueSeeAll != null) {
+			textContinueSeeAll.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (tabPustaka != null) {
+						activePustakaTab = 0;
+						tabPustaka.performClick();
+					}
 				}
-			}
-		});
-
-		headerRow.addView(tvTitle);
-		headerRow.addView(tvSeeAll);
-
-		recyclerContinueWatching = new RecyclerView(this);
-		recyclerContinueWatching.setLayoutManager(
-			new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-		);
-		recyclerContinueWatching.setClipToPadding(false);
-		recyclerContinueWatching.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		recyclerContinueWatching.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT,
-			(int) (132 * d)
-		));
-
-		continueWatchingContainer.addView(headerRow);
-		continueWatchingContainer.addView(recyclerContinueWatching);
-		parent.addView(continueWatchingContainer, idx);
+			});
+		}
 	}
 
 	private void setupPustakaSection() {
@@ -370,7 +313,6 @@ public class MainActivity extends AppCompatActivity {
 		tvHeaderTitle.setTypeface(null, Typeface.BOLD);
 		root.addView(tvHeaderTitle);
 
-		// Sub-tab bar: Riwayat | Daftarku | Unduhan
 		LinearLayout tabsBar = new LinearLayout(this);
 		tabsBar.setOrientation(LinearLayout.HORIZONTAL);
 		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(
@@ -466,7 +408,6 @@ public class MainActivity extends AppCompatActivity {
 			.getReference("users")
 			.child(key);
 
-		// 1. Ambil history dari Firebase Realtime Database
 		userNodeRef.child("history").addValueEventListener(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
@@ -499,7 +440,6 @@ public class MainActivity extends AppCompatActivity {
 			public void onCancelled(@NonNull DatabaseError error) {}
 		});
 
-		// 2. Ambil favorites dari Firebase Realtime Database
 		userNodeRef.child("favorites").addValueEventListener(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
@@ -561,13 +501,13 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	private void renderContinueWatchingCards() {
-		if (continueWatchingContainer == null || recyclerContinueWatching == null) return;
+		if (layoutSectionContinue == null || recyclerContinue == null) return;
 		if (historyList == null || historyList.isEmpty()) {
-			continueWatchingContainer.setVisibility(View.GONE);
+			layoutSectionContinue.setVisibility(View.GONE);
 			return;
 		}
-		continueWatchingContainer.setVisibility(View.VISIBLE);
-		recyclerContinueWatching.setAdapter(new ContinueWatchingAdapter(historyList));
+		layoutSectionContinue.setVisibility(View.VISIBLE);
+		recyclerContinue.setAdapter(new ContinueWatchingAdapter(historyList));
 	}
 
 	private void loadLocalDownloads() {
@@ -667,15 +607,15 @@ public class MainActivity extends AppCompatActivity {
 
 			FrameLayout card = new FrameLayout(parent.getContext());
 			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
-				(int) (220 * d),
-				(int) (124 * d)
+				(int) (235 * d),
+				(int) (116 * d)
 			);
 			lp.rightMargin = (int) (12 * d);
 			card.setLayoutParams(lp);
 
 			GradientDrawable cardBg = new GradientDrawable(
 				GradientDrawable.Orientation.LEFT_RIGHT,
-				new int[]{Color.parseColor("#081A33"), Color.parseColor("#0D2A4A")}
+				new int[]{Color.parseColor("#071830"), Color.parseColor("#0C2847")}
 			);
 			cardBg.setCornerRadius(16 * d);
 			card.setBackground(cardBg);
@@ -686,14 +626,24 @@ public class MainActivity extends AppCompatActivity {
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 			));
 			thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			thumb.setAlpha(0.45f);
+			thumb.setAlpha(0.55f);
 			thumb.setTag("thumb");
 			card.addView(thumb);
+
+			View scrim = new View(parent.getContext());
+			scrim.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+			scrim.setBackground(new GradientDrawable(
+				GradientDrawable.Orientation.LEFT_RIGHT,
+				new int[]{Color.parseColor("#B3051224"), Color.parseColor("#66051224"), Color.parseColor("#33000000")}
+			));
+			card.addView(scrim);
 
 			LinearLayout content = new LinearLayout(parent.getContext());
 			content.setOrientation(LinearLayout.HORIZONTAL);
 			content.setGravity(Gravity.CENTER_VERTICAL);
-			content.setPadding((int) (14 * d), (int) (14 * d), (int) (14 * d), (int) (14 * d));
+			content.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (14 * d));
 			content.setLayoutParams(new FrameLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 			));
@@ -710,7 +660,7 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView playGlyph = new TextView(parent.getContext());
 			playGlyph.setText("▶");
-			playGlyph.setTextColor(Color.WHITE);
+			playGlyph.setTextColor(Color.parseColor("#041E3A"));
 			playGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
 			playGlyph.setGravity(Gravity.CENTER);
 			playCircle.addView(playGlyph, new FrameLayout.LayoutParams(
@@ -732,7 +682,7 @@ public class MainActivity extends AppCompatActivity {
 			tvTitle.setTag("title");
 
 			TextView tvEp = new TextView(parent.getContext());
-			tvEp.setTextColor(Color.parseColor("#93C5FD"));
+			tvEp.setTextColor(Color.parseColor("#BAE6FD"));
 			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
 			tvEp.setTypeface(null, Typeface.BOLD);
 			tvEp.setTag("ep");
@@ -743,6 +693,14 @@ public class MainActivity extends AppCompatActivity {
 			content.addView(playCircle);
 			content.addView(textCol);
 			card.addView(content);
+
+			View progressBar = new View(parent.getContext());
+			FrameLayout.LayoutParams progLp = new FrameLayout.LayoutParams(
+				(int) (135 * d), (int) (3 * d), Gravity.BOTTOM | Gravity.START
+			);
+			progressBar.setLayoutParams(progLp);
+			progressBar.setBackgroundColor(Color.parseColor("#38BDF8"));
+			card.addView(progressBar);
 
 			return new ViewHolder(card);
 		}
