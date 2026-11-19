@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:id="@+id/chat_root"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:background="#000000">
+
+	<LinearLayout
+		android:id="@+id/chat_main_column"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:orientation="vertical">
+
+		<!-- Header Live Chat -->
+		<LinearLayout
+			android:id="@+id/chat_header"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:background="#090A0D"
+			android:gravity="center_vertical"
+			android:orientation="horizontal"
+			android:paddingLeft="16dp"
+			android:paddingTop="12dp"
+			android:paddingRight="16dp"
+			android:paddingBottom="12dp">
+
+			<FrameLayout
+				android:id="@+id/btn_chat_back"
+				android:layout_width="40dp"
+				android:layout_height="40dp"
+				android:layout_marginEnd="12dp"
+				android:background="#141720">
+
+				<TextView
+					android:id="@+id/text_chat_back_arrow"
+					android:layout_width="match_parent"
+					android:layout_height="match_parent"
+					android:gravity="center"
+					android:text="‹"
+					android:textColor="#FFFFFF"
+					android:textSize="22sp" />
+			</FrameLayout>
+
+			<LinearLayout
+				android:id="@+id/chat_header_titles"
+				android:layout_width="0dp"
+				android:layout_height="wrap_content"
+				android:layout_weight="1"
+				android:orientation="vertical">
+
+				<TextView
+					android:id="@+id/text_chat_title"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Live Chat Dongflix"
+					android:textColor="#FFFFFF"
+					android:textSize="16sp"
+					android:textStyle="bold" />
+
+				<LinearLayout
+					android:id="@+id/chat_status_row"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="2dp"
+					android:gravity="center_vertical"
+					android:orientation="horizontal">
+
+					<View
+						android:id="@+id/view_online_dot"
+						android:layout_width="7dp"
+						android:layout_height="7dp"
+						android:layout_marginEnd="6dp"
+						android:background="#22C55E" />
+
+					<TextView
+						android:id="@+id/text_online_status"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:text="Komunitas Online"
+						android:textColor="#22C55E"
+						android:textSize="11.5sp"
+						android:textStyle="bold" />
+				</LinearLayout>
+			</LinearLayout>
+		</LinearLayout>
+
+		<!-- Daftar Pesan -->
+		<ScrollView
+			android:id="@+id/chat_scroll_view"
+			android:layout_width="match_parent"
+			android:layout_height="0dp"
+			android:layout_weight="1"
+			android:clipToPadding="false"
+			android:fillViewport="true"
+			android:paddingLeft="14dp"
+			android:paddingTop="12dp"
+			android:paddingRight="14dp"
+			android:paddingBottom="12dp">
+
+			<LinearLayout
+				android:id="@+id/chat_messages_container"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:orientation="vertical" />
+		</ScrollView>
+
+		<!-- Area Input Bawah -->
+		<LinearLayout
+			android:id="@+id/chat_bottom_bar"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:background="#0A0A0E"
+			android:orientation="vertical"
+			android:paddingLeft="14dp"
+			android:paddingTop="8dp"
+			android:paddingRight="14dp"
+			android:paddingBottom="12dp">
+
+			<!-- Banner Reply / Quote -->
+			<LinearLayout
+				android:id="@+id/reply_banner"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="4dp"
+				android:background="#111827"
+				android:gravity="center_vertical"
+				android:orientation="horizontal"
+				android:paddingLeft="12dp"
+				android:paddingTop="6dp"
+				android:paddingRight="12dp"
+				android:paddingBottom="6dp"
+				android:visibility="gone">
+
+				<LinearLayout
+					android:layout_width="0dp"
+					android:layout_height="wrap_content"
+					android:layout_weight="1"
+					android:orientation="vertical">
+
+					<TextView
+						android:id="@+id/reply_target_author"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:text="Membalas..."
+						android:textColor="#A855F7"
+						android:textSize="11.5sp"
+						android:textStyle="bold" />
+
+					<TextView
+						android:id="@+id/reply_target_snippet"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:ellipsize="end"
+						android:maxLines="1"
+						android:text="..."
+						android:textColor="#94A3B8"
+						android:textSize="11.5sp" />
+				</LinearLayout>
+
+				<TextView
+					android:id="@+id/btn_cancel_reply"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:paddingStart="8dp"
+					android:paddingEnd="4dp"
+					android:text="✕"
+					android:textColor="#94A3B8"
+					android:textSize="15sp" />
+			</LinearLayout>
+
+			<!-- Preview Stiker Terpilih -->
+			<LinearLayout
+				android:id="@+id/sticker_preview_box"
+				android:layout_width="wrap_content"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="6dp"
+				android:gravity="center_vertical"
+				android:orientation="horizontal"
+				android:visibility="gone">
+
+				<ImageView
+					android:id="@+id/sticker_preview_img"
+					android:layout_width="56dp"
+					android:layout_height="56dp"
+					android:scaleType="fitCenter" />
+
+				<TextView
+					android:id="@+id/btn_remove_sticker"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:layout_marginStart="8dp"
+					android:text="✕"
+					android:textColor="#EF4444"
+					android:textSize="14sp"
+					android:textStyle="bold" />
+			</LinearLayout>
+
+			<!-- Dropdown Mention @username -->
+			<LinearLayout
+				android:id="@+id/mention_menu"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginBottom="6dp"
+				android:background="#0B1329"
+				android:orientation="vertical"
+				android:padding="6dp"
+				android:visibility="gone" />
+
+			<!-- Baris Input Teks + Stiker + Kirim -->
+			<LinearLayout
+				android:id="@+id/chat_input_row"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:background="#090D16"
+				android:gravity="center_vertical"
+				android:orientation="horizontal"
+				android:paddingLeft="14dp"
+				android:paddingTop="4dp"
+				android:paddingRight="6dp"
+				android:paddingBottom="4dp">
+
+				<EditText
+					android:id="@+id/chat_input"
+					android:layout_width="0dp"
+					android:layout_height="40dp"
+					android:layout_weight="1"
+					android:background="@android:color/transparent"
+					android:hint="Kirim pesan... (ketik @ untuk tag)"
+					android:inputType="text"
+					android:singleLine="true"
+					android:textColor="#FFFFFF"
+					android:textColorHint="#64748B"
+					android:textSize="14sp" />
+
+				<FrameLayout
+					android:id="@+id/btn_open_sticker"
+					android:layout_width="36dp"
+					android:layout_height="36dp"
+					android:layout_marginEnd="6dp"
+					android:background="#182032">
+
+					<TextView
+						android:layout_width="match_parent"
+						android:layout_height="match_parent"
+						android:gravity="center"
+						android:text="☺"
+						android:textColor="#CBD5E1"
+						android:textSize="16sp" />
+				</FrameLayout>
+
+				<FrameLayout
+					android:id="@+id/btn_send_chat"
+					android:layout_width="36dp"
+					android:layout_height="36dp"
+					android:background="#0284C7">
+
+					<TextView
+						android:layout_width="match_parent"
+						android:layout_height="match_parent"
+						android:gravity="center"
+						android:text="➤"
+						android:textColor="#FFFFFF"
+						android:textSize="13sp" />
+				</FrameLayout>
+			</LinearLayout>
+
+			<!-- Panel Stiker & GIF -->
+			<LinearLayout
+				android:id="@+id/sticker_panel"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="8dp"
+				android:background="#090E17"
+				android:orientation="vertical"
+				android:padding="10dp"
+				android:visibility="gone">
+
+				<TextView
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:layout_marginBottom="8dp"
+					android:text="Pilih Stiker &amp; GIF"
+					android:textColor="#FFFFFF"
+					android:textSize="13sp"
+					android:textStyle="bold" />
+
+				<HorizontalScrollView
+					android:id="@+id/sticker_scroll_view"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content">
+
+					<LinearLayout
+						android:id="@+id/sticker_grid_container"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:orientation="horizontal" />
+				</HorizontalScrollView>
+			</LinearLayout>
+		</LinearLayout>
+	</LinearLayout>
+</FrameLayout>
