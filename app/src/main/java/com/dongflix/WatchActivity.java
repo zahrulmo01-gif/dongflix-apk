@@ -1,5 +1,6 @@
 package com.dongflix;
 
+import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -9,10 +10,13 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -40,6 +44,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.LinearInterpolator;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -71,12 +76,16 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.json.JSONArray;
@@ -91,11 +100,11 @@ public class WatchActivity extends AppCompatActivity {
 	private TextureView playerTextureView;
 	private WebView fallbackWebView;
 	private FrameLayout layoutPlayer;
-	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls;
+	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls, dividerLineView;
 	private ImageView btnBack, btnCast, btnLock, btnSettings, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
 	private TextView textPlayerTitle, textTime, btnFullscreenEpisodes, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes;
-	private LinearLayout animSeekLeft, animSeekRight, btnUnlockScreen, btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
-	private ProgressBar playerLoading;
+	private LinearLayout animSeekLeft, animSeekRight, btnUnlockScreen, pillSpeedHold, btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
+	private ProgressBar playerLoading, miniVideoProgressBar;
 	private SeekBar playerSeekBar;
 	private RecyclerView recyclerEpisode, recyclerRekomendasi;
 
@@ -106,10 +115,19 @@ public class WatchActivity extends AppCompatActivity {
 	private String detailFirstGenre = "-";
 	private String detailAllGenres = "-";
 	private String detailCover = "";
+	private ArrayList<String> currentGenresList = new ArrayList<>();
 
 	private boolean isNewestFirst = true;
 	private boolean isScreenLocked = false;
 	private Runnable hideUnlockBtnRunnable;
+
+	private boolean isHolding2xSpeed = false;
+
+	private ValueAnimator shimmerAnimator;
+	private float shimmerPhase = 0f;
+	private boolean isDetailLoading = true;
+	private boolean isEpisodesLoading = true;
+	private boolean isRekomLoading = true;
 
 	public MediaPlayer mediaPlayer;
 	public Handler playerHandler;
@@ -162,10 +180,13 @@ public class WatchActivity extends AppCompatActivity {
 		gradientBottom = findViewById(R.id.gradientBottom);
 		topBar = findViewById(R.id.topBar);
 		bottomControls = findViewById(R.id.bottomControls);
+		dividerLineView = findViewById(R.id.view139);
+		miniVideoProgressBar = findViewById(R.id.miniVideoProgressBar);
 
 		animSeekLeft = findViewById(R.id.animSeekLeft);
 		animSeekRight = findViewById(R.id.animSeekRight);
 		btnUnlockScreen = findViewById(R.id.btnUnlockScreen);
+		pillSpeedHold = findViewById(R.id.pillSpeedHold);
 
 		btnBack = findViewById(R.id.btnBack);
 		btnCast = findViewById(R.id.btnCast);
@@ -210,6 +231,7 @@ public class WatchActivity extends AppCompatActivity {
 				final String _tag = _param1;
 				final String _response = _param2;
 				if (_tag.equals("slug")) {
+					isEpisodesLoading = false;
 					eps = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
 					if (eps != null && !eps.isEmpty()) {
 						Collections.reverse(eps);
@@ -237,7 +259,12 @@ public class WatchActivity extends AppCompatActivity {
 							});
 						}
 					}
+					checkStopShimmerIfDone();
 				} else {
+					isDetailLoading = false;
+					isRekomLoading = false;
+					clearDetailShimmer();
+
 					String targetSlug = getIntent().getStringExtra("slug");
 					if (targetSlug != null && !targetSlug.isEmpty()) {
 						try {
@@ -263,13 +290,18 @@ public class WatchActivity extends AppCompatActivity {
 									String released = obj.optString("released");
 
 									detailFirstGenre = "-";
+									currentGenresList.clear();
 									StringBuilder allGenresSb = new StringBuilder();
 									JSONArray genresArray = obj.optJSONArray("genres");
 									if (genresArray != null && genresArray.length() > 0) {
 										detailFirstGenre = genresArray.optString(0);
 										for (int g = 0; g < genresArray.length(); g++) {
-											if (g > 0) allGenresSb.append(", ");
-											allGenresSb.append(genresArray.optString(g));
+											String gStr = genresArray.optString(g).trim();
+											if (!gStr.isEmpty()) {
+												currentGenresList.add(gStr.toLowerCase());
+												if (allGenresSb.length() > 0) allGenresSb.append(", ");
+												allGenresSb.append(gStr);
+											}
 										}
 									}
 									detailAllGenres = allGenresSb.length() > 0 ? allGenresSb.toString() : detailFirstGenre;
@@ -292,27 +324,252 @@ public class WatchActivity extends AppCompatActivity {
 
 							ArrayList<HashMap<String, Object>> allList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
 							if (allList != null && recyclerRekomendasi != null) {
-								ArrayList<HashMap<String, Object>> rekomList = new ArrayList<>();
-								for (HashMap<String, Object> item : allList) {
-									String s = item.get("slug") != null ? item.get("slug").toString() : "";
-									if (!s.equals(targetSlug)) {
-										rekomList.add(item);
-										if (rekomList.size() >= 6) break;
-									}
-								}
-								recyclerRekomendasi.setAdapter(new RecyclerRekomendasiAdapter(rekomList));
+								ArrayList<HashMap<String, Object>> smartRekomList = getSmartRecommendations(allList, targetSlug, 6);
+								recyclerRekomendasi.setAdapter(new RecyclerRekomendasiAdapter(smartRekomList));
 							}
 						} catch (Exception e) {
 							e.printStackTrace();
 						}
 					}
+					checkStopShimmerIfDone();
 				}
 			}
 
 			@Override
 			public void onErrorResponse(String _param1, String _param2) {
+				if (_param1.equals("slug")) isEpisodesLoading = false;
+				else {
+					isDetailLoading = false;
+					isRekomLoading = false;
+					clearDetailShimmer();
+				}
+				checkStopShimmerIfDone();
 			}
 		};
+	}
+
+	private Set<String> extractKeywords(String text) {
+		Set<String> keywords = new HashSet<>();
+		if (text == null || text.isEmpty()) return keywords;
+
+		Set<String> stopWords = new HashSet<>(Arrays.asList(
+			"yang", "dan", "di", "ke", "dari", "ini", "itu", "untuk", "dengan", "pada", "adalah",
+			"sebagai", "dalam", "tidak", "akan", "oleh", "ia", "dia", "mereka", "nya", "atau",
+			"the", "of", "and", "in", "to", "a", "is", "for", "with", "on", "as", "by", "at",
+			"sub", "indo", "episode", "season", "donghua", "anime", "cerita", "kisah", "dunia"
+		));
+
+		String[] tokens = text.toLowerCase().replaceAll("[^a-z0-9\\s]", " ").split("\\s+");
+		for (String t : tokens) {
+			if (t.length() >= 3 && !stopWords.contains(t)) {
+				keywords.add(t);
+			}
+		}
+		return keywords;
+	}
+
+	private ArrayList<HashMap<String, Object>> getSmartRecommendations(
+			ArrayList<HashMap<String, Object>> allList,
+			String currentSlug,
+			int maxCount) {
+
+		final Set<String> baseTitleWords = extractKeywords(detailTitle);
+		final Set<String> baseSynopsisWords = extractKeywords(detailSynopsis);
+		final Set<String> baseGenres = new HashSet<>(currentGenresList);
+
+		ArrayList, Integer>> scoredItems = new ArrayList<>();
+
+		for (HashMap<String, Object> item : allList) {
+			String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+			if (slug.isEmpty() || slug.equals(currentSlug)) continue;
+
+			int score = 0;
+
+			Object rawGenres = item.get("genres");
+			if (rawGenres instanceof List) {
+				for (Object gObj : (List<?>) rawGenres) {
+					if (gObj != null && baseGenres.contains(gObj.toString().trim().toLowerCase())) {
+						score += 12;
+					}
+				}
+			} else if (rawGenres != null) {
+				String gStr = rawGenres.toString().toLowerCase();
+				for (String bg : baseGenres) {
+					if (gStr.contains(bg)) score += 12;
+				}
+			}
+
+			String itemTitle = item.get("title") != null ? item.get("title").toString() : "";
+			Set<String> itemTitleWords = extractKeywords(itemTitle);
+			for (String w : itemTitleWords) {
+				if (baseTitleWords.contains(w)) {
+					score += 15;
+				}
+			}
+
+			String itemSynopsis = item.get("synopsis") != null ? item.get("synopsis").toString() : "";
+			Set<String> itemSynopsisWords = extractKeywords(itemSynopsis);
+			for (String sw : itemSynopsisWords) {
+				if (baseSynopsisWords.contains(sw)) {
+					score += 4;
+				}
+			}
+
+			String itemStatus = item.get("status") != null ? item.get("status").toString() : "";
+			if (!detailStatus.isEmpty() && detailStatus.equalsIgnoreCase(itemStatus)) {
+				score += 2;
+			}
+
+			scoredItems.add(new java.util.AbstractMap.SimpleEntry<>(item, score));
+		}
+
+		Collections.sort(scoredItems, new Comparator, Integer>>() {
+			@Override
+			public int compare(Map.Entry<HashMap<String, Object>, Integer> a, Map.Entry<HashMap<String, Object>, Integer> b) {
+				return Integer.compare(b.getValue(), a.getValue());
+			}
+		});
+
+		ArrayList<HashMap<String, Object>> result = new ArrayList<>();
+		for (int i = 0; i < Math.min(maxCount, scoredItems.size()); i++) {
+			result.add(scoredItems.get(i).getKey());
+		}
+		return result;
+	}
+
+	private Drawable createShimmerDrawable(final float cornerRadiusPx) {
+		return new Drawable() {
+			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint shimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Matrix shaderMatrix = new Matrix();
+			private LinearGradient gradient;
+			private int lastWidth = -1;
+
+			{
+				basePaint.setColor(Color.parseColor("#12141A"));
+			}
+
+			@Override
+			public void draw(Canvas canvas) {
+				Rect b = getBounds();
+				int w = b.width();
+				int h = b.height();
+				if (w <= 0 || h <= 0) return;
+
+				RectF rect = new RectF(b);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, basePaint);
+
+				if (gradient == null || lastWidth != w) {
+					lastWidth = w;
+					gradient = new LinearGradient(
+						0, 0, w, 0,
+						new int[]{
+							Color.TRANSPARENT,
+							Color.parseColor("#1AFFFFFF"),
+							Color.parseColor("#33FFFFFF"),
+							Color.parseColor("#1AFFFFFF"),
+							Color.TRANSPARENT
+						},
+						new float[]{0f, 0.35f, 0.5f, 0.65f, 1f},
+						Shader.TileMode.CLAMP
+					);
+					shimmerPaint.setShader(gradient);
+				}
+
+				float translateX = -w + (2f * w * shimmerPhase);
+				shaderMatrix.setTranslate(translateX, 0);
+				gradient.setLocalMatrix(shaderMatrix);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, shimmerPaint);
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+	}
+
+	private void startLoadingShimmer() {
+		float d = getResources().getDisplayMetrics().density;
+
+		if (imagePoster != null) {
+			imagePoster.setImageDrawable(createShimmerDrawable(32 * d));
+		}
+		if (textJudul != null) {
+			textJudul.setText("                    ");
+			textJudul.setBackground(createShimmerDrawable(6 * d));
+		}
+		if (textRating != null) {
+			textRating.setText("        ");
+			textRating.setBackground(createShimmerDrawable(4 * d));
+		}
+		if (textYear != null) {
+			textYear.setText("      ");
+			textYear.setBackground(createShimmerDrawable(4 * d));
+		}
+		if (textGenre != null) {
+			textGenre.setText("        ");
+			textGenre.setBackground(createShimmerDrawable(4 * d));
+		}
+
+		if (recyclerEpisode != null) {
+			recyclerEpisode.setAdapter(new ShimmerEpisodeAdapter(6));
+		}
+
+		if (recyclerRekomendasi != null) {
+			recyclerRekomendasi.setAdapter(new ShimmerRekomendasiAdapter(6));
+		}
+
+		shimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
+		shimmerAnimator.setDuration(1250);
+		shimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
+		shimmerAnimator.setInterpolator(new LinearInterpolator());
+		shimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+			@Override
+			public void onAnimationUpdate(ValueAnimator animation) {
+				shimmerPhase = (float) animation.getAnimatedValue();
+				if (isDetailLoading) {
+					if (imagePoster != null) imagePoster.invalidate();
+					if (textJudul != null) textJudul.invalidate();
+					if (textRating != null) textRating.invalidate();
+					if (textYear != null) textYear.invalidate();
+					if (textGenre != null) textGenre.invalidate();
+				}
+				if (isEpisodesLoading && recyclerEpisode != null) {
+					for (int i = 0; i < recyclerEpisode.getChildCount(); i++) {
+						recyclerEpisode.getChildAt(i).invalidate();
+					}
+				}
+				if (isRekomLoading && recyclerRekomendasi != null) {
+					for (int i = 0; i < recyclerRekomendasi.getChildCount(); i++) {
+						View child = recyclerRekomendasi.getChildAt(i);
+						child.invalidate();
+						if (child instanceof ViewGroup) {
+							ViewGroup vg = (ViewGroup) child;
+							for (int j = 0; j < vg.getChildCount(); j++) {
+								vg.getChildAt(j).invalidate();
+							}
+						}
+					}
+				}
+			}
+		});
+		shimmerAnimator.start();
+	}
+
+	private void clearDetailShimmer() {
+		if (textJudul != null) textJudul.setBackground(null);
+		if (textRating != null) textRating.setBackground(null);
+		if (textYear != null) textYear.setBackground(null);
+		if (textGenre != null) textGenre.setBackground(null);
+	}
+
+	private void checkStopShimmerIfDone() {
+		if (!isDetailLoading && !isEpisodesLoading && !isRekomLoading) {
+			if (shimmerAnimator != null) {
+				shimmerAnimator.cancel();
+				shimmerAnimator = null;
+			}
+		}
 	}
 
 	private void initializeLogic() {
@@ -335,12 +592,7 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		_WatchUI();
-
-		String slug = getIntent().getStringExtra("slug");
-		if (slug == null) slug = "";
-
-		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
-		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
+		updateBottomDividerState();
 
 		if (recyclerEpisode != null) {
 			recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
@@ -350,6 +602,14 @@ public class WatchActivity extends AppCompatActivity {
 			recyclerRekomendasi.setLayoutManager(new GridLayoutManager(this, 3));
 			recyclerRekomendasi.setNestedScrollingEnabled(false);
 		}
+
+		startLoadingShimmer();
+
+		String slug = getIntent().getStringExtra("slug");
+		if (slug == null) slug = "";
+
+		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
+		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
 
 		_initPlayerViews();
 		applyCustomFonts();
@@ -403,12 +663,12 @@ public class WatchActivity extends AppCompatActivity {
 		);
 		if (gradientBottom != null) gradientBottom.setBackground(botGrad);
 
-		View[] seekPills = {animSeekLeft, animSeekRight};
+		View[] seekPills = {animSeekLeft, animSeekRight, pillSpeedHold};
 		for (View pill : seekPills) {
 			if (pill != null) {
 				GradientDrawable pillBg = new GradientDrawable();
 				pillBg.setCornerRadius(100f);
-				pillBg.setColor(0x99000000);
+				pillBg.setColor(0xB3000000);
 				pill.setBackground(pillBg);
 			}
 		}
@@ -423,10 +683,6 @@ public class WatchActivity extends AppCompatActivity {
 		if (btnFullscreenEpisodes != null) {
 			btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 		}
-
-		if (textRating != null) textRating.setBackground(null);
-		if (textYear != null) textYear.setBackground(null);
-		if (textGenre != null) textGenre.setBackground(null);
 
 		if (iconExpandDetail != null) {
 			GradientDrawable expandBg = new GradientDrawable();
@@ -450,6 +706,56 @@ public class WatchActivity extends AppCompatActivity {
 				btnBg.setColor(Color.parseColor("#12141A"));
 				btn.setBackground(btnBg);
 			}
+		}
+	}
+
+	// ========================================================
+	// PEMBATAS BAWAH VIDEO: GARIS BIASA VS PROGRESSBAR MINI
+	// ========================================================
+	private void updateBottomDividerState() {
+		if (isFullscreen) {
+			if (dividerLineView != null) dividerLineView.setVisibility(View.GONE);
+			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.GONE);
+		} else if (areControlsVisible) {
+			// Kontainer kontrol muncul -> tampilkan garis pembatas biasa
+			if (dividerLineView != null) dividerLineView.setVisibility(View.VISIBLE);
+			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.GONE);
+		} else {
+			// Kontainer kontrol hilang -> ganti menjadi ProgressBar berjalan
+			if (dividerLineView != null) dividerLineView.setVisibility(View.GONE);
+			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.VISIBLE);
+		}
+	}
+
+	private void applyPlaybackSpeedValue(float speed) {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && mediaPlayer != null) {
+			try {
+				boolean wasPlaying = mediaPlayer.isPlaying();
+				PlaybackParams params = mediaPlayer.getPlaybackParams();
+				if (params == null) params = new PlaybackParams();
+				params.setSpeed(speed);
+				mediaPlayer.setPlaybackParams(params);
+				if (!wasPlaying) mediaPlayer.pause();
+			} catch (Exception ignored) {}
+		}
+	}
+
+	private void startHold2xSpeed() {
+		if (isScreenLocked || mediaPlayer == null || !mediaPlayer.isPlaying()) return;
+		isHolding2xSpeed = true;
+		applyPlaybackSpeedValue(2.0f);
+		if (pillSpeedHold != null) {
+			pillSpeedHold.setVisibility(View.VISIBLE);
+			pillSpeedHold.bringToFront();
+		}
+	}
+
+	private void stopHold2xSpeed() {
+		if (!isHolding2xSpeed) return;
+		isHolding2xSpeed = false;
+		applyPlaybackSpeedValue(currentPlaybackSpeed);
+		if (pillSpeedHold != null) {
+			pillSpeedHold.setVisibility(View.GONE);
 		}
 	}
 
@@ -576,6 +882,10 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	private Dialog createAdaptiveSheetDialog(View contentView) {
+		return createAdaptiveSheetDialog(contentView, false);
+	}
+
+	private Dialog createAdaptiveSheetDialog(View contentView, final boolean allowVideoInteraction) {
 		float d = getResources().getDisplayMetrics().density;
 
 		if (isLandscapeOrFullscreen()) {
@@ -629,6 +939,18 @@ public class WatchActivity extends AppCompatActivity {
 		} else {
 			final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
 			sheetDialog.setContentView(contentView);
+
+			if (allowVideoInteraction) {
+				sheetDialog.setCanceledOnTouchOutside(false);
+				Window sheetWindow = sheetDialog.getWindow();
+				if (sheetWindow != null) {
+					sheetWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+					sheetWindow.setDimAmount(0f);
+					sheetWindow.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL);
+					sheetWindow.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+				}
+			}
+
 			sheetDialog.setOnShowListener(new DialogInterface.OnShowListener() {
 				@Override
 				public void onShow(DialogInterface dialog) {
@@ -926,7 +1248,8 @@ public class WatchActivity extends AppCompatActivity {
 		content.addView(tvSinopsisBody);
 
 		root.addView(scrollView);
-		dialogHolder[0] = createAdaptiveSheetDialog(root);
+		// Sinopsis tidak menggelapkan layar dan video tetap bisa diklik
+		dialogHolder[0] = createAdaptiveSheetDialog(root, true);
 	}
 
 	private void showCleanOptionBottomSheet(String title, ArrayList<String> optionTitles, int activeIdx, final OnSheetItemClickListener listener) {
@@ -1269,19 +1592,7 @@ public class WatchActivity extends AppCompatActivity {
 				public void onItemClick(int which) {
 					float selectedSpeed = speedVals[which];
 					currentPlaybackSpeed = selectedSpeed;
-
-					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-						if (mediaPlayer != null) {
-							try {
-								boolean isPlaying = mediaPlayer.isPlaying();
-								PlaybackParams params = mediaPlayer.getPlaybackParams();
-								if (params == null) params = new PlaybackParams();
-								params.setSpeed(selectedSpeed);
-								mediaPlayer.setPlaybackParams(params);
-								if (!isPlaying) mediaPlayer.pause();
-							} catch (Exception ignored) {}
-						}
-					}
+					applyPlaybackSpeedValue(selectedSpeed);
 				}
 			}
 		);
@@ -1289,6 +1600,10 @@ public class WatchActivity extends AppCompatActivity {
 
 	@Override
 	public void onDestroy() {
+		if (shimmerAnimator != null) {
+			shimmerAnimator.cancel();
+			shimmerAnimator = null;
+		}
 		if (playerHandler != null) {
 			if (progressLoop != null) playerHandler.removeCallbacks(progressLoop);
 			if (hideControlsRunnable != null) playerHandler.removeCallbacks(hideControlsRunnable);
@@ -1328,6 +1643,7 @@ public class WatchActivity extends AppCompatActivity {
 	@Override
 	public void onPause() {
 		super.onPause();
+		stopHold2xSpeed();
 		if (mediaPlayer != null && mediaPlayer.isPlaying()) {
 			mediaPlayer.pause();
 			if (btnPlay != null) {
@@ -1481,6 +1797,7 @@ public class WatchActivity extends AppCompatActivity {
 			playerControlsOverlay.bringToFront();
 		}
 		areControlsVisible = true;
+		updateBottomDividerState();
 		resetControlsTimer();
 	}
 
@@ -1489,6 +1806,7 @@ public class WatchActivity extends AppCompatActivity {
 			playerControlsOverlay.setVisibility(View.GONE);
 		}
 		areControlsVisible = false;
+		updateBottomDividerState();
 		if (playerHandler != null && hideControlsRunnable != null) {
 			playerHandler.removeCallbacks(hideControlsRunnable);
 		}
@@ -1890,13 +2208,9 @@ public class WatchActivity extends AppCompatActivity {
 							}
 							mp.start();
 
-							if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && currentPlaybackSpeed != 1.0f) {
-								try {
-									PlaybackParams params = mp.getPlaybackParams();
-									if (params == null) params = new PlaybackParams();
-									params.setSpeed(currentPlaybackSpeed);
-									mp.setPlaybackParams(params);
-								} catch (Exception ignored) {}
+							float targetSpeed = isHolding2xSpeed ? 2.0f : currentPlaybackSpeed;
+							if (targetSpeed != 1.0f) {
+								applyPlaybackSpeedValue(targetSpeed);
 							}
 
 							if (playerHandler != null && progressLoop != null) {
@@ -1948,7 +2262,6 @@ public class WatchActivity extends AppCompatActivity {
 		final View decorView = window.getDecorView();
 		final View rootWatch = findViewById(R.id.rootWatchLayout);
 		final View scrollContent = findViewById(R.id.vscroll16);
-		final View dividerLine = findViewById(R.id.view139);
 		final FrameLayout playContainer = findViewById(R.id.frame_layout5);
 		final float density = getResources().getDisplayMetrics().density;
 
@@ -1974,7 +2287,6 @@ public class WatchActivity extends AppCompatActivity {
 			);
 
 			if (scrollContent != null) scrollContent.setVisibility(View.GONE);
-			if (dividerLine != null) dividerLine.setVisibility(View.GONE);
 
 			if (layoutPlayer != null) {
 				ViewGroup.LayoutParams lp = layoutPlayer.getLayoutParams();
@@ -2102,7 +2414,6 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			if (scrollContent != null) scrollContent.setVisibility(View.VISIBLE);
-			if (dividerLine != null) dividerLine.setVisibility(View.VISIBLE);
 			if (textPlayerTitle != null) textPlayerTitle.setVisibility(View.GONE);
 			if (btnLock != null) btnLock.setVisibility(View.GONE);
 			if (btnFullscreenEpisodes != null) btnFullscreenEpisodes.setVisibility(View.GONE);
@@ -2187,6 +2498,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			isFullscreen = false;
 		}
+		updateBottomDividerState();
 		adjustVideoAspectRatio();
 		resetControlsTimer();
 	}
@@ -2337,6 +2649,11 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			@Override
+			public void onLongPress(MotionEvent e) {
+				startHold2xSpeed();
+			}
+
+			@Override
 			public boolean onDoubleTap(MotionEvent e) {
 				if (isScreenLocked) {
 					showUnlockPillTemporarily();
@@ -2374,22 +2691,25 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		});
 
-		if (layoutPlayer != null) {
-			layoutPlayer.setOnTouchListener(new View.OnTouchListener() {
-				@Override
-				public boolean onTouch(View v, MotionEvent event) {
-					return playerGestureDetector.onTouchEvent(event);
+		View.OnTouchListener playerTouchListener = new View.OnTouchListener() {
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+					if (isHolding2xSpeed) {
+						stopHold2xSpeed();
+						return true;
+					}
 				}
-			});
+				return playerGestureDetector.onTouchEvent(event);
+			}
+		};
+
+		if (layoutPlayer != null) {
+			layoutPlayer.setOnTouchListener(playerTouchListener);
 		}
 
 		if (playerControlsOverlay != null) {
-			playerControlsOverlay.setOnTouchListener(new View.OnTouchListener() {
-				@Override
-				public boolean onTouch(View v, MotionEvent event) {
-					return playerGestureDetector.onTouchEvent(event);
-				}
-			});
+			playerControlsOverlay.setOnTouchListener(playerTouchListener);
 		}
 
 		if (playerTextureView != null) {
@@ -2430,6 +2750,11 @@ public class WatchActivity extends AppCompatActivity {
 						if (playerSeekBar != null) {
 							playerSeekBar.setProgress(cur);
 							playerSeekBar.invalidate();
+						}
+
+						if (miniVideoProgressBar != null && tot > 0) {
+							int permille = (int) ((cur * 1000L) / tot);
+							miniVideoProgressBar.setProgress(permille);
 						}
 
 						if (textTime != null) {
@@ -3316,6 +3641,65 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			}).start();
 		}
+	}
+
+	public class ShimmerEpisodeAdapter extends RecyclerView.Adapter<ShimmerEpisodeAdapter.ViewHolder> {
+		private final int count;
+		public ShimmerEpisodeAdapter(int count) { this.count = count; }
+
+		@Override
+		public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+			float d = parent.getContext().getResources().getDisplayMetrics().density;
+			View v = new View(parent.getContext());
+			RecyclerView.LayoutParams params = new RecyclerView.LayoutParams((int)(65 * d), (int)(60 * d));
+			params.setMarginEnd((int)(8 * d));
+			v.setLayoutParams(params);
+			v.setBackground(createShimmerDrawable(12 * d));
+			return new ViewHolder(v);
+		}
+
+		@Override public void onBindViewHolder(ViewHolder holder, int position) {}
+		@Override public int getItemCount() { return count; }
+		public class ViewHolder extends RecyclerView.ViewHolder { public ViewHolder(View v) { super(v); } }
+	}
+
+	public class ShimmerRekomendasiAdapter extends RecyclerView.Adapter<ShimmerRekomendasiAdapter.ViewHolder> {
+		private final int count;
+		public ShimmerRekomendasiAdapter(int count) { this.count = count; }
+
+		@Override
+		public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+			Context ctx = parent.getContext();
+			float d = ctx.getResources().getDisplayMetrics().density;
+
+			LinearLayout box = new LinearLayout(ctx);
+			box.setOrientation(LinearLayout.VERTICAL);
+			GridLayoutManager.LayoutParams lp = new GridLayoutManager.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			lp.setMargins((int)(4 * d), 0, (int)(4 * d), (int)(14 * d));
+			box.setLayoutParams(lp);
+
+			View coverStub = new View(ctx);
+			LinearLayout.LayoutParams covLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int)(145 * d));
+			coverStub.setLayoutParams(covLp);
+			coverStub.setBackground(createShimmerDrawable(10 * d));
+			box.addView(coverStub);
+
+			View titleStub = new View(ctx);
+			LinearLayout.LayoutParams titLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int)(14 * d));
+			titLp.topMargin = (int)(8 * d);
+			titleStub.setLayoutParams(titLp);
+			titleStub.setBackground(createShimmerDrawable(5 * d));
+			box.addView(titleStub);
+
+			return new ViewHolder(box);
+		}
+
+		@Override public void onBindViewHolder(ViewHolder holder, int position) {}
+		@Override public int getItemCount() { return count; }
+		public class ViewHolder extends RecyclerView.ViewHolder { public ViewHolder(View v) { super(v); } }
 	}
 
 	public class RecyclerEpisodeAdapter extends RecyclerView.Adapter<RecyclerEpisodeAdapter.ViewHolder> {
