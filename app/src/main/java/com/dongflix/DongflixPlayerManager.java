@@ -50,8 +50,21 @@ public class DongflixPlayerManager {
 	public int activeEpisodeIndex = 0;
 	public ArrayList<HashMap<String, Object>> activeEpisodeList = new ArrayList<>();
 
+	// Cache lengkap agar saat Mini Player diklik tidak refresh/memuat ulang detail & server
+	public String cachedAllCatalogJson = "";
+	public String cachedEpisodesJson = "";
+	public String activeServerName = "";
+	public int activeSelectedServerIndex = 0;
+	public ArrayList<String> activeServerNames = new ArrayList<>();
+	public ArrayList<String> activeServerUrls = new ArrayList<>();
+	public ArrayList<String> activeQualityNames = new ArrayList<>();
+	public ArrayList<String> activeQualityUrls = new ArrayList<>();
+	public int activeSelectedQualityIndex = 0;
+	public boolean activeIsAutoQuality = true;
+
 	private boolean isReceiverRegistered = false;
 	private Application appContext;
+	private int startedActivityCount = 0;
 
 	public static synchronized DongflixPlayerManager getInstance() {
 		if (instance == null) {
@@ -68,6 +81,27 @@ public class DongflixPlayerManager {
 
 		app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
 			@Override
+			public void onActivityStarted(Activity activity) {
+				startedActivityCount++;
+			}
+
+			@Override
+			public void onActivityStopped(Activity activity) {
+				startedActivityCount = Math.max(0, startedActivityCount - 1);
+				// Jangan putar di latar belakang: otomatis jeda saat aplikasi keluar/diminimalkan ke Home
+				if (startedActivityCount == 0 && sharedMediaPlayer != null) {
+					try {
+						if (sharedMediaPlayer.isPlaying()) {
+							sharedMediaPlayer.pause();
+							if (isMiniPlayerActive) {
+								updatePlaybackNotification(activity);
+							}
+						}
+					} catch (Exception ignored) {}
+				}
+			}
+
+			@Override
 			public void onActivityResumed(Activity activity) {
 				if (activity instanceof WatchActivity) {
 					removeMiniPlayerFromActivity(activity);
@@ -78,9 +112,7 @@ public class DongflixPlayerManager {
 			}
 
 			@Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {}
-			@Override public void onActivityStarted(Activity activity) {}
 			@Override public void onActivityPaused(Activity activity) {}
-			@Override public void onActivityStopped(Activity activity) {}
 			@Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
 			@Override public void onActivityDestroyed(Activity activity) {}
 		});
@@ -93,7 +125,7 @@ public class DongflixPlayerManager {
 				"Pemutar Video Dongflix",
 				NotificationManager.IMPORTANCE_LOW
 			);
-			channel.setDescription("Kontrol pemutaran Dongflix di latar belakang");
+			channel.setDescription("Kontrol pemutaran Dongflix");
 			channel.setShowBadge(false);
 			NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
 			if (nm != null) nm.createNotificationChannel(channel);
@@ -184,8 +216,22 @@ public class DongflixPlayerManager {
 		}
 	}
 
+	public void clearCache() {
+		cachedAllCatalogJson = "";
+		cachedEpisodesJson = "";
+		activeServerName = "";
+		activeSelectedServerIndex = 0;
+		activeServerNames.clear();
+		activeServerUrls.clear();
+		activeQualityNames.clear();
+		activeQualityUrls.clear();
+		activeSelectedQualityIndex = 0;
+		activeIsAutoQuality = true;
+	}
+
 	public void stopAndCloseEverything(Context ctx) {
 		isMiniPlayerActive = false;
+		clearCache();
 		if (sharedMediaPlayer != null) {
 			try {
 				if (sharedMediaPlayer.isPlaying()) sharedMediaPlayer.stop();
@@ -221,7 +267,6 @@ public class DongflixPlayerManager {
 
 		float d = activity.getResources().getDisplayMetrics().density;
 
-		// Deteksi apakah activity punya bottom navbar (@id/navbar) seperti MainActivity
 		View bottomNav = activity.findViewById(R.id.navbar);
 		int bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
 			? (int) (86 * d)
@@ -347,6 +392,7 @@ public class DongflixPlayerManager {
 		});
 		row.addView(btnClose);
 
+		// Klik Mini Player -> Buka WatchActivity dengan animasi naik dari bawah ke atas (slide_up_enter)
 		miniBar.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -354,6 +400,7 @@ public class DongflixPlayerManager {
 				intent.putExtra("slug", activeSlug);
 				intent.putExtra("resume_mini_player", true);
 				activity.startActivity(intent);
+				activity.overridePendingTransition(R.anim.slide_up_enter, R.anim.no_anim);
 			}
 		});
 
