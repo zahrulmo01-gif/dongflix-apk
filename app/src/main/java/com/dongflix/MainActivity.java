@@ -50,8 +50,9 @@ public class MainActivity extends AppCompatActivity {
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
 	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
-	private ImageView imgHeroBanner, imgPlayIcon;
+	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopSearch, imgTopChat;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
+	private FrameLayout btnHeroFavorite, btnTopSearch, btnTopChat;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
@@ -65,12 +66,16 @@ public class MainActivity extends AppCompatActivity {
 	private float mainShimmerPhase = 0f;
 	private boolean isMainLoading = true;
 
+	private SharedPreferences favPrefs;
+	private HashMap<String, Object> currentHeroItem;
+
 	@Override
 	protected void onCreate(Bundle _savedInstanceState) {
 		super.onCreate(_savedInstanceState);
 		setContentView(R.layout.activity_main);
 
 		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
+		favPrefs = getSharedPreferences("dongflix_favorites", Context.MODE_PRIVATE);
 
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
 			if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -80,6 +85,76 @@ public class MainActivity extends AppCompatActivity {
 
 		initialize(_savedInstanceState);
 		initializeLogic();
+	}
+
+	private void applyCustomFonts() {
+		try {
+			final Typeface fontReg = Typeface.createFromAsset(getAssets(), "fonts/productsans_reg.ttf");
+			final Typeface fontMed = Typeface.createFromAsset(getAssets(), "fonts/productsans_med.ttf");
+			final Typeface fontBold = Typeface.createFromAsset(getAssets(), "fonts/productsans_bold.ttf");
+
+			Queue<View> viewQueue = new LinkedList<>();
+			viewQueue.add(getWindow().getDecorView().findViewById(android.R.id.content));
+
+			while (!viewQueue.isEmpty()) {
+				View currentView = viewQueue.poll();
+				if (currentView instanceof TextView) {
+					TextView tv = (TextView) currentView;
+					Typeface tf = tv.getTypeface();
+					int style = (tf != null) ? tf.getStyle() : Typeface.NORMAL;
+
+					if (style == Typeface.BOLD) {
+						tv.setTypeface(fontBold, Typeface.NORMAL);
+						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+							tv.setLetterSpacing(-0.01f);
+						}
+					} else if (style == Typeface.BOLD_ITALIC) {
+						tv.setTypeface(fontBold, Typeface.ITALIC);
+					} else if (style == Typeface.ITALIC) {
+						tv.setTypeface(fontReg, Typeface.ITALIC);
+					} else if (tv.getId() == R.id.text_hero_desc) {
+						tv.setTypeface(fontReg, Typeface.NORMAL);
+					} else {
+						tv.setTypeface(fontMed, Typeface.NORMAL);
+					}
+				} else if (currentView instanceof ViewGroup) {
+					ViewGroup group = (ViewGroup) currentView;
+					for (int k = 0; k < group.getChildCount(); k++) {
+						viewQueue.add(group.getChildAt(k));
+					}
+				}
+			}
+		} catch (Exception ignored) {}
+	}
+
+	private boolean isFavoriteSlug(String slug) {
+		if (favPrefs == null || slug == null || slug.isEmpty()) return false;
+		return favPrefs.contains("fav_" + slug);
+	}
+
+	private void toggleFavoriteItem(HashMap<String, Object> item) {
+		if (favPrefs == null || item == null) return;
+		String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+		String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
+		if (slug.isEmpty()) return;
+
+		if (isFavoriteSlug(slug)) {
+			favPrefs.edit().remove("fav_" + slug).apply();
+			Toast.makeText(this, "Dihapus dari Favorit", Toast.LENGTH_SHORT).show();
+		} else {
+			favPrefs.edit().putString("fav_" + slug, new Gson().toJson(item)).apply();
+			Toast.makeText(this, "Disimpan ke Favorit: " + title, Toast.LENGTH_SHORT).show();
+		}
+		updateHeroFavoriteIcon(slug);
+	}
+
+	private void updateHeroFavoriteIcon(String slug) {
+		if (imgHeroFavorite == null) return;
+		if (isFavoriteSlug(slug)) {
+			imgHeroFavorite.setColorFilter(Color.parseColor("#EF4444"));
+		} else {
+			imgHeroFavorite.setColorFilter(Color.WHITE);
+		}
 	}
 
 	private void openWatchBySlug(String slug) {
@@ -180,6 +255,7 @@ public class MainActivity extends AppCompatActivity {
 				if (textHeroTitle != null) textHeroTitle.invalidate();
 				if (textHeroDesc != null) textHeroDesc.invalidate();
 				if (btnHeroPlay != null) btnHeroPlay.invalidate();
+				if (btnHeroFavorite != null) btnHeroFavorite.invalidate();
 
 				if (recyclerPopular != null) {
 					for (int idx = 0; idx < recyclerPopular.getChildCount(); idx++) {
@@ -243,11 +319,18 @@ public class MainActivity extends AppCompatActivity {
 		textSeeAll = findViewById(R.id.text_see_all);
 		imgHeroBanner = findViewById(R.id.img_hero_banner);
 		btnHeroPlay = findViewById(R.id.btn_hero_play);
+		btnHeroFavorite = findViewById(R.id.btn_hero_favorite);
+		imgHeroFavorite = findViewById(R.id.img_hero_favorite);
 		imgPlayIcon = findViewById(R.id.img_play_icon);
 		indicatorCapsule = findViewById(R.id.indicator_capsule);
 		dot0 = findViewById(R.id.dot_0);
 		dot1 = findViewById(R.id.dot_1);
 		dot2 = findViewById(R.id.dot_2);
+
+		btnTopSearch = findViewById(R.id.btn_top_search);
+		btnTopChat = findViewById(R.id.btn_top_chat);
+		imgTopSearch = findViewById(R.id.img_top_search);
+		imgTopChat = findViewById(R.id.img_top_chat);
 
 		navbarExpanded = findViewById(R.id.navbar);
 		btnCompactHome = findViewById(R.id.btn_compact_home);
@@ -274,7 +357,31 @@ public class MainActivity extends AppCompatActivity {
 			});
 		}
 
-		// SEMUA LIST LANGSUNG BUKA WATCHACTIVITY
+		if (btnHeroFavorite != null) {
+			btnHeroFavorite.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (currentHeroItem != null) {
+						toggleFavoriteItem(currentHeroItem);
+					}
+				}
+			});
+		}
+
+		if (btnTopChat != null) {
+			btnTopChat.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					try {
+						Class<?> chatCls = Class.forName("com.dongflix.ChatActivity");
+						startActivity(new Intent(MainActivity.this, chatCls));
+					} catch (Exception e) {
+						Toast.makeText(MainActivity.this, "Membuka Obrolan Komunitas", Toast.LENGTH_SHORT).show();
+					}
+				}
+			});
+		}
+
 		if (gridview1 != null) {
 			gridview1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 				@Override
@@ -289,7 +396,6 @@ public class MainActivity extends AppCompatActivity {
 			});
 		}
 
-		// SEARCH BAR INTERAKSI REAL-TIME + TOMBOL X CLEAR
 		if (btnClearSearch != null) {
 			btnClearSearch.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -312,7 +418,6 @@ public class MainActivity extends AppCompatActivity {
 					}
 
 					if (q.isEmpty()) {
-						// Jika belum disearch -> tampilkan list Populer dulu
 						if (textSearchSectionLabel != null) {
 							textSearchSectionLabel.setVisibility(View.VISIBLE);
 							textSearchSectionLabel.setText("Populer");
@@ -362,7 +467,6 @@ public class MainActivity extends AppCompatActivity {
 					setGridViewHeightBasedOnChildren(gridview1, 3);
 				}
 
-				// Default isi halaman Search sebelum disearch: list Populer
 				if (recyclerSearchList != null) {
 					recyclerSearchList.setAdapter(new ListPopularAdapter(listMap));
 				}
@@ -380,6 +484,10 @@ public class MainActivity extends AppCompatActivity {
 					if (btnHeroPlay != null) {
 						btnHeroPlay.setBackground(playActiveBg);
 						btnHeroPlay.setEnabled(true);
+					}
+					if (btnHeroFavorite != null) {
+						btnHeroFavorite.setEnabled(true);
+						applyUniversalGlassStyle(btnHeroFavorite, btnHeroFavorite);
 					}
 					if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.VISIBLE);
 					if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.VISIBLE);
@@ -408,6 +516,7 @@ public class MainActivity extends AppCompatActivity {
 						public void run() {
 							int pos = heroCurrentIndex[0];
 							HashMap<String, Object> heroItem = listMap.get(pos);
+							currentHeroItem = heroItem;
 
 							String heroTitle = heroItem.get("title") != null ? heroItem.get("title").toString() : "";
 							String heroSynopsis = heroItem.get("synopsis") != null ? cleanText(heroItem.get("synopsis").toString()) : "";
@@ -423,6 +532,7 @@ public class MainActivity extends AppCompatActivity {
 
 							if (textHeroTitle != null) textHeroTitle.setText(heroTitle);
 							if (textHeroDesc != null) textHeroDesc.setText(heroSynopsis);
+							updateHeroFavoriteIcon(heroSlug);
 
 							if (imgHeroBanner != null) {
 								Glide.with(getApplicationContext())
@@ -484,6 +594,7 @@ public class MainActivity extends AppCompatActivity {
 		_UI();
 		_Nav();
 		setupScrollResponsiveNavbar();
+		applyCustomFonts();
 
 		float d = getResources().getDisplayMetrics().density;
 
@@ -523,6 +634,10 @@ public class MainActivity extends AppCompatActivity {
 			btnHeroPlay.setEnabled(false);
 			btnHeroPlay.setBackground(createMainShimmerDrawable(100f));
 		}
+		if (btnHeroFavorite != null) {
+			btnHeroFavorite.setEnabled(false);
+			btnHeroFavorite.setBackground(createMainShimmerDrawable(100f));
+		}
 
 		if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.INVISIBLE);
 		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
@@ -552,20 +667,19 @@ public class MainActivity extends AppCompatActivity {
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
-	// Frosted Glass universal (tanpa RenderEffect agar kompati di semua versi Android dan sudut tidak bocor)
 	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
 		float d = getResources().getDisplayMetrics().density;
 		if (blurTarget != null) {
 			GradientDrawable glass = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#D913161F"), Color.parseColor("#EB0A0C12")}
+				new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
 			);
 			glass.setCornerRadius(100f);
-			glass.setStroke((int)(1 * d), Color.parseColor("#2EFFFFFF"));
+			glass.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
 			blurTarget.setBackground(glass);
 		}
 		if (containerTarget != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			containerTarget.setElevation(20f);
+			containerTarget.setElevation(16f);
 		}
 	}
 
@@ -595,7 +709,13 @@ public class MainActivity extends AppCompatActivity {
 			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
 		}
 
-		// Sesuaikan margin atas searchBarContainer agar pas di bawah status bar
+		// Bulatan kaca buram pada tombol Search & Chat di header kanan atas
+		applyUniversalGlassStyle(btnTopSearch, btnTopSearch);
+		applyUniversalGlassStyle(btnTopChat, btnTopChat);
+		if (imgTopSearch != null) imgTopSearch.setColorFilter(Color.WHITE);
+		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE);
+		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
+
 		if (searchBarContainer != null) {
 			LinearLayout.LayoutParams sbLp = (LinearLayout.LayoutParams) searchBarContainer.getLayoutParams();
 			sbLp.topMargin = statusBarHeight + (int)(12 * density);
@@ -644,7 +764,6 @@ public class MainActivity extends AppCompatActivity {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
 				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-					// Jika tidak ada Mini Player yang aktif, tampilan navbar tetap sama saat discroll
 					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 						resetNavbarToExpanded();
 						return;
@@ -742,7 +861,6 @@ public class MainActivity extends AppCompatActivity {
 				} else if (btnCircleSearch != null && id == btnCircleSearch.getId()) {
 					if (pageSearch != null) pageSearch.setVisibility(View.VISIBLE);
 					if (imgSearch != null) imgSearch.setColorFilter(colorActive);
-					// Otomatis fokus ke searchbar dan buka keyboard
 					showKeyboardOnSearch();
 				}
 			}
@@ -754,9 +872,8 @@ public class MainActivity extends AppCompatActivity {
 		if (tabAkun != null) tabAkun.setOnClickListener(tabClickListener);
 		if (btnCircleSearch != null) btnCircleSearch.setOnClickListener(tabClickListener);
 
-		View topSearchBtn = findViewById(R.id.btn_top_search);
-		if (topSearchBtn != null && btnCircleSearch != null) {
-			topSearchBtn.setOnClickListener(new View.OnClickListener() {
+		if (btnTopSearch != null && btnCircleSearch != null) {
+			btnTopSearch.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
 					btnCircleSearch.performClick();
