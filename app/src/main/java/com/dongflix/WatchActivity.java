@@ -162,6 +162,16 @@ public class WatchActivity extends AppCompatActivity {
 	public String dmSessionCookie = "";
 	private boolean isWebViewFallbackActive = false;
 
+	private static class ScoredAnimeItem {
+		final HashMap<String, Object> item;
+		final int score;
+
+		ScoredAnimeItem(HashMap<String, Object> item, int score) {
+			this.item = item;
+			this.score = score;
+		}
+	}
+
 	@Override
 	protected void onCreate(Bundle _savedInstanceState) {
 		super.onCreate(_savedInstanceState);
@@ -377,7 +387,7 @@ public class WatchActivity extends AppCompatActivity {
 		final Set<String> baseSynopsisWords = extractKeywords(detailSynopsis);
 		final Set<String> baseGenres = new HashSet<>(currentGenresList);
 
-		ArrayList, Integer>> scoredItems = new ArrayList<>();
+		ArrayList<ScoredAnimeItem> scoredItems = new ArrayList<>();
 
 		for (HashMap<String, Object> item : allList) {
 			String slug = item.get("slug") != null ? item.get("slug").toString() : "";
@@ -420,19 +430,19 @@ public class WatchActivity extends AppCompatActivity {
 				score += 2;
 			}
 
-			scoredItems.add(new java.util.AbstractMap.SimpleEntry<>(item, score));
+			scoredItems.add(new ScoredAnimeItem(item, score));
 		}
 
-		Collections.sort(scoredItems, new Comparator, Integer>>() {
+		Collections.sort(scoredItems, new Comparator<ScoredAnimeItem>() {
 			@Override
-			public int compare(Map.Entry<HashMap<String, Object>, Integer> a, Map.Entry<HashMap<String, Object>, Integer> b) {
-				return Integer.compare(b.getValue(), a.getValue());
+			public int compare(ScoredAnimeItem a, ScoredAnimeItem b) {
+				return Integer.compare(b.score, a.score);
 			}
 		});
 
 		ArrayList<HashMap<String, Object>> result = new ArrayList<>();
 		for (int i = 0; i < Math.min(maxCount, scoredItems.size()); i++) {
-			result.add(scoredItems.get(i).getKey());
+			result.add(scoredItems.get(i).item);
 		}
 		return result;
 	}
@@ -709,19 +719,14 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// ========================================================
-	// PEMBATAS BAWAH VIDEO: GARIS BIASA VS PROGRESSBAR MINI
-	// ========================================================
 	private void updateBottomDividerState() {
 		if (isFullscreen) {
 			if (dividerLineView != null) dividerLineView.setVisibility(View.GONE);
 			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.GONE);
 		} else if (areControlsVisible) {
-			// Kontainer kontrol muncul -> tampilkan garis pembatas biasa
 			if (dividerLineView != null) dividerLineView.setVisibility(View.VISIBLE);
 			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.GONE);
 		} else {
-			// Kontainer kontrol hilang -> ganti menjadi ProgressBar berjalan
 			if (dividerLineView != null) dividerLineView.setVisibility(View.GONE);
 			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.VISIBLE);
 		}
@@ -1248,7 +1253,6 @@ public class WatchActivity extends AppCompatActivity {
 		content.addView(tvSinopsisBody);
 
 		root.addView(scrollView);
-		// Sinopsis tidak menggelapkan layar dan video tetap bisa diklik
 		dialogHolder[0] = createAdaptiveSheetDialog(root, true);
 	}
 
