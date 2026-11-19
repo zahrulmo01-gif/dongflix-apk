@@ -352,7 +352,7 @@ public class CatalogActivity extends AppCompatActivity {
 
 		ScrollView scroll = new ScrollView(this);
 		scroll.setFillViewport(true);
-		scroll.setScrollBarEnabled(false);
+		scroll.setVerticalScrollBarEnabled(false);
 
 		LinearLayout container = new LinearLayout(this);
 		container.setOrientation(LinearLayout.VERTICAL);
@@ -367,7 +367,6 @@ public class CatalogActivity extends AppCompatActivity {
 		sheetBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
 		container.setBackground(sheetBg);
 
-		// Handle bar atas
 		View handle = new View(this);
 		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int) (42 * d), (int) (4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -391,7 +390,6 @@ public class CatalogActivity extends AppCompatActivity {
 		tvSheetTitle.setLayoutParams(stLp);
 		container.addView(tvSheetTitle);
 
-		// Bagian Status
 		container.addView(buildSheetSectionLabel("Status Tayang", d));
 		final String[] statusLabels = {"Semua Status", "Ongoing", "Completed"};
 		final List<TextView> statusChips = new ArrayList<>();
@@ -421,7 +419,6 @@ public class CatalogActivity extends AppCompatActivity {
 		statusScroll.addView(statusRow);
 		container.addView(statusScroll);
 
-		// Bagian Urutkan
 		container.addView(buildSheetSectionLabel("Urutkan", d));
 		final String[] sortLabels = {"Terbaru", "Judul A - Z", "Judul Z - A"};
 		final List<TextView> sortChips = new ArrayList<>();
@@ -451,7 +448,6 @@ public class CatalogActivity extends AppCompatActivity {
 		sortScroll.addView(sortRow);
 		container.addView(sortScroll);
 
-		// Bagian Kategori Lengkap (3 kolom per baris agar mudah dipilih)
 		container.addView(buildSheetSectionLabel("Kategori Lengkap", d));
 		final List<TextView> categoryChips = new ArrayList<>();
 		LinearLayout currentCatRow = null;
@@ -498,7 +494,6 @@ public class CatalogActivity extends AppCompatActivity {
 			}
 		}
 
-		// Isi sisa slot baris terakhir jika jumlah kategori tidak kelipatan 3
 		int remainder = availableCategories.size() % 3;
 		if (remainder != 0 && currentCatRow != null) {
 			int fillers = 3 - remainder;
@@ -511,7 +506,6 @@ public class CatalogActivity extends AppCompatActivity {
 			}
 		}
 
-		// Tombol Aksi Reset & Terapkan
 		LinearLayout actionRow = new LinearLayout(this);
 		actionRow.setOrientation(LinearLayout.HORIZONTAL);
 		LinearLayout.LayoutParams actLp = new LinearLayout.LayoutParams(
