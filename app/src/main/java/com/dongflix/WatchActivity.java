@@ -6,7 +6,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -123,6 +122,10 @@ public class WatchActivity extends AppCompatActivity {
 	public String currentStreamReferer = "";
 	public boolean isFullscreen = false;
 	public int savedSeekPosition = 0;
+
+	public int currentVideoWidth = 0;
+	public int currentVideoHeight = 0;
+	public boolean isFillModeActive = false;
 
 	public boolean isAutoQualityMode = true;
 	public int selectedQualityIndex = 0;
@@ -312,6 +315,15 @@ public class WatchActivity extends AppCompatActivity {
 		};
 	}
 
+	private int getSystemStatusBarHeight() {
+		int result = 0;
+		int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+		if (resourceId > 0) {
+			result = getResources().getDimensionPixelSize(resourceId);
+		}
+		return result;
+	}
+
 	private void initializeLogic() {
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -320,6 +332,11 @@ public class WatchActivity extends AppCompatActivity {
 			window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
 			window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
 			window.setStatusBarColor(0xFF000000);
+		}
+
+		View rootWatch = findViewById(R.id.rootWatchLayout);
+		if (rootWatch != null) {
+			rootWatch.setPadding(0, getSystemStatusBarHeight(), 0, 0);
 		}
 
 		_WatchUI();
@@ -379,8 +396,6 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	public void _WatchUI() {
-		float d = getResources().getDisplayMetrics().density;
-
 		GradientDrawable topGrad = new GradientDrawable(
 			GradientDrawable.Orientation.TOP_BOTTOM,
 			new int[]{0xCC000000, 0x00000000}
@@ -406,7 +421,7 @@ public class WatchActivity extends AppCompatActivity {
 		if (btnUnlockScreen != null) {
 			GradientDrawable lockBg = new GradientDrawable();
 			lockBg.setCornerRadius(100f);
-			lockBg.setColor(0xCC14161D);
+			lockBg.setColor(0xCC0B0D11);
 			btnUnlockScreen.setBackground(lockBg);
 		}
 
@@ -414,28 +429,21 @@ public class WatchActivity extends AppCompatActivity {
 			btnFullscreenEpisodes.setBackgroundColor(Color.TRANSPARENT);
 		}
 
-		TextView[] badges = {textRating, textYear, textGenre};
-		for (TextView badge : badges) {
-			if (badge != null) {
-				GradientDrawable pillBg = new GradientDrawable();
-				pillBg.setCornerRadius(6 * d);
-				pillBg.setColor(Color.parseColor("#1E212B"));
-				badge.setBackground(pillBg);
-				badge.setTextColor(Color.parseColor("#CBD5E1"));
-			}
-		}
+		if (textRating != null) textRating.setBackground(null);
+		if (textYear != null) textYear.setBackground(null);
+		if (textGenre != null) textGenre.setBackground(null);
 
 		if (iconExpandDetail != null) {
 			GradientDrawable expandBg = new GradientDrawable();
 			expandBg.setShape(GradientDrawable.OVAL);
-			expandBg.setColor(Color.parseColor("#1E212B"));
+			expandBg.setColor(Color.parseColor("#12141A"));
 			iconExpandDetail.setBackground(expandBg);
 		}
 
 		if (btnSortEpisodes != null) {
 			GradientDrawable sortBg = new GradientDrawable();
 			sortBg.setCornerRadius(100f);
-			sortBg.setColor(Color.parseColor("#1E212B"));
+			sortBg.setColor(Color.parseColor("#12141A"));
 			btnSortEpisodes.setBackground(sortBg);
 		}
 
@@ -444,10 +452,59 @@ public class WatchActivity extends AppCompatActivity {
 			if (btn != null) {
 				GradientDrawable btnBg = new GradientDrawable();
 				btnBg.setCornerRadius(100f);
-				btnBg.setColor(Color.parseColor("#1E212B"));
+				btnBg.setColor(Color.parseColor("#12141A"));
 				btn.setBackground(btnBg);
 			}
 		}
+	}
+
+	// ========================================================
+	// RASIO ASLI VIDEO (MENCEGAH VIDEO GEPENG / MELAR)
+	// ========================================================
+	public void adjustVideoAspectRatio() {
+		if (playerTextureView == null || layoutPlayer == null) return;
+		if (currentVideoWidth <= 0 || currentVideoHeight <= 0) return;
+
+		layoutPlayer.post(new Runnable() {
+			@Override
+			public void run() {
+				int containerWidth = layoutPlayer.getWidth();
+				int containerHeight = layoutPlayer.getHeight();
+				if (containerWidth <= 0 || containerHeight <= 0) return;
+
+				float videoAspect = (float) currentVideoWidth / currentVideoHeight;
+				float containerAspect = (float) containerWidth / containerHeight;
+
+				int targetWidth;
+				int targetHeight;
+
+				if (isFillModeActive) {
+					if (videoAspect > containerAspect) {
+						targetHeight = containerHeight;
+						targetWidth = Math.round(containerHeight * videoAspect);
+					} else {
+						targetWidth = containerWidth;
+						targetHeight = Math.round(containerWidth / videoAspect);
+					}
+				} else {
+					if (videoAspect > containerAspect) {
+						targetWidth = containerWidth;
+						targetHeight = Math.round(containerWidth / videoAspect);
+					} else {
+						targetHeight = containerHeight;
+						targetWidth = Math.round(containerHeight * videoAspect);
+					}
+				}
+
+				FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) playerTextureView.getLayoutParams();
+				lp.width = targetWidth;
+				lp.height = targetHeight;
+				lp.gravity = Gravity.CENTER;
+				playerTextureView.setLayoutParams(lp);
+				playerTextureView.setScaleX(1.0f);
+				playerTextureView.setScaleY(1.0f);
+			}
+		});
 	}
 
 	private void showSeekAnimation(final View animView) {
@@ -534,7 +591,7 @@ public class WatchActivity extends AppCompatActivity {
 			sideDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
 			GradientDrawable panelBg = new GradientDrawable();
-			panelBg.setColor(Color.parseColor("#14161D"));
+			panelBg.setColor(Color.parseColor("#0B0D11"));
 			panelBg.setCornerRadii(new float[]{18 * d, 18 * d, 0, 0, 0, 0, 18 * d, 18 * d});
 			contentView.setBackground(panelBg);
 
@@ -556,12 +613,9 @@ public class WatchActivity extends AppCompatActivity {
 				window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
 				window.setDimAmount(0.45f);
 				window.getDecorView().setSystemUiVisibility(
-					View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-					| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-					| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-					| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+					View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 					| View.SYSTEM_UI_FLAG_FULLSCREEN
-					| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+					| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
 				);
 			}
 
@@ -570,12 +624,9 @@ public class WatchActivity extends AppCompatActivity {
 				public void onDismiss(DialogInterface dialog) {
 					if (isFullscreen) {
 						getWindow().getDecorView().setSystemUiVisibility(
-							View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-							| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-							| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-							| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+							View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 							| View.SYSTEM_UI_FLAG_FULLSCREEN
-							| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+							| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
 						);
 					}
 				}
@@ -635,7 +686,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		GradientDrawable closeBg = new GradientDrawable();
 		closeBg.setShape(GradientDrawable.OVAL);
-		closeBg.setColor(Color.parseColor("#252936"));
+		closeBg.setColor(Color.parseColor("#181B22"));
 		btnClose.setBackground(closeBg);
 
 		btnClose.setOnClickListener(new View.OnClickListener() {
@@ -658,7 +709,7 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setColor(Color.parseColor("#0B0D11"));
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
@@ -668,7 +719,7 @@ public class WatchActivity extends AppCompatActivity {
 		handleLp.bottomMargin = (int)(12 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setColor(Color.parseColor("#1E222B"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -728,7 +779,7 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(28 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setColor(Color.parseColor("#0B0D11"));
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
@@ -738,7 +789,7 @@ public class WatchActivity extends AppCompatActivity {
 		handleLp.bottomMargin = (int)(12 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setColor(Color.parseColor("#1E222B"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -765,7 +816,7 @@ public class WatchActivity extends AppCompatActivity {
 		posterCard.setLayoutParams(cardLp);
 		posterCard.setRadius(8 * d);
 		posterCard.setCardElevation(0f);
-		posterCard.setCardBackgroundColor(Color.parseColor("#1E212B"));
+		posterCard.setCardBackgroundColor(Color.parseColor("#12141A"));
 
 		ImageView ivSheetPoster = new ImageView(this);
 		ivSheetPoster.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -816,7 +867,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			GradientDrawable bBg = new GradientDrawable();
 			bBg.setCornerRadius(5 * d);
-			bBg.setColor(Color.parseColor("#1E212B"));
+			bBg.setColor(Color.parseColor("#12141A"));
 			bView.setBackground(bBg);
 
 			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -836,7 +887,7 @@ public class WatchActivity extends AppCompatActivity {
 		miniThumb.setLayoutParams(miniLp);
 		miniThumb.setRadius(11 * d);
 		miniThumb.setCardElevation(0f);
-		miniThumb.setCardBackgroundColor(Color.parseColor("#1E212B"));
+		miniThumb.setCardBackgroundColor(Color.parseColor("#12141A"));
 
 		ImageView ivMini = new ImageView(this);
 		ivMini.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -878,7 +929,7 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setColor(Color.parseColor("#0B0D11"));
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
@@ -888,7 +939,7 @@ public class WatchActivity extends AppCompatActivity {
 		handleLp.bottomMargin = (int)(12 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setColor(Color.parseColor("#1E222B"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -920,7 +971,7 @@ public class WatchActivity extends AppCompatActivity {
 			if (isSelected) {
 				GradientDrawable selectedBg = new GradientDrawable();
 				selectedBg.setCornerRadius(12 * d);
-				selectedBg.setColor(Color.parseColor("#263B5E"));
+				selectedBg.setColor(Color.parseColor("#1E3A8A"));
 				itemRow.setBackground(selectedBg);
 			} else {
 				itemRow.setBackgroundColor(Color.TRANSPARENT);
@@ -941,7 +992,7 @@ public class WatchActivity extends AppCompatActivity {
 				checkCircle.setLayoutParams(checkLp);
 				checkCircle.setGravity(Gravity.CENTER);
 				checkCircle.setText("✓");
-				checkCircle.setTextColor(Color.parseColor("#14161D"));
+				checkCircle.setTextColor(Color.parseColor("#0B0D11"));
 				checkCircle.setTextSize(11f);
 				checkCircle.setTypeface(null, Typeface.BOLD);
 
@@ -986,7 +1037,7 @@ public class WatchActivity extends AppCompatActivity {
 		root.setPadding((int)(20 * d), (int)(12 * d), (int)(20 * d), (int)(24 * d));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#14161D"));
+		sheetBg.setColor(Color.parseColor("#0B0D11"));
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0, 0, 0, 0});
 		root.setBackground(sheetBg);
 
@@ -996,7 +1047,7 @@ public class WatchActivity extends AppCompatActivity {
 		handleLp.bottomMargin = (int)(12 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#2D313E"));
+		handleBg.setColor(Color.parseColor("#1E222B"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -1051,7 +1102,7 @@ public class WatchActivity extends AppCompatActivity {
 
 					GradientDrawable cellBg = new GradientDrawable();
 					cellBg.setCornerRadius(10 * d);
-					cellBg.setColor(isActive ? Color.parseColor("#3B82F6") : Color.parseColor("#1E212B"));
+					cellBg.setColor(isActive ? Color.parseColor("#3B82F6") : Color.parseColor("#12141A"));
 					cellBtn.setBackground(cellBg);
 
 					cellBtn.setOnClickListener(new View.OnClickListener() {
@@ -1582,9 +1633,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// ========================================================
-	// FALLBACK WEBVIEW INTERCEPTOR (JIKA SERVER PROTEKSI JS / IFRAME)
-	// ========================================================
 	private void playViaWebViewInterceptor(final String embedUrl) {
 		runOnUiThread(new Runnable() {
 			@Override
@@ -1621,7 +1669,6 @@ public class WatchActivity extends AppCompatActivity {
 								if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request != null && request.getUrl() != null) {
 									final String reqUrl = request.getUrl().toString();
 									String low = reqUrl.toLowerCase();
-									// Jika WebView menangkap URL video m3u8 / mp4 asli di belakang layar, ambil dan putar di native MediaPlayer!
 									if ((low.contains(".m3u8") || low.contains(".mp4")) && !low.contains("ads") && !low.contains("analytics") && !low.contains("tracker")) {
 										runOnUiThread(new Runnable() {
 											@Override
@@ -1748,6 +1795,17 @@ public class WatchActivity extends AppCompatActivity {
 					mediaPlayer.setDataSource(WatchActivity.this, Uri.parse(cleanUrl), headers);
 					mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
 
+					mediaPlayer.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
+						@Override
+						public void onVideoSizeChanged(MediaPlayer mp, int width, int height) {
+							if (width > 0 && height > 0) {
+								currentVideoWidth = width;
+								currentVideoHeight = height;
+								adjustVideoAspectRatio();
+							}
+						}
+					});
+
 					mediaPlayer.setOnBufferingUpdateListener(new MediaPlayer.OnBufferingUpdateListener() {
 						@Override
 						public void onBufferingUpdate(MediaPlayer mp, int percent) {
@@ -1807,6 +1865,14 @@ public class WatchActivity extends AppCompatActivity {
 								mp.setSurface(playerSurface);
 							}
 
+							int vw = mp.getVideoWidth();
+							int vh = mp.getVideoHeight();
+							if (vw > 0 && vh > 0) {
+								currentVideoWidth = vw;
+								currentVideoHeight = vh;
+								adjustVideoAspectRatio();
+							}
+
 							int duration = mp.getDuration();
 							if (playerSeekBar != null) playerSeekBar.setMax(duration);
 
@@ -1839,7 +1905,6 @@ public class WatchActivity extends AppCompatActivity {
 							if (playerHandler != null && autoDowngradeRunnable != null) {
 								playerHandler.removeCallbacks(autoDowngradeRunnable);
 							}
-							// Jika link IPFS gateway pertama gagal, coba gateway alternatif dweb.link
 							if (cleanUrl.contains("ipfs.io/ipfs/")) {
 								String altIpfs = cleanUrl.replace("https://ipfs.io/ipfs/", "https://dweb.link/ipfs/");
 								playVideoUrl(altIpfs, savedSeekPosition);
@@ -1869,42 +1934,34 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
-	// ========================================================
-	// FULLSCREEN: FIX SECTION ATAS & SAMPING TERPOTONG TOTAL
-	// ========================================================
 	public void toggleFullscreen() {
 		final Window window = getWindow();
 		final View decorView = window.getDecorView();
+		final View rootWatch = findViewById(R.id.rootWatchLayout);
 		final View scrollContent = findViewById(R.id.vscroll16);
 		final View dividerLine = findViewById(R.id.view139);
 		final FrameLayout playContainer = findViewById(R.id.frame_layout5);
-		final View rootContainer = (layoutPlayer != null && layoutPlayer.getParent() instanceof View) ? (View) layoutPlayer.getParent() : null;
 		final float density = getResources().getDisplayMetrics().density;
 
 		if (!isFullscreen) {
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
-			if (rootContainer != null) {
-				rootContainer.setFitsSystemWindows(false);
-				rootContainer.setPadding(0, 0, 0, 0);
+			if (rootWatch != null) {
+				rootWatch.setPadding(0, 0, 0, 0);
 			}
 
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 				WindowManager.LayoutParams lp = window.getAttributes();
-				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
 				window.setAttributes(lp);
 			}
 
 			window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-			window.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 
 			decorView.setSystemUiVisibility(
-				View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-				| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-				| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+				View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 				| View.SYSTEM_UI_FLAG_FULLSCREEN
-				| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
 			);
 
 			if (scrollContent != null) scrollContent.setVisibility(View.GONE);
@@ -1928,19 +1985,19 @@ public class WatchActivity extends AppCompatActivity {
 				btnFullscreenEpisodes.setVisibility(View.VISIBLE);
 			}
 
-			int sideMarginFull = (int) (40 * density);
+			int sideMarginFull = (int) (28 * density);
 			if (btnPrevEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnPrevEpisode.getLayoutParams();
-				lp.width = (int) (40 * density);
-				lp.height = (int) (40 * density);
+				lp.width = (int) (38 * density);
+				lp.height = (int) (38 * density);
 				lp.setMargins(sideMarginFull, 0, 0, 0);
 				btnPrevEpisode.setLayoutParams(lp);
 			}
 
 			if (btnNextEpisode != null) {
 				RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) btnNextEpisode.getLayoutParams();
-				lp.width = (int) (40 * density);
-				lp.height = (int) (40 * density);
+				lp.width = (int) (38 * density);
+				lp.height = (int) (38 * density);
 				lp.setMargins(0, 0, sideMarginFull, 0);
 				btnNextEpisode.setLayoutParams(lp);
 			}
@@ -1948,46 +2005,46 @@ public class WatchActivity extends AppCompatActivity {
 			int gapCenterFull = (int) (36 * density);
 			if (btnRewind != null) {
 				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnRewind.getLayoutParams();
-				lp.width = (int) (44 * density);
-				lp.height = (int) (44 * density);
+				lp.width = (int) (42 * density);
+				lp.height = (int) (42 * density);
 				btnRewind.setLayoutParams(lp);
 			}
 
 			if (playContainer != null) {
 				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) playContainer.getLayoutParams();
-				lp.width = (int) (78 * density);
-				lp.height = (int) (78 * density);
+				lp.width = (int) (74 * density);
+				lp.height = (int) (74 * density);
 				lp.setMargins(gapCenterFull, 0, gapCenterFull, 0);
 				playContainer.setLayoutParams(lp);
 			}
 
 			if (playerLoading != null) {
 				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
-				lp.width = (int) (78 * density);
-				lp.height = (int) (78 * density);
+				lp.width = (int) (74 * density);
+				lp.height = (int) (74 * density);
 				playerLoading.setLayoutParams(lp);
 			}
 
 			if (btnPlay != null) {
 				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
-				lp.width = (int) (64 * density);
-				lp.height = (int) (64 * density);
+				lp.width = (int) (60 * density);
+				lp.height = (int) (60 * density);
 				btnPlay.setLayoutParams(lp);
-				int padPlay = (int) (16 * density);
+				int padPlay = (int) (15 * density);
 				btnPlay.setPadding(padPlay, padPlay, padPlay, padPlay);
 			}
 
 			if (btnForward != null) {
 				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) btnForward.getLayoutParams();
-				lp.width = (int) (44 * density);
-				lp.height = (int) (44 * density);
+				lp.width = (int) (42 * density);
+				lp.height = (int) (42 * density);
 				btnForward.setLayoutParams(lp);
 			}
 
 			if (btnBack != null) {
 				ViewGroup.LayoutParams lp = btnBack.getLayoutParams();
-				lp.width = (int) (30 * density);
-				lp.height = (int) (30 * density);
+				lp.width = (int) (28 * density);
+				lp.height = (int) (28 * density);
 				btnBack.setLayoutParams(lp);
 			}
 			if (btnFullscreen != null) {
@@ -2000,20 +2057,18 @@ public class WatchActivity extends AppCompatActivity {
 			if (btnQuality != null) btnQuality.setTextSize(14f);
 			if (textTime != null) textTime.setTextSize(13.5f);
 
-			// Safe-area padding ekstra di kiri-kanan (44dp) dan atas (22dp) agar bebas dari bezel & poni kamera
-			int padHoriz = (int) (44 * density);
-			int padTop = (int) (22 * density);
-			int padBottom = (int) (14 * density);
-			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, 0);
+			int padHoriz = (int) (28 * density);
+			int padTop = (int) (18 * density);
+			int padBottom = (int) (12 * density);
+			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, (int)(6 * density));
 			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
 
 			isFullscreen = true;
 		} else {
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-			if (rootContainer != null) {
-				rootContainer.setFitsSystemWindows(true);
-				rootContainer.requestFitSystemWindows();
+			if (rootWatch != null) {
+				rootWatch.setPadding(0, getSystemStatusBarHeight(), 0, 0);
 			}
 
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -2023,7 +2078,6 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-			window.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 			decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
 
 			int heightPx = (int) (220 * density);
@@ -2111,14 +2165,15 @@ public class WatchActivity extends AppCompatActivity {
 			if (btnQuality != null) btnQuality.setTextSize(13f);
 			if (textTime != null) textTime.setTextSize(13f);
 
-			int defPadX = (int) (14 * density);
-			int defPadTop = (int) (10 * density);
+			int defPadX = (int) (16 * density);
+			int defPadTop = (int) (14 * density);
 			int defPadBottom = (int) (6 * density);
-			if (topBar != null) topBar.setPadding(defPadX, defPadTop, defPadX, 0);
+			if (topBar != null) topBar.setPadding(defPadX, defPadTop, defPadX, (int)(6 * density));
 			if (bottomControls != null) bottomControls.setPadding(0, 0, 0, defPadBottom);
 
 			isFullscreen = false;
 		}
+		adjustVideoAspectRatio();
 		resetControlsTimer();
 	}
 
@@ -2331,6 +2386,7 @@ public class WatchActivity extends AppCompatActivity {
 					if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
 						mediaPlayer.setSurface(playerSurface);
 					}
+					adjustVideoAspectRatio();
 				}
 				@Override public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
 				@Override
@@ -2550,24 +2606,14 @@ public class WatchActivity extends AppCompatActivity {
 			});
 		}
 
-		final boolean[] isFillMode = new boolean[]{false};
 		if (btnFill != null) {
 			btnFill.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
 					resetControlsTimer();
-					isFillMode[0] = !isFillMode[0];
-					if (playerTextureView != null) {
-						if (isFillMode[0]) {
-							playerTextureView.setScaleX(1.33f);
-							playerTextureView.setScaleY(1.33f);
-							Toast.makeText(WatchActivity.this, "Mode: Fill", Toast.LENGTH_SHORT).show();
-						} else {
-							playerTextureView.setScaleX(1.0f);
-							playerTextureView.setScaleY(1.0f);
-							Toast.makeText(WatchActivity.this, "Mode: Original", Toast.LENGTH_SHORT).show();
-						}
-					}
+					isFillModeActive = !isFillModeActive;
+					adjustVideoAspectRatio();
+					Toast.makeText(WatchActivity.this, isFillModeActive ? "Mode: Fill" : "Mode: Original", Toast.LENGTH_SHORT).show();
 				}
 			});
 		}
@@ -2606,9 +2652,6 @@ public class WatchActivity extends AppCompatActivity {
 		updateEpisodeNavButtons();
 	}
 
-	// ========================================================
-	// HELPER HTTP GET & POST + JS PACKER UNPACKER
-	// ========================================================
 	private String fetchHttpString(String targetUrl, String referer, boolean saveDmCookie) throws Exception {
 		String currentUrl = targetUrl;
 		HttpURLConnection conn = null;
@@ -2676,7 +2719,7 @@ public class WatchActivity extends AppCompatActivity {
 		conn.setReadTimeout(10000);
 		conn.setDoOutput(true);
 		conn.setRequestProperty("Content-Type", "application/json");
-		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
 		OutputStream os = conn.getOutputStream();
 		os.write(jsonPayload.getBytes("UTF-8"));
@@ -2722,9 +2765,6 @@ public class WatchActivity extends AppCompatActivity {
 		return "";
 	}
 
-	// ========================================================
-	// EKSTRAKTOR STREAM MULTI-SERVER + WEBVIEW FALLBACK OTOMATIS
-	// ========================================================
 	public void extractStream(final String server, final String targetUrl) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
 
@@ -2740,7 +2780,6 @@ public class WatchActivity extends AppCompatActivity {
 		currentStreamReferer = finalTargetUrl;
 
 		if (serverKey.contains("ok") || serverKey.contains("odnoklassniki") || lowerUrl.contains("ok.ru")) {
-			// ==================== 1. OK.RU ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -2829,7 +2868,6 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly")) {
-			// ==================== 2. DAILYMOTION (AMBIL ?id=... DARI WORKER / URL) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -2873,7 +2911,6 @@ public class WatchActivity extends AppCompatActivity {
 										JSONArray qArr = qualities.optJSONArray(qKey);
 										if (qArr != null) {
 											String chosenUrl = "";
-											// Prioritaskan MP4 progresif agar tidak putus di MediaPlayer Android
 											for (int idx = 0; idx < qArr.length(); idx++) {
 												JSONObject itemQ = qArr.getJSONObject(idx);
 												String mime = itemQ.optString("type", "");
@@ -2912,7 +2949,6 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
 								} else {
-									// Fallback langsung ke Geo Dailymotion Embed Player jika API blocked
 									playViaWebViewInterceptor("https://geo.dailymotion.com/player.html?video=" + cleanDmId);
 								}
 							}
@@ -2924,7 +2960,6 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
-			// ==================== 3. D.TUBE (HIVE RPC API + MULTI GATEWAY IPFS) ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -3006,7 +3041,6 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("rumble") || lowerUrl.contains("rumble.com")) {
-			// ==================== 4. RUMBLE ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -3115,7 +3149,6 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else if (serverKey.contains("odysee") || lowerUrl.contains("odysee.com") || lowerUrl.contains("odycdn.com")) {
-			// ==================== 5. ODYSEE ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -3186,7 +3219,6 @@ public class WatchActivity extends AppCompatActivity {
 			}).start();
 
 		} else {
-			// ==================== 6. SERVER EMBED / PACKED JS / WEBVIEW FALLBACK ====================
 			new Thread(new Runnable() {
 				@Override
 				public void run() {
@@ -3260,7 +3292,6 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalGenericUrl, 0);
 								} else {
-									// Jika terproteksi JS/Cloudflare, langsung jalankan di WebView Interceptor
 									playViaWebViewInterceptor(finalTargetUrl);
 								}
 							}
@@ -3315,7 +3346,7 @@ public class WatchActivity extends AppCompatActivity {
 					tvEpisode.setTypeface(null, Typeface.BOLD);
 				}
 			} else {
-				itemBg.setColor(Color.parseColor("#1E212B"));
+				itemBg.setColor(Color.parseColor("#12141A"));
 				if (tvEpisode != null) {
 					tvEpisode.setTextColor(0xFFCBD5E1);
 					tvEpisode.setTypeface(null, Typeface.NORMAL);
