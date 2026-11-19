@@ -88,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
 	private ImageView imgHome, imgFavorite, imgProfile, imgSearch;
 	private TextView txtHome, txtFavorite, txtProfile;
 	private View liquidDragPill;
-	private int activeNavTabIndex = 0; // 0 = Beranda, 1 = Pustaka, 2 = Akun
+	private int activeNavTabIndex = 0;
 	private boolean isNavbarCompact = false;
 
 	private ValueAnimator mainShimmerAnimator;
@@ -1649,7 +1649,6 @@ public class MainActivity extends AppCompatActivity {
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
-	// Liquid Glass bening ber-highlight tanpa RenderEffect blur merata
 	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
 		float d = getResources().getDisplayMetrics().density;
 		if (blurTarget != null) {
