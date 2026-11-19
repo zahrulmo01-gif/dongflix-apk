@@ -23,7 +23,6 @@
 			android:gravity="center_vertical"
 			android:orientation="vertical">
 
-			<!-- LOGO / BRAND HEADER -->
 			<LinearLayout
 				android:layout_width="wrap_content"
 				android:layout_height="wrap_content"
@@ -69,11 +68,10 @@
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:layout_marginTop="8dp"
-				android:text="Masuk menggunakan email yang terdaftar di Dongflix untuk menyinkronkan riwayat &amp; pustaka kamu."
+				android:text="Masuk menggunakan email dan password akun Dongflix kamu."
 				android:textSize="13.5sp"
 				android:textColor="#94A3B8" />
 
-			<!-- SWITCH PILIHAN MODE: MASUK / DAFTAR -->
 			<LinearLayout
 				android:id="@+id/tab_switch_container"
 				android:layout_width="match_parent"
@@ -105,7 +103,6 @@
 					android:textColor="#94A3B8" />
 			</LinearLayout>
 
-			<!-- FORM CARD FROSTED GLASS -->
 			<LinearLayout
 				android:id="@+id/auth_form_card"
 				android:layout_width="match_parent"
@@ -114,7 +111,6 @@
 				android:padding="20dp"
 				android:orientation="vertical">
 
-				<!-- FIELD NAMA LENGKAP (HANYA MUNCUL SAAT DAFTAR) -->
 				<LinearLayout
 					android:id="@+id/group_register_fields"
 					android:layout_width="match_parent"
@@ -169,7 +165,6 @@
 						android:singleLine="true" />
 				</LinearLayout>
 
-				<!-- FIELD EMAIL -->
 				<TextView
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
@@ -192,7 +187,29 @@
 					android:inputType="textEmailAddress"
 					android:singleLine="true" />
 
-				<!-- TOMBOL SUBMIT -->
+				<TextView
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="16dp"
+					android:text="Password"
+					android:textSize="12.5sp"
+					android:textStyle="bold"
+					android:textColor="#CBD5E1" />
+
+				<EditText
+					android:id="@+id/input_auth_password"
+					android:layout_width="match_parent"
+					android:layout_height="48dp"
+					android:layout_marginTop="8dp"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp"
+					android:textSize="14sp"
+					android:textColor="#FFFFFF"
+					android:hint="Minimal 6 karakter"
+					android:textColorHint="#64748B"
+					android:inputType="textPassword"
+					android:singleLine="true" />
+
 				<FrameLayout
 					android:id="@+id/btn_submit_auth"
 					android:layout_width="match_parent"
