@@ -190,7 +190,7 @@ public class WatchActivity extends AppCompatActivity {
 		gradientBottom = findViewById(R.id.gradientBottom);
 		topBar = findViewById(R.id.topBar);
 		bottomControls = findViewById(R.id.bottomControls);
-		dividerLineView = findViewById(R.id.view139);
+		dividerLineView = findViewById(R.id.dividerContainer);
 		miniVideoProgressBar = findViewById(R.id.miniVideoProgressBar);
 
 		animSeekLeft = findViewById(R.id.animSeekLeft);
@@ -719,16 +719,17 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
+	// ========================================================
+	// PEMBATAS BAWAH VIDEO TANPA KEDUTAN (VISIBLE <-> INVISIBLE)
+	// ========================================================
 	private void updateBottomDividerState() {
+		if (dividerLineView == null || miniVideoProgressBar == null) return;
+
 		if (isFullscreen) {
-			if (dividerLineView != null) dividerLineView.setVisibility(View.GONE);
-			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.GONE);
-		} else if (areControlsVisible) {
-			if (dividerLineView != null) dividerLineView.setVisibility(View.VISIBLE);
-			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.GONE);
+			dividerLineView.setVisibility(View.GONE);
 		} else {
-			if (dividerLineView != null) dividerLineView.setVisibility(View.GONE);
-			if (miniVideoProgressBar != null) miniVideoProgressBar.setVisibility(View.VISIBLE);
+			dividerLineView.setVisibility(View.VISIBLE);
+			miniVideoProgressBar.setVisibility(areControlsVisible ? View.INVISIBLE : View.VISIBLE);
 		}
 	}
 
@@ -968,16 +969,18 @@ public class WatchActivity extends AppCompatActivity {
 							bottomSheet.setElevation(0f);
 						}
 
-						View decor = getWindow().getDecorView();
-						int totalHeight = decor.getHeight();
+						// Hitung tinggi presisi tepat dari bawah pemutar video sampai batas bawah layar
+						Rect visibleFrame = new Rect();
+						getWindow().getDecorView().getWindowVisibleDisplayFrame(visibleFrame);
+
 						int playerBottom = 0;
 						if (layoutPlayer != null) {
 							int[] loc = new int[2];
-							layoutPlayer.getLocationInWindow(loc);
+							layoutPlayer.getLocationOnScreen(loc);
 							playerBottom = loc[1] + layoutPlayer.getHeight();
 						}
 
-						int targetSheetHeight = totalHeight - playerBottom;
+						int targetSheetHeight = visibleFrame.bottom - playerBottom;
 						if (targetSheetHeight > (int)(200 * getResources().getDisplayMetrics().density)) {
 							ViewGroup.LayoutParams sheetLp = bottomSheet.getLayoutParams();
 							sheetLp.height = targetSheetHeight;
@@ -985,6 +988,7 @@ public class WatchActivity extends AppCompatActivity {
 						}
 
 						BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+						behavior.setPeekHeight(targetSheetHeight);
 						behavior.setSkipCollapsed(true);
 						behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 					}
@@ -2147,6 +2151,10 @@ public class WatchActivity extends AppCompatActivity {
 									playerSeekBar.setSecondaryProgress(cacheMillis);
 									playerSeekBar.invalidate();
 								}
+								if (miniVideoProgressBar != null) {
+									miniVideoProgressBar.setSecondaryProgress(percent * 10);
+									miniVideoProgressBar.invalidate();
+								}
 							} catch (Exception ignored) {}
 						}
 					});
@@ -2583,6 +2591,58 @@ public class WatchActivity extends AppCompatActivity {
 			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
 		};
 
+		// Custom Drawable untuk Mini ProgressBar di pembatas bawah video (gaya + cache identik dengan SeekBar utama)
+		Drawable miniTrackDrawable = new Drawable() {
+			private final Paint paintBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint paintCache = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint paintProgress = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+			{
+				paintBg.setColor(0x33FFFFFF);
+				paintCache.setColor(0x80CCCCCC);
+				paintProgress.setColor(0xFF3B82F6);
+			}
+
+			@Override
+			public void draw(Canvas canvas) {
+				if (miniVideoProgressBar == null) return;
+				Rect bounds = getBounds();
+				float width = bounds.width();
+				float top = bounds.top;
+				float bottom = bounds.bottom;
+
+				int max = miniVideoProgressBar.getMax();
+				if (max <= 0) max = 1000;
+
+				float progressRatio = (float) miniVideoProgressBar.getProgress() / max;
+				float cacheRatio = (float) miniVideoProgressBar.getSecondaryProgress() / max;
+
+				float progressRight = bounds.left + (width * progressRatio);
+				float cacheRight = bounds.left + (width * cacheRatio);
+
+				if (cacheRight > bounds.left) {
+					canvas.drawRect(bounds.left, top, cacheRight, bottom, paintCache);
+				}
+
+				if (progressRight > bounds.left) {
+					canvas.drawRect(bounds.left, top, progressRight, bottom, paintProgress);
+				}
+
+				float bgStart = Math.max(cacheRight, progressRight) + gapSize;
+				if (bgStart < bounds.right) {
+					canvas.drawRect(bgStart, top, bounds.right, bottom, paintBg);
+				}
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+
+		if (miniVideoProgressBar != null) {
+			miniVideoProgressBar.setProgressDrawable(miniTrackDrawable);
+		}
+
 		if (playerSeekBar != null) {
 			playerSeekBar.setProgressDrawable(customTrackDrawable);
 
@@ -2759,6 +2819,7 @@ public class WatchActivity extends AppCompatActivity {
 						if (miniVideoProgressBar != null && tot > 0) {
 							int permille = (int) ((cur * 1000L) / tot);
 							miniVideoProgressBar.setProgress(permille);
+							miniVideoProgressBar.invalidate();
 						}
 
 						if (textTime != null) {
