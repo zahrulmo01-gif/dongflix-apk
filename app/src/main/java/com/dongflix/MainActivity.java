@@ -1652,59 +1652,59 @@ public class MainActivity extends AppCompatActivity {
 		if (blurTarget != null) {
 			GradientDrawable glass = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#801A1F2E"), Color.parseColor("#990D1018")}
+				new int[]{Color.parseColor("#D9161923"), Color.parseColor("#E60A0C12")}
 			);
 			glass.setCornerRadius(100f);
-			glass.setStroke((int)(1.2f * d), Color.parseColor("#55FFFFFF"));
+			glass.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
 			blurTarget.setBackground(glass);
 		}
 		if (containerTarget != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			containerTarget.setElevation(16f);
+			containerTarget.setElevation(18f);
 		}
 	}
 
 	private void setupIos26DraggableNavbar() {
 		if (navbarExpanded == null || tabBeranda == null) return;
-		if (!(navbarExpanded.getChildAt(0) instanceof ViewGroup)) return;
+		if (navbarExpanded.getChildCount() < 2) return;
 
-		ViewGroup rootTrack = (ViewGroup) navbarExpanded.getChildAt(0);
-		float d = getResources().getDisplayMetrics().density;
+		final ViewGroup tabsRow = (ViewGroup) navbarExpanded.getChildAt(1);
+		final float d = getResources().getDisplayMetrics().density;
 
 		if (liquidDragPill == null) {
 			liquidDragPill = new View(this);
 			GradientDrawable pillBg = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#59FFFFFF"), Color.parseColor("#29FFFFFF")}
+				new int[]{Color.parseColor("#38FFFFFF"), Color.parseColor("#22FFFFFF")}
 			);
 			pillBg.setCornerRadius(100f);
-			pillBg.setStroke((int) (1 * d), Color.parseColor("#77FFFFFF"));
+			pillBg.setStroke((int) (1 * d), Color.parseColor("#4DFFFFFF"));
 			liquidDragPill.setBackground(pillBg);
 
 			FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
 				(int) (96 * d),
 				(int) (54 * d),
-				Gravity.CENTER_VERTICAL
+				Gravity.CENTER_VERTICAL | Gravity.START
 			);
 			pillLp.leftMargin = (int) (5 * d);
 			liquidDragPill.setLayoutParams(pillLp);
-			rootTrack.addView(liquidDragPill, 0);
+			navbarExpanded.addView(liquidDragPill, 1);
 		}
 
-		rootTrack.post(new Runnable() {
+		tabsRow.post(new Runnable() {
 			@Override
 			public void run() {
 				snapPillToTab(activeNavTabIndex, false);
 			}
 		});
 
-		rootTrack.setOnTouchListener(new View.OnTouchListener() {
+		tabsRow.setOnTouchListener(new View.OnTouchListener() {
 			private float downRawX = 0f;
 			private float initialPillTx = 0f;
 			private boolean isDragging = false;
 
 			@Override
 			public boolean onTouch(View v, MotionEvent event) {
-				int trackW = rootTrack.getWidth();
+				int trackW = tabsRow.getWidth();
 				int pillW = liquidDragPill != null ? liquidDragPill.getWidth() : 0;
 				float minTx = 0f;
 				float maxTx = Math.max(0f, trackW - pillW - (10 * d));
@@ -1723,8 +1723,8 @@ public class MainActivity extends AppCompatActivity {
 							if (liquidDragPill != null) {
 								float nextTx = Math.max(minTx, Math.min(maxTx, initialPillTx + dx));
 								liquidDragPill.setTranslationX(nextTx);
-								liquidDragPill.setScaleX(1.06f);
-								liquidDragPill.setScaleY(1.04f);
+								liquidDragPill.setScaleX(1.05f);
+								liquidDragPill.setScaleY(1.03f);
 							}
 						}
 						return true;
@@ -1745,7 +1745,7 @@ public class MainActivity extends AppCompatActivity {
 							selectNavTabByIndex(targetIdx, true);
 						} else {
 							float localX = event.getX();
-							int slotW = Math.max(1, rootTrack.getWidth() / 3);
+							int slotW = Math.max(1, tabsRow.getWidth() / 3);
 							int tappedIdx = Math.max(0, Math.min(2, (int) (localX / slotW)));
 							selectNavTabByIndex(tappedIdx, true);
 						}
@@ -1761,20 +1761,27 @@ public class MainActivity extends AppCompatActivity {
 		View targetTab = (idx == 1) ? tabPustaka : (idx == 2 ? tabAkun : tabBeranda);
 		float d = getResources().getDisplayMetrics().density;
 
-		int targetW = Math.max((int) (72 * d), targetTab.getWidth());
+		int targetW = targetTab.getWidth();
+		if (targetW <= 0 && navbarExpanded != null && navbarExpanded.getWidth() > 0) {
+			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / 3;
+		}
+		if (targetW <= 0) targetW = (int) (96 * d);
+
 		ViewGroup.LayoutParams lp = liquidDragPill.getLayoutParams();
 		if (lp.width != targetW) {
 			lp.width = targetW;
 			liquidDragPill.setLayoutParams(lp);
 		}
 
-		float baseLeft = (5 * d);
-		float targetTx = Math.max(0f, targetTab.getLeft() - baseLeft);
+		float targetTx = idx * targetW;
+		if (targetTab.getLeft() > 0) {
+			targetTx = Math.max(0f, targetTab.getLeft() - (5 * d));
+		}
 
 		if (animate) {
 			liquidDragPill.animate()
 				.translationX(targetTx)
-				.setInterpolator(new OvershootInterpolator(1.1f))
+				.setInterpolator(new OvershootInterpolator(1.05f))
 				.setDuration(220)
 				.start();
 		} else {
