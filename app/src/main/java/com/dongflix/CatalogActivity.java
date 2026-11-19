@@ -19,6 +19,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -44,25 +46,38 @@ import eightbitlab.com.blurview.BlurView;
 import eightbitlab.com.blurview.RenderScriptBlur;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 public class CatalogActivity extends AppCompatActivity {
+
+	private static final int FILTER_SEMUA = 0;
+	private static final int FILTER_DONGHUA = 1;
+	private static final int FILTER_ANIME = 2;
 
 	private FrameLayout catalogRoot;
 	private LinearLayout catalogHeader;
 	private NestedScrollView catalogScrollView;
 	private GridView gridCatalog;
-	private TextView btnLoadMore;
+	private GridView gridCatalogLoadingMore;
 	private View btnBack;
+
+	private TextView filterSemua;
+	private TextView filterDonghua;
+	private TextView filterAnime;
 
 	private RequestNetwork req;
 	private RequestNetwork.RequestListener reqListener;
 
 	private ArrayList<HashMap<String, Object>> allDataList = new ArrayList<>();
+	private ArrayList<HashMap<String, Object>> filteredDataList = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> displayedList = new ArrayList<>();
 	private CatalogAdapter adapter;
 
+	private int activeFilter = FILTER_SEMUA;
 	private int currentLimit = 18;
 	private final int PAGE_SIZE = 18;
+	private boolean isLoadingMore = false;
+	private final Handler paginationHandler = new Handler(Looper.getMainLooper());
 
 	private ValueAnimator catalogShimmerAnimator;
 	private float catalogShimmerPhase = 0f;
@@ -88,11 +103,16 @@ public class CatalogActivity extends AppCompatActivity {
 		catalogHeader = findViewById(R.id.catalog_header);
 		catalogScrollView = findViewById(R.id.catalog_scroll_view);
 		gridCatalog = findViewById(R.id.grid_catalog);
-		btnLoadMore = findViewById(R.id.btn_load_more);
+		gridCatalogLoadingMore = findViewById(R.id.grid_catalog_loading_more);
 		btnBack = findViewById(R.id.btn_catalog_back);
 
+		filterSemua = findViewById(R.id.filter_semua);
+		filterDonghua = findViewById(R.id.filter_donghua);
+		filterAnime = findViewById(R.id.filter_anime);
+
 		applyHeaderGlassStyle();
-		applyLoadMoreButtonStyle();
+		setupFilterTabs();
+		setupInfiniteScroll();
 		updateBottomSpacingForMiniPlayer();
 
 		btnBack.setOnClickListener(new View.OnClickListener() {
@@ -125,14 +145,6 @@ public class CatalogActivity extends AppCompatActivity {
 			}
 		});
 
-		btnLoadMore.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				currentLimit += PAGE_SIZE;
-				updateDisplayedList();
-			}
-		});
-
 		showCatalogLoadingPlaceholders();
 
 		req = new RequestNetwork(this);
@@ -145,7 +157,7 @@ public class CatalogActivity extends AppCompatActivity {
 				);
 				if (parsed != null) {
 					allDataList = parsed;
-					updateDisplayedList();
+					applyFilterAndResetPagination();
 				}
 			}
 
@@ -162,6 +174,170 @@ public class CatalogActivity extends AppCompatActivity {
 	protected void onResume() {
 		super.onResume();
 		updateBottomSpacingForMiniPlayer();
+	}
+
+	private void setupFilterTabs() {
+		updateFilterVisualState();
+
+		if (filterSemua != null) {
+			filterSemua.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (activeFilter != FILTER_SEMUA) {
+						activeFilter = FILTER_SEMUA;
+						updateFilterVisualState();
+						applyFilterAndResetPagination();
+					}
+				}
+			});
+		}
+
+		if (filterDonghua != null) {
+			filterDonghua.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (activeFilter != FILTER_DONGHUA) {
+						activeFilter = FILTER_DONGHUA;
+						updateFilterVisualState();
+						applyFilterAndResetPagination();
+					}
+				}
+			});
+		}
+
+		if (filterAnime != null) {
+			filterAnime.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (activeFilter != FILTER_ANIME) {
+						activeFilter = FILTER_ANIME;
+						updateFilterVisualState();
+						applyFilterAndResetPagination();
+					}
+				}
+			});
+		}
+	}
+
+	private void updateFilterVisualState() {
+		float d = getResources().getDisplayMetrics().density;
+		TextView[] tabs = {filterSemua, filterDonghua, filterAnime};
+		for (int i = 0; i < tabs.length; i++) {
+			TextView tv = tabs[i];
+			if (tv == null) continue;
+			boolean selected = (i == activeFilter);
+
+			GradientDrawable bg = new GradientDrawable();
+			bg.setShape(GradientDrawable.RECTANGLE);
+			bg.setCornerRadius(100f);
+			if (selected) {
+				bg.setColor(Color.parseColor("#2563EB"));
+				tv.setTextColor(Color.WHITE);
+			} else {
+				bg.setColor(Color.parseColor("#141822"));
+				bg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
+				tv.setTextColor(Color.CBD5E1);
+			}
+			tv.setBackground(bg);
+		}
+	}
+
+	private boolean matchesActiveFilter(HashMap<String, Object> item) {
+		if (activeFilter == FILTER_SEMUA) return true;
+
+		String typeStr = item.get("type") != null ? item.get("type").toString().toLowerCase(Locale.US) : "";
+		String categoryStr = item.get("category") != null ? item.get("category").toString().toLowerCase(Locale.US) : "";
+		String genresStr = item.get("genres") != null ? item.get("genres").toString().toLowerCase(Locale.US) : "";
+		String urlStr = item.get("url") != null ? item.get("url").toString().toLowerCase(Locale.US) : "";
+		String slugStr = item.get("slug") != null ? item.get("slug").toString().toLowerCase(Locale.US) : "";
+		String combined = typeStr + " " + categoryStr + " " + genresStr + " " + urlStr + " " + slugStr;
+
+		boolean isAnime = combined.contains("anime") || combined.contains("samehadaku");
+		boolean isDonghua = combined.contains("donghua") || combined.contains("anichin") || combined.contains("3d");
+
+		if (activeFilter == FILTER_ANIME) {
+			return isAnime;
+		} else if (activeFilter == FILTER_DONGHUA) {
+			return isDonghua || !isAnime;
+		}
+		return true;
+	}
+
+	private void applyFilterAndResetPagination() {
+		paginationHandler.removeCallbacksAndMessages(null);
+		isLoadingMore = false;
+		if (gridCatalogLoadingMore != null) {
+			gridCatalogLoadingMore.setVisibility(View.GONE);
+		}
+
+		filteredDataList = new ArrayList<>();
+		for (HashMap<String, Object> item : allDataList) {
+			if (matchesActiveFilter(item)) {
+				filteredDataList.add(item);
+			}
+		}
+		if (filteredDataList.isEmpty() && activeFilter != FILTER_SEMUA) {
+			filteredDataList.addAll(allDataList);
+		}
+
+		currentLimit = PAGE_SIZE;
+		updateDisplayedList();
+		if (catalogScrollView != null) {
+			catalogScrollView.scrollTo(0, 0);
+		}
+	}
+
+	private void setupInfiniteScroll() {
+		if (catalogScrollView == null) return;
+		catalogScrollView.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
+			@Override
+			public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+				if (isCatalogLoading || isLoadingMore) return;
+				if (displayedList.size() >= filteredDataList.size()) return;
+
+				View child = v.getChildAt(0);
+				if (child == null) return;
+
+				int diff = child.getBottom() - (v.getHeight() + scrollY);
+				if (diff <= 140) {
+					triggerLoadMoreWithPlaceholder();
+				}
+			}
+		});
+	}
+
+	private void triggerLoadMoreWithPlaceholder() {
+		if (isLoadingMore || displayedList.size() >= filteredDataList.size()) return;
+		isLoadingMore = true;
+
+		int remaining = filteredDataList.size() - displayedList.size();
+		int placeholderCount = Math.min(6, remaining);
+		ArrayList<HashMap<String, Object>> loadItems = new ArrayList<>();
+		for (int i = 0; i < placeholderCount; i++) {
+			HashMap<String, Object> m = new HashMap<>();
+			m.put("is_loading", true);
+			loadItems.add(m);
+		}
+
+		if (gridCatalogLoadingMore != null) {
+			gridCatalogLoadingMore.setVisibility(View.VISIBLE);
+			gridCatalogLoadingMore.setAdapter(new CatalogAdapter(loadItems));
+			adjustGridHeight(gridCatalogLoadingMore, 3);
+		}
+		startCatalogShimmer();
+
+		paginationHandler.postDelayed(new Runnable() {
+			@Override
+			public void run() {
+				currentLimit += PAGE_SIZE;
+				isLoadingMore = false;
+				if (gridCatalogLoadingMore != null) {
+					gridCatalogLoadingMore.setVisibility(View.GONE);
+				}
+				stopCatalogShimmer();
+				updateDisplayedList();
+			}
+		}, 450);
 	}
 
 	private void applyHeaderGlassStyle() {
@@ -181,7 +357,7 @@ public class CatalogActivity extends AppCompatActivity {
 		if (catalogScrollView != null) {
 			catalogScrollView.setPadding(
 				catalogScrollView.getPaddingLeft(),
-				statusBarHeight + (int) (66 * d),
+				statusBarHeight + (int) (72 * d),
 				catalogScrollView.getPaddingRight(),
 				catalogScrollView.getPaddingBottom()
 			);
@@ -231,33 +407,17 @@ public class CatalogActivity extends AppCompatActivity {
 		blurView.setForeground(glassBorder);
 	}
 
-	private void applyLoadMoreButtonStyle() {
-		if (btnLoadMore == null) return;
-		GradientDrawable btnBg = new GradientDrawable();
-		btnBg.setShape(GradientDrawable.RECTANGLE);
-		btnBg.setColor(Color.parseColor("#2563EB"));
-		btnBg.setCornerRadius(100f);
-		btnLoadMore.setBackground(btnBg);
-		btnLoadMore.setTextColor(Color.WHITE);
-	}
-
 	private void updateBottomSpacingForMiniPlayer() {
-		if (btnLoadMore == null) return;
 		float d = getResources().getDisplayMetrics().density;
 		boolean miniActive = DongflixPlayerManager.getInstance().isMiniPlayerActive
 			&& DongflixPlayerManager.getInstance().sharedMediaPlayer != null;
 
-		ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) btnLoadMore.getLayoutParams();
-		if (lp != null) {
-			lp.bottomMargin = miniActive ? (int) (96 * d) : (int) (20 * d);
-			btnLoadMore.setLayoutParams(lp);
-		}
 		if (catalogScrollView != null) {
 			catalogScrollView.setPadding(
 				catalogScrollView.getPaddingLeft(),
 				catalogScrollView.getPaddingTop(),
 				catalogScrollView.getPaddingRight(),
-				miniActive ? (int) (140 * d) : (int) (48 * d)
+				miniActive ? (int) (124 * d) : (int) (40 * d)
 			);
 		}
 	}
@@ -328,7 +488,6 @@ public class CatalogActivity extends AppCompatActivity {
 	}
 
 	private void startCatalogShimmer() {
-		isCatalogLoading = true;
 		stopCatalogShimmerOnly();
 		catalogShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
 		catalogShimmerAnimator.setDuration(1200);
@@ -337,10 +496,16 @@ public class CatalogActivity extends AppCompatActivity {
 		catalogShimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
 			@Override
 			public void onAnimationUpdate(ValueAnimator animation) {
-				if (!isCatalogLoading || gridCatalog == null) return;
 				catalogShimmerPhase = (float) animation.getAnimatedValue();
-				for (int i = 0; i < gridCatalog.getChildCount(); i++) {
-					invalidateShimmerRecursive(gridCatalog.getChildAt(i));
+				if (gridCatalog != null) {
+					for (int i = 0; i < gridCatalog.getChildCount(); i++) {
+						invalidateShimmerRecursive(gridCatalog.getChildAt(i));
+					}
+				}
+				if (gridCatalogLoadingMore != null && gridCatalogLoadingMore.getVisibility() == View.VISIBLE) {
+					for (int i = 0; i < gridCatalogLoadingMore.getChildCount(); i++) {
+						invalidateShimmerRecursive(gridCatalogLoadingMore.getChildAt(i));
+					}
 				}
 			}
 		});
@@ -372,23 +537,18 @@ public class CatalogActivity extends AppCompatActivity {
 
 	@Override
 	protected void onDestroy() {
+		paginationHandler.removeCallbacksAndMessages(null);
 		stopCatalogShimmer();
 		super.onDestroy();
 	}
 
 	private void updateDisplayedList() {
-		int end = Math.min(currentLimit, allDataList.size());
-		displayedList = new ArrayList<>(allDataList.subList(0, end));
+		int end = Math.min(currentLimit, filteredDataList.size());
+		displayedList = new ArrayList<>(filteredDataList.subList(0, end));
 		adapter = new CatalogAdapter(displayedList);
 		gridCatalog.setAdapter(adapter);
 		adjustGridHeight(gridCatalog, 3);
 		updateBottomSpacingForMiniPlayer();
-
-		if (end >= allDataList.size()) {
-			btnLoadMore.setVisibility(View.GONE);
-		} else {
-			btnLoadMore.setVisibility(View.VISIBLE);
-		}
 	}
 
 	private void adjustGridHeight(final GridView gridView, final int columns) {
