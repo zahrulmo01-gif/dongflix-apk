@@ -307,16 +307,14 @@ public class DongflixPlayerManager {
 			blurBg.setupWith(rootMain, new RenderScriptBlur(activity))
 				.setFrameClearDrawable(windowBackground)
 				.setBlurRadius(20f);
-			blurBg.setOverlayColor(Color.parseColor("#9910131C"));
+			blurBg.setOverlayColor(Color.parseColor("#66141824"));
 		}
 
-		GradientDrawable glassOverlay = new GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
-		);
-		glassOverlay.setCornerRadius(1000f);
-		glassOverlay.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
-		blurBg.setBackground(glassOverlay);
+		GradientDrawable glassBorder = new GradientDrawable();
+		glassBorder.setColor(Color.TRANSPARENT);
+		glassBorder.setCornerRadius(1000f);
+		glassBorder.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
+		glassRoot.setForeground(glassBorder);
 		glassRoot.addView(blurBg);
 
 		LinearLayout row = new LinearLayout(activity);
