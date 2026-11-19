@@ -64,6 +64,8 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import eightbitlab.com.blurview.BlurView;
+import eightbitlab.com.blurview.RenderScriptBlur;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -187,6 +189,31 @@ public class ChatActivity extends AppCompatActivity {
 		}
 	}
 
+	private void setupGlassBlur(BlurView blurView, ViewGroup rootContainer, float radius, int strokeColor) {
+		if (blurView == null || rootContainer == null) return;
+		float d = getResources().getDisplayMetrics().density;
+
+		blurView.setOutlineProvider(new ViewOutlineProvider() {
+			@Override
+			public void getOutline(View view, Outline outline) {
+				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f);
+			}
+		});
+		blurView.setClipToOutline(true);
+
+		Drawable winBg = getWindow().getDecorView().getBackground();
+		blurView.setupWith(rootContainer, new RenderScriptBlur(this))
+			.setFrameClearDrawable(winBg)
+			.setBlurRadius(radius);
+		blurView.setOverlayColor(Color.parseColor("#66141824"));
+
+		GradientDrawable glassBorder = new GradientDrawable();
+		glassBorder.setColor(Color.TRANSPARENT);
+		glassBorder.setCornerRadius(1000f);
+		glassBorder.setStroke((int) (1 * d), strokeColor);
+		blurView.setForeground(glassBorder);
+	}
+
 	private Drawable createChatShimmerDrawable(final float cornerRadiusPx) {
 		return new Drawable() {
 			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -286,7 +313,7 @@ public class ChatActivity extends AppCompatActivity {
 
 		float d = getResources().getDisplayMetrics().density;
 		boolean[] minePattern = {false, true, false, true, false};
-		int[] lineWidthsDp = {190, 220, 155, 205, 175};
+		int[] lineWidthsDp = {195, 225, 175, 210, 185};
 
 		for (int i = 0; i < minePattern.length; i++) {
 			boolean isMine = minePattern[i];
@@ -318,7 +345,7 @@ public class ChatActivity extends AppCompatActivity {
 			bubblePh.setLayoutParams(bLp);
 
 			View line1 = new View(this);
-			line1.setLayoutParams(new LinearLayout.LayoutParams((int) (88 * d), (int) (10 * d)));
+			line1.setLayoutParams(new LinearLayout.LayoutParams((int) (110 * d), (int) (10 * d)));
 			line1.setBackground(createChatShimmerDrawable(6 * d));
 
 			View line2 = new View(this);
@@ -390,7 +417,8 @@ public class ChatActivity extends AppCompatActivity {
 	private void setupKeyboardFollowBehavior() {
 		if (chatRoot == null || chatBottomBar == null) return;
 		final float d = getResources().getDisplayMetrics().density;
-		baseBottomPaddingPx = (int) (14 * d);
+		// Ruang aman di atas gesture bar / navigasi HP
+		baseBottomPaddingPx = (int) (26 * d);
 
 		getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
@@ -409,7 +437,7 @@ public class ChatActivity extends AppCompatActivity {
 				);
 
 				if (chatScrollView != null) {
-					int extraScrollPad = (int) (116 * d) + bottomInset;
+					int extraScrollPad = (int) (132 * d) + bottomInset;
 					chatScrollView.setPadding(
 						chatScrollView.getPaddingLeft(),
 						chatScrollView.getPaddingTop(),
@@ -453,7 +481,7 @@ public class ChatActivity extends AppCompatActivity {
 							chatScrollView.getPaddingLeft(),
 							chatScrollView.getPaddingTop(),
 							chatScrollView.getPaddingRight(),
-							(int) (116 * d) + keyboardHeight
+							(int) (132 * d) + keyboardHeight
 						);
 						if (keyboardHeight > 0) {
 							chatScrollView.postDelayed(new Runnable() {
@@ -513,7 +541,7 @@ public class ChatActivity extends AppCompatActivity {
 			(int) (14 * d),
 			statusBarHeight + (int) (74 * d),
 			(int) (14 * d),
-			(int) (116 * d)
+			(int) (132 * d)
 		);
 		chatScrollView.setClipToPadding(false);
 		chatScrollView.setVerticalScrollBarEnabled(false);
@@ -526,9 +554,12 @@ public class ChatActivity extends AppCompatActivity {
 		chatScrollView.addView(messagesContainer);
 		chatRoot.addView(chatScrollView);
 
+		// Header dengan BlurView
 		chatHeader = new LinearLayout(this);
 		chatHeader.setOrientation(LinearLayout.HORIZONTAL);
 		chatHeader.setGravity(Gravity.CENTER_VERTICAL);
+		chatHeader.setClipChildren(false);
+		chatHeader.setClipToPadding(false);
 		FrameLayout.LayoutParams headerLp = new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
 		);
@@ -540,12 +571,14 @@ public class ChatActivity extends AppCompatActivity {
 		LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(backSize, backSize);
 		backLp.rightMargin = (int) (10 * d);
 		backBtn.setLayoutParams(backLp);
-		GradientDrawable backBg = new GradientDrawable();
-		backBg.setShape(GradientDrawable.OVAL);
-		backBg.setColor(Color.parseColor("#E6131722"));
-		backBg.setStroke((int) (1 * d), Color.parseColor("#2AFFFFFF"));
-		backBtn.setBackground(backBg);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) backBtn.setElevation(12f);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) backBtn.setElevation(14f);
+
+		BlurView backBlur = new BlurView(this);
+		backBlur.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		setupGlassBlur(backBlur, chatRoot, 20f, Color.parseColor("#33FFFFFF"));
+		backBtn.addView(backBlur);
 
 		ImageView backArrow = new ImageView(this);
 		int arrowSize = (int) (20 * d);
@@ -562,17 +595,21 @@ public class ChatActivity extends AppCompatActivity {
 			}
 		});
 
-		LinearLayout headerCapsule = new LinearLayout(this);
-		headerCapsule.setOrientation(LinearLayout.VERTICAL);
-		headerCapsule.setGravity(Gravity.CENTER);
+		FrameLayout headerCapsule = new FrameLayout(this);
 		headerCapsule.setLayoutParams(new LinearLayout.LayoutParams(0, (int) (46 * d), 1f));
-		headerCapsule.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		GradientDrawable headBg = new GradientDrawable();
-		headBg.setColor(Color.parseColor("#E6131722"));
-		headBg.setCornerRadius(100f);
-		headBg.setStroke((int) (1 * d), Color.parseColor("#2AFFFFFF"));
-		headerCapsule.setBackground(headBg);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) headerCapsule.setElevation(12f);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) headerCapsule.setElevation(14f);
+
+		BlurView headerBlur = new BlurView(this);
+		headerBlur.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		setupGlassBlur(headerBlur, chatRoot, 20f, Color.parseColor("#33FFFFFF"));
+		headerCapsule.addView(headerBlur);
+
+		LinearLayout titleCol = new LinearLayout(this);
+		titleCol.setOrientation(LinearLayout.VERTICAL);
+		titleCol.setGravity(Gravity.CENTER);
+		titleCol.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
 
 		TextView tvTitle = new TextView(this);
 		tvTitle.setText("Live Chat");
@@ -586,20 +623,24 @@ public class ChatActivity extends AppCompatActivity {
 		tvOnline.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
 		tvOnline.setTypeface(null, Typeface.BOLD);
 
-		headerCapsule.addView(tvTitle);
-		headerCapsule.addView(tvOnline);
+		titleCol.addView(tvTitle);
+		titleCol.addView(tvOnline);
+		headerCapsule.addView(titleCol, new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
 
 		chatHeader.addView(backBtn);
 		chatHeader.addView(headerCapsule);
 		chatRoot.addView(chatHeader);
 
+		// Bilah Chat Bawah dengan BlurView
 		chatBottomBar = new LinearLayout(this);
 		chatBottomBar.setOrientation(LinearLayout.VERTICAL);
 		FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
 		);
 		chatBottomBar.setLayoutParams(bottomLp);
-		chatBottomBar.setPadding((int) (14 * d), (int) (6 * d), (int) (14 * d), (int) (14 * d));
+		chatBottomBar.setPadding((int) (14 * d), (int) (6 * d), (int) (14 * d), (int) (26 * d));
 		chatBottomBar.setClipChildren(false);
 		chatBottomBar.setClipToPadding(false);
 
@@ -607,7 +648,7 @@ public class ChatActivity extends AppCompatActivity {
 		replyBanner.setOrientation(LinearLayout.HORIZONTAL);
 		replyBanner.setGravity(Gravity.CENTER_VERTICAL);
 		GradientDrawable repBg = new GradientDrawable();
-		repBg.setColor(Color.parseColor("#F0131926"));
+		repBg.setColor(Color.parseColor("#E6131926"));
 		repBg.setCornerRadius(14 * d);
 		repBg.setStroke((int) (1 * d), Color.parseColor("#2E38BDF8"));
 		replyBanner.setBackground(repBg);
@@ -688,7 +729,7 @@ public class ChatActivity extends AppCompatActivity {
 		mentionMenu = new LinearLayout(this);
 		mentionMenu.setOrientation(LinearLayout.VERTICAL);
 		GradientDrawable mBg = new GradientDrawable();
-		mBg.setColor(Color.parseColor("#F20D1424"));
+		mBg.setColor(Color.parseColor("#E60D1424"));
 		mBg.setCornerRadius(14 * d);
 		mBg.setStroke((int) (1 * d), Color.parseColor("#26FFFFFF"));
 		mentionMenu.setBackground(mBg);
@@ -701,28 +742,32 @@ public class ChatActivity extends AppCompatActivity {
 		mentionMenu.setVisibility(View.GONE);
 		chatBottomBar.addView(mentionMenu);
 
+		FrameLayout inputGlassFrame = new FrameLayout(this);
+		inputGlassFrame.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (52 * d)
+		));
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			inputGlassFrame.setElevation(18f);
+		}
+
+		BlurView inputBlur = new BlurView(this);
+		inputBlur.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		setupGlassBlur(inputBlur, chatRoot, 20f, Color.parseColor("#33FFFFFF"));
+		inputGlassFrame.addView(inputBlur);
+
 		LinearLayout inputRow = new LinearLayout(this);
 		inputRow.setOrientation(LinearLayout.HORIZONTAL);
 		inputRow.setGravity(Gravity.CENTER_VERTICAL);
-		inputRow.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (52 * d)
-		));
 		inputRow.setPadding((int) (16 * d), (int) (4 * d), (int) (6 * d), (int) (4 * d));
-		GradientDrawable inputBg = new GradientDrawable();
-		inputBg.setColor(Color.parseColor("#F2131722"));
-		inputBg.setCornerRadius(100f);
-		inputBg.setStroke((int) (1 * d), Color.parseColor("#2AFFFFFF"));
-		inputRow.setBackground(inputBg);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			inputRow.setElevation(14f);
-		}
 
 		chatInput = new EditText(this);
 		chatInput.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 		chatInput.setBackground(null);
 		chatInput.setTextColor(Color.WHITE);
 		chatInput.setHint("Kirim pesan...");
-		chatInput.setHintTextColor(Color.parseColor("#8A94A6"));
+		chatInput.setHintTextColor(Color.parseColor("#94A3B8"));
 		chatInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
 		chatInput.setSingleLine(true);
 
@@ -741,12 +786,12 @@ public class ChatActivity extends AppCompatActivity {
 		stickerBtn.setLayoutParams(stBtnLp);
 		GradientDrawable stBtnBg = new GradientDrawable();
 		stBtnBg.setShape(GradientDrawable.OVAL);
-		stBtnBg.setColor(Color.parseColor("#202638"));
+		stBtnBg.setColor(Color.parseColor("#26FFFFFF"));
 		stickerBtn.setBackground(stBtnBg);
 
 		TextView stLabel = new TextView(this);
 		stLabel.setText("☺");
-		stLabel.setTextColor(Color.parseColor("#E2E8F0"));
+		stLabel.setTextColor(Color.WHITE);
 		stLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
 		stLabel.setGravity(Gravity.CENTER);
 		stickerBtn.addView(stLabel, new FrameLayout.LayoutParams(
@@ -786,12 +831,15 @@ public class ChatActivity extends AppCompatActivity {
 		inputRow.addView(chatInput);
 		inputRow.addView(stickerBtn);
 		inputRow.addView(sendBtn);
-		chatBottomBar.addView(inputRow);
+		inputGlassFrame.addView(inputRow, new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		chatBottomBar.addView(inputGlassFrame);
 
 		stickerPanel = new LinearLayout(this);
 		stickerPanel.setOrientation(LinearLayout.VERTICAL);
 		GradientDrawable spPanelBg = new GradientDrawable();
-		spPanelBg.setColor(Color.parseColor("#F50D121F"));
+		spPanelBg.setColor(Color.parseColor("#E60B0F1A"));
 		spPanelBg.setCornerRadius(16 * d);
 		spPanelBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
 		stickerPanel.setBackground(spPanelBg);
@@ -1084,6 +1132,7 @@ public class ChatActivity extends AppCompatActivity {
 			LinearLayout row = new LinearLayout(this);
 			row.setOrientation(LinearLayout.HORIZONTAL);
 			row.setGravity(isMine ? Gravity.END : Gravity.START);
+			row.setClipChildren(false);
 			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
@@ -1101,13 +1150,16 @@ public class ChatActivity extends AppCompatActivity {
 
 			LinearLayout bubbleCol = new LinearLayout(this);
 			bubbleCol.setOrientation(LinearLayout.VERTICAL);
-			bubbleCol.setLayoutParams(new LinearLayout.LayoutParams(
+			bubbleCol.setClipChildren(false);
+			LinearLayout.LayoutParams bColLp = new LinearLayout.LayoutParams(
 				0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-			));
+			);
+			bubbleCol.setLayoutParams(bColLp);
 
 			LinearLayout bubble = new LinearLayout(this);
 			bubble.setOrientation(LinearLayout.VERTICAL);
-			bubble.setPadding((int) (14 * d), (int) (11 * d), (int) (14 * d), (int) (10 * d));
+			bubble.setMinimumWidth((int) (185 * d));
+			bubble.setPadding((int) (14 * d), (int) (11 * d), (int) (18 * d), (int) (10 * d));
 			GradientDrawable bubbleBg = new GradientDrawable();
 			if (isMine) {
 				bubbleBg.setColors(new int[]{Color.parseColor("#1D3358"), Color.parseColor("#13213B")});
@@ -1185,9 +1237,11 @@ public class ChatActivity extends AppCompatActivity {
 				bubble.addView(quoteBox);
 			}
 
+			// Baris Nama + Level + Badge Admin tampil penuh tanpa terpotong
 			LinearLayout metaRow = new LinearLayout(this);
 			metaRow.setOrientation(LinearLayout.HORIZONTAL);
 			metaRow.setGravity(Gravity.CENTER_VERTICAL);
+			metaRow.setPadding(0, 0, (int) (6 * d), 0);
 
 			TextView tvSender = new TextView(this);
 			tvSender.setText(authorName);
@@ -1195,12 +1249,12 @@ public class ChatActivity extends AppCompatActivity {
 			tvSender.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 			tvSender.setTypeface(null, Typeface.BOLD);
 			tvSender.setMaxLines(1);
-			tvSender.setEllipsize(TextUtils.TruncateAt.END);
 
 			TextView tvLv = new TextView(this);
 			tvLv.setText(isMsgAdmin ? "Lv999+" : "Lv" + calculateLevel(exp));
 			tvLv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
 			tvLv.setTypeface(null, Typeface.BOLD);
+			tvLv.setMaxLines(1);
 			tvLv.setTextColor(isMsgAdmin ? Color.parseColor("#451A03") : Color.parseColor("#38BDF8"));
 			GradientDrawable lvBg = new GradientDrawable();
 			lvBg.setCornerRadius(100f);
@@ -1222,6 +1276,7 @@ public class ChatActivity extends AppCompatActivity {
 				tvAdm.setTextColor(Color.WHITE);
 				tvAdm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
 				tvAdm.setTypeface(null, Typeface.BOLD);
+				tvAdm.setMaxLines(1);
 				GradientDrawable admBg = new GradientDrawable();
 				admBg.setCornerRadius(100f);
 				admBg.setColor(Color.parseColor("#EA580C"));
