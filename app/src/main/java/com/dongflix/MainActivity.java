@@ -25,6 +25,7 @@ import android.webkit.*;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.compose.ui.platform.ComposeView;
 import androidx.core.*;
 import androidx.core.ktx.*;
 import androidx.core.widget.NestedScrollView;
@@ -71,25 +72,18 @@ public class MainActivity extends AppCompatActivity {
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
-	// Lanjutkan Menonton (di atas Populer Hari Ini)
 	private LinearLayout layoutSectionContinue;
 	private TextView textTitleContinue, textContinueSeeAll;
 	private RecyclerView recyclerContinue;
 
-	// Pustaka (Riwayat, Daftarku, Unduhan)
 	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
 	private View linePustakaRiwayat, linePustakaDaftarku, linePustakaUnduhan;
 	private TextView textPustakaSectionLabel;
 	private RecyclerView recyclerPustakaList;
 	private int activePustakaTab = 0;
 
-	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
-	private LinearLayout tabBeranda, tabPustaka, tabAkun;
-	private ImageView imgHome, imgFavorite, imgProfile, imgSearch;
-	private TextView txtHome, txtFavorite, txtProfile;
-	private View liquidDragPill;
+	private ComposeView composeLiquidNavbar;
 	private int activeNavTabIndex = 0;
-	private boolean isNavbarCompact = false;
 
 	private ValueAnimator mainShimmerAnimator;
 	private float mainShimmerPhase = 0f;
@@ -269,10 +263,8 @@ public class MainActivity extends AppCompatActivity {
 			textContinueSeeAll.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					if (tabPustaka != null) {
-						activePustakaTab = 0;
-						tabPustaka.performClick();
-					}
+					activePustakaTab = 0;
+					selectNavTabByIndex(1);
 				}
 			});
 		}
@@ -1301,20 +1293,7 @@ public class MainActivity extends AppCompatActivity {
 		imgTopNotif = findViewById(R.id.img_top_search);
 		imgTopChat = findViewById(R.id.img_top_chat);
 
-		navbarExpanded = findViewById(R.id.navbar);
-		btnCompactHome = findViewById(R.id.btn_compact_home);
-		miniPlayerInlineSlot = findViewById(R.id.mini_player_inline_slot);
-		btnCircleSearch = findViewById(R.id.btn_circle_search);
-		tabBeranda = findViewById(R.id.tab_beranda);
-		tabPustaka = findViewById(R.id.tab_pustaka);
-		tabAkun = findViewById(R.id.tab_akun);
-		imgHome = findViewById(R.id.img_home);
-		imgFavorite = findViewById(R.id.img_favorite);
-		imgProfile = findViewById(R.id.img_profile);
-		imgSearch = findViewById(R.id.img_search);
-		txtHome = findViewById(R.id.txt_home);
-		txtFavorite = findViewById(R.id.txt_favorite);
-		txtProfile = findViewById(R.id.txt_profile);
+		composeLiquidNavbar = findViewById(R.id.compose_liquid_navbar);
 
 		if (imgTopNotif != null) {
 			int notifResId = getResources().getIdentifier("ic_notifications", "drawable", getPackageName());
@@ -1573,9 +1552,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private void initializeLogic() {
 		_UI();
-		setupIos26DraggableNavbar();
 		_Nav();
-		setupScrollResponsiveNavbar();
 		applyCustomFonts();
 
 		float d = getResources().getDisplayMetrics().density;
@@ -1670,128 +1647,9 @@ public class MainActivity extends AppCompatActivity {
 		}
 	}
 
-	private void setupIos26DraggableNavbar() {
-		if (navbarExpanded == null || tabBeranda == null) return;
-		if (!(navbarExpanded.getChildAt(0) instanceof ViewGroup)) return;
-
-		ViewGroup rootTrack = (ViewGroup) navbarExpanded.getChildAt(0);
-		float d = getResources().getDisplayMetrics().density;
-
-		if (liquidDragPill == null) {
-			liquidDragPill = new View(this);
-			GradientDrawable pillBg = new GradientDrawable(
-				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#59FFFFFF"), Color.parseColor("#29FFFFFF")}
-			);
-			pillBg.setCornerRadius(100f);
-			pillBg.setStroke((int) (1 * d), Color.parseColor("#77FFFFFF"));
-			liquidDragPill.setBackground(pillBg);
-
-			FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
-				(int) (96 * d),
-				(int) (54 * d),
-				Gravity.CENTER_VERTICAL
-			);
-			pillLp.leftMargin = (int) (5 * d);
-			liquidDragPill.setLayoutParams(pillLp);
-			rootTrack.addView(liquidDragPill, 0);
-		}
-
-		rootTrack.post(new Runnable() {
-			@Override
-			public void run() {
-				snapPillToTab(activeNavTabIndex, false);
-			}
-		});
-
-		rootTrack.setOnTouchListener(new View.OnTouchListener() {
-			private float downRawX = 0f;
-			private float initialPillTx = 0f;
-			private boolean isDragging = false;
-
-			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				int trackW = rootTrack.getWidth();
-				int pillW = liquidDragPill != null ? liquidDragPill.getWidth() : 0;
-				float minTx = 0f;
-				float maxTx = Math.max(0f, trackW - pillW - (10 * d));
-
-				switch (event.getActionMasked()) {
-					case MotionEvent.ACTION_DOWN:
-						downRawX = event.getRawX();
-						initialPillTx = liquidDragPill != null ? liquidDragPill.getTranslationX() : 0f;
-						isDragging = false;
-						return true;
-
-					case MotionEvent.ACTION_MOVE:
-						float dx = event.getRawX() - downRawX;
-						if (Math.abs(dx) > (8 * d)) {
-							isDragging = true;
-							if (liquidDragPill != null) {
-								float nextTx = Math.max(minTx, Math.min(maxTx, initialPillTx + dx));
-								liquidDragPill.setTranslationX(nextTx);
-								liquidDragPill.setScaleX(1.06f);
-								liquidDragPill.setScaleY(1.04f);
-							}
-						}
-						return true;
-
-					case MotionEvent.ACTION_UP:
-					case MotionEvent.ACTION_CANCEL:
-						if (liquidDragPill != null) {
-							liquidDragPill.animate()
-								.scaleX(1f)
-								.scaleY(1f)
-								.setDuration(140)
-								.start();
-						}
-						if (isDragging) {
-							float currentTx = liquidDragPill != null ? liquidDragPill.getTranslationX() : 0f;
-							float slotW = Math.max(1f, (trackW - (10 * d)) / 3f);
-							int targetIdx = Math.max(0, Math.min(2, Math.round(currentTx / slotW)));
-							selectNavTabByIndex(targetIdx, true);
-						} else {
-							float localX = event.getX();
-							int slotW = Math.max(1, rootTrack.getWidth() / 3);
-							int tappedIdx = Math.max(0, Math.min(2, (int) (localX / slotW)));
-							selectNavTabByIndex(tappedIdx, true);
-						}
-						return true;
-				}
-				return false;
-			}
-		});
-	}
-
-	private void snapPillToTab(int idx, boolean animate) {
-		if (liquidDragPill == null || tabBeranda == null || tabPustaka == null || tabAkun == null) return;
-		View targetTab = (idx == 1) ? tabPustaka : (idx == 2 ? tabAkun : tabBeranda);
-		float d = getResources().getDisplayMetrics().density;
-
-		int targetW = Math.max((int) (72 * d), targetTab.getWidth());
-		ViewGroup.LayoutParams lp = liquidDragPill.getLayoutParams();
-		if (lp.width != targetW) {
-			lp.width = targetW;
-			liquidDragPill.setLayoutParams(lp);
-		}
-
-		float baseLeft = (5 * d);
-		float targetTx = Math.max(0f, targetTab.getLeft() - baseLeft);
-
-		if (animate) {
-			liquidDragPill.animate()
-				.translationX(targetTx)
-				.setInterpolator(new OvershootInterpolator(1.1f))
-				.setDuration(220)
-				.start();
-		} else {
-			liquidDragPill.setTranslationX(targetTx);
-		}
-	}
-
-	private void selectNavTabByIndex(int idx, boolean animatePill) {
+	private void selectNavTabByIndex(int idx) {
 		activeNavTabIndex = idx;
-		snapPillToTab(idx, animatePill);
+		LiquidGlassNavBridge.setSelectedTab(idx);
 
 		final View pageHome = findViewById(R.id.main_scroll_view);
 		final View pageSearch = findViewById(R.id.layout_search);
@@ -1803,22 +1661,9 @@ public class MainActivity extends AppCompatActivity {
 		if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
 		if (pageProfile != null) pageProfile.setVisibility(View.GONE);
 
-		final int colorActive = Color.WHITE;
-		final int colorInactive = Color.parseColor("#94A3B8");
-
-		if (imgHome != null) imgHome.setColorFilter(idx == 0 ? colorActive : colorInactive);
-		if (imgFavorite != null) imgFavorite.setColorFilter(idx == 1 ? colorActive : colorInactive);
-		if (imgProfile != null) imgProfile.setColorFilter(idx == 2 ? colorActive : colorInactive);
-		if (imgSearch != null) imgSearch.setColorFilter(colorInactive);
-
-		if (txtHome != null) txtHome.setTextColor(idx == 0 ? colorActive : colorInactive);
-		if (txtFavorite != null) txtFavorite.setTextColor(idx == 1 ? colorActive : colorInactive);
-		if (txtProfile != null) txtProfile.setTextColor(idx == 2 ? colorActive : colorInactive);
-
 		hideKeyboard();
 		if (idx == 0) {
 			if (pageHome != null) pageHome.setVisibility(View.VISIBLE);
-			setNavbarCompactState(false);
 		} else if (idx == 1) {
 			if (pageFavorite != null) pageFavorite.setVisibility(View.VISIBLE);
 			renderActivePustakaTab();
@@ -1895,93 +1740,31 @@ public class MainActivity extends AppCompatActivity {
 			);
 			heroShadow.setBackground(bottomGradient);
 		}
-
-		applyUniversalGlassStyle(findViewById(R.id.navbar_blur_bg), navbarExpanded);
-		applyUniversalGlassStyle(findViewById(R.id.compact_home_blur_bg), btnCompactHome);
-		applyUniversalGlassStyle(findViewById(R.id.search_blur_bg), btnCircleSearch);
-	}
-
-	private void setupScrollResponsiveNavbar() {
-		NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
-		if (mainScroll != null) {
-			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
-				@Override
-				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
-						resetNavbarToExpanded();
-						return;
-					}
-
-					int dy = scrollY - oldScrollY;
-					if (scrollY <= 20 || dy < -12) {
-						setNavbarCompactState(false);
-					} else if (dy > 14 && scrollY > 80) {
-						setNavbarCompactState(true);
-					}
-				}
-			});
-		}
-	}
-
-	public void resetNavbarToExpanded() {
-		setNavbarCompactState(false);
-	}
-
-	private void setNavbarCompactState(boolean compact) {
-		if (compact && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
-			compact = false;
-		}
-		if (isNavbarCompact == compact) return;
-		isNavbarCompact = compact;
-
-		if (compact) {
-			if (navbarExpanded != null) navbarExpanded.setVisibility(View.GONE);
-			if (btnCompactHome != null) btnCompactHome.setVisibility(View.VISIBLE);
-		} else {
-			if (btnCompactHome != null) btnCompactHome.setVisibility(View.GONE);
-			if (miniPlayerInlineSlot != null) miniPlayerInlineSlot.setVisibility(View.GONE);
-			if (navbarExpanded != null) navbarExpanded.setVisibility(View.VISIBLE);
-			snapPillToTab(activeNavTabIndex, false);
-		}
-
-		DongflixPlayerManager.getInstance().setCompactScrollMode(this, compact);
 	}
 
 	public void _Nav() {
-		final View pageHome = findViewById(R.id.main_scroll_view);
-		final View pageSearch = findViewById(R.id.layout_search);
-		final View pageFavorite = findViewById(R.id.layout_favorite);
-		final View pageProfile = findViewById(R.id.layout_profile);
+		if (composeLiquidNavbar != null) {
+			LiquidGlassNavBridge.attach(composeLiquidNavbar, 0, new OnLiquidNavSelectedListener() {
+				@Override
+				public void onTabSelected(int index) {
+					selectNavTabByIndex(index);
+				}
 
-		View.OnClickListener tabClickListener = new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				int id = v.getId();
-
-				if ((tabBeranda != null && id == tabBeranda.getId()) || (btnCompactHome != null && id == btnCompactHome.getId())) {
-					selectNavTabByIndex(0, true);
-				} else if (tabPustaka != null && id == tabPustaka.getId()) {
-					selectNavTabByIndex(1, true);
-				} else if (tabAkun != null && id == tabAkun.getId()) {
-					selectNavTabByIndex(2, true);
-				} else if (btnCircleSearch != null && id == btnCircleSearch.getId()) {
+				@Override
+				public void onSearchClicked() {
+					View pageHome = findViewById(R.id.main_scroll_view);
+					View pageSearch = findViewById(R.id.layout_search);
+					View pageFavorite = findViewById(R.id.layout_favorite);
+					View pageProfile = findViewById(R.id.layout_profile);
 					if (pageHome != null) pageHome.setVisibility(View.GONE);
 					if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
 					if (pageProfile != null) pageProfile.setVisibility(View.GONE);
 					if (pageSearch != null) pageSearch.setVisibility(View.VISIBLE);
-					if (imgSearch != null) imgSearch.setColorFilter(Color.WHITE);
 					showKeyboardOnSearch();
 				}
-			}
-		};
-
-		if (tabBeranda != null) tabBeranda.setOnClickListener(tabClickListener);
-		if (btnCompactHome != null) btnCompactHome.setOnClickListener(tabClickListener);
-		if (tabPustaka != null) tabPustaka.setOnClickListener(tabClickListener);
-		if (tabAkun != null) tabAkun.setOnClickListener(tabClickListener);
-		if (btnCircleSearch != null) btnCircleSearch.setOnClickListener(tabClickListener);
-
-		selectNavTabByIndex(0, false);
+			});
+		}
+		selectNavTabByIndex(0);
 	}
 
 	public void setGridViewHeightBasedOnChildren(final GridView gridView, final int columns) {
