@@ -463,9 +463,19 @@ public class DongflixPlayerManager {
 		ViewGroup contentRoot = activity.findViewById(android.R.id.content);
 		if (contentRoot == null) return;
 
-		int bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
-			? (int) (92 * d)
-			: (int) (16 * d);
+		boolean isMainScreen = activity instanceof MainActivity;
+		int sideMarginPx = (int) (14 * d);
+		int bottomMarginPx;
+
+		if (isMainScreen) {
+			bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
+				? (int) (92 * d)
+				: (int) (16 * d);
+		} else {
+			bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
+				? (int) (102 * d)
+				: (int) (28 * d);
+		}
 
 		View floatingPill = buildMiniPlayerPillView(activity, false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -477,7 +487,7 @@ public class DongflixPlayerManager {
 			(int) (60 * d)
 		);
 		rootLp.gravity = Gravity.BOTTOM;
-		rootLp.setMargins((int) (14 * d), 0, (int) (14 * d), bottomMarginPx);
+		rootLp.setMargins(sideMarginPx, 0, sideMarginPx, bottomMarginPx);
 		contentRoot.addView(floatingPill, rootLp);
 	}
 }
