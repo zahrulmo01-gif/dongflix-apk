@@ -35,6 +35,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
@@ -44,12 +45,14 @@ import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
 
-	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
+	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";[span_0](start_span)[span_0](end_span)
 
 	private String cover = "";
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> fullCatalogList = new ArrayList<>();
+	private final Map<String, Long> viewsTotalMap = new HashMap<>();
+	private final Map<String, Long> viewsDailyMap = new HashMap<>();
 
 	private RequestNetwork dongflix_req;
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
@@ -140,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
 						if (photoUrl.startsWith("data:image")) {
 							try {
 								String base64Part = photoUrl.substring(photoUrl.indexOf(",") + 1);
-								byte[] decoded = Base64.decode(base64Part, Base64.DEFAULT);
+								byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
 								Bitmap bmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
 								if (bmp != null) imgUserAvatar.setImageBitmap(bmp);
 							} catch (Exception ignored) {}
@@ -157,6 +160,115 @@ public class MainActivity extends AppCompatActivity {
 				@Override
 				public void onCancelled(@NonNull DatabaseError error) {}
 			});
+	}
+
+	private String getTodayDateString() {
+		Calendar cal = Calendar.getInstance();
+		int year = cal.get(Calendar.YEAR);
+		int month = cal.get(Calendar.MONTH) + 1;
+		int day = cal.get(Calendar.DAY_OF_MONTH);
+		return String.format(Locale.US, "%04d-%02d-%02d", year, month, day);
+	}
+
+	private long parseViewNumber(Object val) {
+		if (val == null) return 0L;
+		if (val instanceof Number) return ((Number) val).longValue();
+		try {
+			return Long.parseLong(val.toString().trim());
+		} catch (Exception e) {
+			return 0L;
+		}
+	}
+
+	private void sortAndRenderPopularSections() {
+		if (fullCatalogList == null || fullCatalogList.isEmpty()) return;
+
+		ArrayList<HashMap<String, Object>> todaySorted = new ArrayList<>(fullCatalogList);
+		Collections.sort(todaySorted, new Comparator<HashMap<String, Object>>() {
+			@Override
+			public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+				String slugA = a.get("slug") != null ? a.get("slug").toString() : "";
+				String slugB = b.get("slug") != null ? b.get("slug").toString() : "";
+				long dailyA = viewsDailyMap.containsKey(slugA) ? viewsDailyMap.get(slugA) : 0L;
+				long dailyB = viewsDailyMap.containsKey(slugB) ? viewsDailyMap.get(slugB) : 0L;
+				if (dailyB != dailyA) {
+					return Long.compare(dailyB, dailyA);
+				}
+				long totalA = viewsTotalMap.containsKey(slugA) ? viewsTotalMap.get(slugA) : 0L;
+				long totalB = viewsTotalMap.containsKey(slugB) ? viewsTotalMap.get(slugB) : 0L;
+				return Long.compare(totalB, totalA);
+			}
+		});
+
+		ArrayList<HashMap<String, Object>> totalSorted = new ArrayList<>(fullCatalogList);
+		Collections.sort(totalSorted, new Comparator<HashMap<String, Object>>() {
+			@Override
+			public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+				String slugA = a.get("slug") != null ? a.get("slug").toString() : "";
+				String slugB = b.get("slug") != null ? b.get("slug").toString() : "";
+				long totalA = viewsTotalMap.containsKey(slugA) ? viewsTotalMap.get(slugA) : 0L;
+				long totalB = viewsTotalMap.containsKey(slugB) ? viewsTotalMap.get(slugB) : 0L;
+				return Long.compare(totalB, totalA);
+			}
+		});
+
+		ArrayList<HashMap<String, Object>> todaySlice = new ArrayList<>(
+			todaySorted.subList(0, Math.min(8, todaySorted.size()))
+		);
+		ArrayList<HashMap<String, Object>> allPopularSlice = new ArrayList<>(
+			totalSorted.subList(0, Math.min(10, totalSorted.size()))
+		);
+
+		if (recyclerPopular != null) {
+			recyclerPopular.setAdapter(new RecyclerPopularAdapter(todaySlice));
+		}
+		if (listPopular != null) {
+			listPopular.setAdapter(new ListPopularAdapter(allPopularSlice));
+		}
+		if (recyclerSearchList != null && (inputSearch == null || inputSearch.getText().toString().trim().isEmpty())) {
+			recyclerSearchList.setAdapter(new ListPopularAdapter(allPopularSlice));
+		}
+	}
+
+	private void syncFirebaseViewsAndSort() {
+		String todayStr = getTodayDateString();
+		DatabaseReference rootDb = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference();
+
+		rootDb.child("views_total").addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				viewsTotalMap.clear();
+				if (snapshot.exists()) {
+					for (DataSnapshot child : snapshot.getChildren()) {
+						if (child.getKey() != null) {
+							viewsTotalMap.put(child.getKey(), parseViewNumber(child.getValue()));
+						}
+					}
+				}
+				sortAndRenderPopularSections();
+			}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError error) {}
+		});
+
+		rootDb.child("views_daily").child(todayStr).addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				viewsDailyMap.clear();
+				if (snapshot.exists()) {
+					for (DataSnapshot child : snapshot.getChildren()) {
+						if (child.getKey() != null) {
+							viewsDailyMap.put(child.getKey(), parseViewNumber(child.getValue()));
+						}
+					}
+				}
+				sortAndRenderPopularSections();
+			}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError error) {}
+		});
 	}
 
 	private void applyCustomFonts() {
@@ -651,6 +763,9 @@ public class MainActivity extends AppCompatActivity {
 
 				if (recyclerPopular != null) recyclerPopular.setAdapter(new RecyclerPopularAdapter(listMap));
 				if (listPopular != null) listPopular.setAdapter(new ListPopularAdapter(listMap));
+
+				sortAndRenderPopularSections();
+				syncFirebaseViewsAndSort();
 			}
 
 			@Override
