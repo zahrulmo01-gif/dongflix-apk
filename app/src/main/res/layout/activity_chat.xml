@@ -248,13 +248,14 @@
 					android:layout_height="38dp"
 					android:layout_marginEnd="6dp">
 
-					<TextView
-						android:layout_width="match_parent"
-						android:layout_height="match_parent"
-						android:gravity="center"
-						android:text="☺"
-						android:textColor="#E2E8F0"
-						android:textSize="17sp" />
+					<ImageView
+						android:id="@+id/img_open_sticker"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
+						android:layout_gravity="center"
+						android:contentDescription="Stiker"
+						android:scaleType="fitCenter"
+						android:src="@drawable/ic_sticker" />
 				</FrameLayout>
 
 				<FrameLayout
@@ -262,14 +263,14 @@
 					android:layout_width="40dp"
 					android:layout_height="40dp">
 
-					<TextView
-						android:layout_width="match_parent"
-						android:layout_height="match_parent"
-						android:gravity="center"
-						android:text="➤"
-						android:textColor="#07101C"
-						android:textSize="13sp"
-						android:textStyle="bold" />
+					<ImageView
+						android:id="@+id/img_send_chat"
+						android:layout_width="18dp"
+						android:layout_height="18dp"
+						android:layout_gravity="center"
+						android:contentDescription="Kirim"
+						android:scaleType="fitCenter"
+						android:src="@drawable/ic_send" />
 				</FrameLayout>
 			</LinearLayout>
 		</FrameLayout>
