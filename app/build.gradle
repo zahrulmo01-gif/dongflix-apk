@@ -77,4 +77,5 @@ dependencies {
 	annotationProcessor 'com.github.bumptech.glide:compiler:4.15.1'
 
 	implementation 'com.google.android.exoplayer:exoplayer:2.18.2'
+	implementation 'com.github.Dimezis:BlurView:version-2.0.6'
 }
