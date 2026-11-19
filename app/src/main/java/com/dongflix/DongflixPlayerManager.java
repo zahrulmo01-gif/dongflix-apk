@@ -10,6 +10,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -50,7 +52,6 @@ public class DongflixPlayerManager {
 	public int activeEpisodeIndex = 0;
 	public ArrayList<HashMap<String, Object>> activeEpisodeList = new ArrayList<>();
 
-	// Cache lengkap agar saat Mini Player diklik tidak refresh/memuat ulang detail & server
 	public String cachedAllCatalogJson = "";
 	public String cachedEpisodesJson = "";
 	public String activeServerName = "";
@@ -61,6 +62,8 @@ public class DongflixPlayerManager {
 	public ArrayList<String> activeQualityUrls = new ArrayList<>();
 	public int activeSelectedQualityIndex = 0;
 	public boolean activeIsAutoQuality = true;
+
+	public boolean isScrolledDownCompact = false;
 
 	private boolean isReceiverRegistered = false;
 	private Application appContext;
@@ -88,7 +91,6 @@ public class DongflixPlayerManager {
 			@Override
 			public void onActivityStopped(Activity activity) {
 				startedActivityCount = Math.max(0, startedActivityCount - 1);
-				// Jangan putar di latar belakang: otomatis jeda saat aplikasi keluar/diminimalkan ke Home
 				if (startedActivityCount == 0 && sharedMediaPlayer != null) {
 					try {
 						if (sharedMediaPlayer.isPlaying()) {
@@ -254,55 +256,61 @@ public class DongflixPlayerManager {
 		if (existing != null && existing.getParent() instanceof ViewGroup) {
 			((ViewGroup) existing.getParent()).removeView(existing);
 		}
+		FrameLayout inlineSlot = activity.findViewById(R.id.mini_player_inline_slot);
+		if (inlineSlot != null) {
+			inlineSlot.removeAllViews();
+			inlineSlot.setVisibility(View.GONE);
+		}
 	}
 
-	public void attachMiniPlayerToActivity(final Activity activity) {
-		if (!isMiniPlayerActive || sharedMediaPlayer == null) return;
+	public void setCompactScrollMode(Activity activity, boolean compact) {
+		if (isScrolledDownCompact == compact) return;
+		isScrolledDownCompact = compact;
+		if (isMiniPlayerActive && sharedMediaPlayer != null) {
+			attachMiniPlayerToActivity(activity);
+		}
+	}
 
-		ViewGroup contentRoot = activity.findViewById(android.R.id.content);
-		if (contentRoot == null) return;
-
-		View existing = contentRoot.findViewWithTag("DONGFLIX_MINI_PLAYER");
-		if (existing != null) contentRoot.removeView(existing);
-
+	private View buildMiniPlayerPillView(final Activity activity, final boolean isInlineCompact) {
 		float d = activity.getResources().getDisplayMetrics().density;
 
-		View bottomNav = activity.findViewById(R.id.navbar);
-		int bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
-			? (int) (86 * d)
-			: (int) (14 * d);
+		final FrameLayout glassRoot = new FrameLayout(activity);
+		glassRoot.setTag("DONGFLIX_MINI_PLAYER");
 
-		final LinearLayout miniBar = new LinearLayout(activity);
-		miniBar.setTag("DONGFLIX_MINI_PLAYER");
-		miniBar.setOrientation(LinearLayout.VERTICAL);
-
-		GradientDrawable barBg = new GradientDrawable();
-		barBg.setColor(Color.parseColor("#0E1117"));
-		barBg.setCornerRadius(14 * d);
-		barBg.setStroke((int)(1 * d), Color.parseColor("#263B82F6"));
-		miniBar.setBackground(barBg);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			miniBar.setElevation(24 * d);
-		}
-
-		FrameLayout.LayoutParams rootLp = new FrameLayout.LayoutParams(
+		// Lapisan kaca buram (Liquid Glass)
+		View blurLayer = new View(activity);
+		blurLayer.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT,
-			ViewGroup.LayoutParams.WRAP_CONTENT
+			ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		GradientDrawable glassBg = new GradientDrawable(
+			GradientDrawable.Orientation.TOP_BOTTOM,
+			new int[]{Color.parseColor("#E6161922"), Color.parseColor("#F00C0E14")}
 		);
-		rootLp.gravity = Gravity.BOTTOM;
-		rootLp.setMargins((int)(14 * d), 0, (int)(14 * d), bottomMarginPx);
-		miniBar.setLayoutParams(rootLp);
+		glassBg.setCornerRadius(100f);
+		glassBg.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
+		blurLayer.setBackground(glassBg);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+			blurLayer.setRenderEffect(RenderEffect.createBlurEffect(20f, 20f, Shader.TileMode.CLAMP));
+		}
+		glassRoot.addView(blurLayer);
 
 		LinearLayout row = new LinearLayout(activity);
 		row.setOrientation(LinearLayout.HORIZONTAL);
 		row.setGravity(Gravity.CENTER_VERTICAL);
-		row.setPadding((int)(8 * d), (int)(8 * d), (int)(10 * d), (int)(8 * d));
-		miniBar.addView(row);
+		int hPad = isInlineCompact ? (int)(8 * d) : (int)(10 * d);
+		int vPad = isInlineCompact ? (int)(6 * d) : (int)(8 * d);
+		row.setPadding(hPad, vPad, hPad, vPad);
+		glassRoot.addView(row);
 
-		FrameLayout videoThumbBox = new FrameLayout(activity);
-		LinearLayout.LayoutParams thumbLp = new LinearLayout.LayoutParams((int)(104 * d), (int)(58 * d));
-		videoThumbBox.setLayoutParams(thumbLp);
-		videoThumbBox.setBackgroundColor(Color.BLACK);
+		// Thumbnail video live sudut membulat
+		androidx.cardview.widget.CardView thumbCard = new androidx.cardview.widget.CardView(activity);
+		int thumbW = isInlineCompact ? (int)(44 * d) : (int)(56 * d);
+		int thumbH = isInlineCompact ? (int)(44 * d) : (int)(44 * d);
+		thumbCard.setLayoutParams(new LinearLayout.LayoutParams(thumbW, thumbH));
+		thumbCard.setRadius(isInlineCompact ? 22 * d : 12 * d);
+		thumbCard.setCardElevation(0f);
+		thumbCard.setCardBackgroundColor(Color.BLACK);
 
 		TextureView miniTexture = new TextureView(activity);
 		miniTexture.setLayoutParams(new FrameLayout.LayoutParams(
@@ -322,38 +330,41 @@ public class DongflixPlayerManager {
 			@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
 			@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
 		});
-		videoThumbBox.addView(miniTexture);
-		row.addView(videoThumbBox);
+		thumbCard.addView(miniTexture);
+		row.addView(thumbCard);
 
+		// Judul & Episode
 		LinearLayout infoCol = new LinearLayout(activity);
 		infoCol.setOrientation(LinearLayout.VERTICAL);
 		LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-		infoLp.setMargins((int)(12 * d), 0, (int)(8 * d), 0);
+		infoLp.setMargins((int)(10 * d), 0, (int)(6 * d), 0);
 		infoCol.setLayoutParams(infoLp);
 
 		TextView tvTitle = new TextView(activity);
 		tvTitle.setText(activeTitle.isEmpty() ? "Dongflix" : activeTitle);
 		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(13.5f);
+		tvTitle.setTextSize(isInlineCompact ? 13f : 14f);
 		tvTitle.setTypeface(null, Typeface.BOLD);
 		tvTitle.setMaxLines(1);
 		tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 		infoCol.addView(tvTitle);
 
 		TextView tvSub = new TextView(activity);
-		tvSub.setText(activeEpisodeLabel.isEmpty() ? "Sedang memutar" : "Episode " + activeEpisodeLabel);
+		tvSub.setText(activeEpisodeLabel.isEmpty() ? "Dongflix" : "Episode " + activeEpisodeLabel);
 		tvSub.setTextColor(Color.parseColor("#9CA3AF"));
-		tvSub.setTextSize(11.5f);
+		tvSub.setTextSize(isInlineCompact ? 11f : 12f);
 		tvSub.setMaxLines(1);
+		tvSub.setEllipsize(TextUtils.TruncateAt.END);
 		infoCol.addView(tvSub);
 
 		row.addView(infoCol);
 
+		// Tombol Play / Pause PUTIH TERANG (fix tombol hitam)
 		final ImageView btnMiniPlay = new ImageView(activity);
-		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int)(36 * d), (int)(36 * d));
-		playLp.rightMargin = (int)(6 * d);
+		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int)(34 * d), (int)(34 * d));
 		btnMiniPlay.setLayoutParams(playLp);
-		btnMiniPlay.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
+		btnMiniPlay.setPadding((int)(7 * d), (int)(7 * d), (int)(7 * d), (int)(7 * d));
+		btnMiniPlay.setColorFilter(Color.WHITE);
 		boolean playingNow = false;
 		try { playingNow = sharedMediaPlayer.isPlaying(); } catch (Exception ignored) {}
 		btnMiniPlay.setImageResource(playingNow ? R.drawable.ic_pause : R.drawable.ic_play1);
@@ -370,6 +381,7 @@ public class DongflixPlayerManager {
 							sharedMediaPlayer.start();
 							btnMiniPlay.setImageResource(R.drawable.ic_pause);
 						}
+						btnMiniPlay.setColorFilter(Color.WHITE);
 						updatePlaybackNotification(activity);
 					} catch (Exception ignored) {}
 				}
@@ -377,23 +389,27 @@ public class DongflixPlayerManager {
 		});
 		row.addView(btnMiniPlay);
 
-		TextView btnClose = new TextView(activity);
-		btnClose.setLayoutParams(new LinearLayout.LayoutParams((int)(32 * d), (int)(32 * d)));
-		btnClose.setGravity(Gravity.CENTER);
-		btnClose.setText("✕");
-		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
-		btnClose.setTextSize(14f);
-		btnClose.setTypeface(null, Typeface.BOLD);
-		btnClose.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				stopAndCloseEverything(activity);
-			}
-		});
-		row.addView(btnClose);
+		// Tombol Tutup (✕)
+		if (!isInlineCompact) {
+			TextView btnClose = new TextView(activity);
+			LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int)(30 * d), (int)(30 * d));
+			closeLp.leftMargin = (int)(2 * d);
+			btnClose.setLayoutParams(closeLp);
+			btnClose.setGravity(Gravity.CENTER);
+			btnClose.setText("✕");
+			btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+			btnClose.setTextSize(13f);
+			btnClose.setTypeface(null, Typeface.BOLD);
+			btnClose.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					stopAndCloseEverything(activity);
+				}
+			});
+			row.addView(btnClose);
+		}
 
-		// Klik Mini Player -> Buka WatchActivity dengan animasi naik dari bawah ke atas (slide_up_enter)
-		miniBar.setOnClickListener(new View.OnClickListener() {
+		glassRoot.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				Intent intent = new Intent(activity, WatchActivity.class);
@@ -404,6 +420,48 @@ public class DongflixPlayerManager {
 			}
 		});
 
-		contentRoot.addView(miniBar);
+		return glassRoot;
+	}
+
+	public void attachMiniPlayerToActivity(final Activity activity) {
+		if (!isMiniPlayerActive || sharedMediaPlayer == null) return;
+
+		removeMiniPlayerFromActivity(activity);
+		float d = activity.getResources().getDisplayMetrics().density;
+
+		FrameLayout inlineSlot = activity.findViewById(R.id.mini_player_inline_slot);
+		View bottomNav = activity.findViewById(R.id.navbar_wrapper);
+
+		// Jika sedang scroll ke bawah dan berada di MainActivity (punya mini_player_inline_slot) -> taruh di TENGAH navbar
+		if (isScrolledDownCompact && inlineSlot != null) {
+			inlineSlot.setVisibility(View.VISIBLE);
+			View inlinePill = buildMiniPlayerPillView(activity, true);
+			inlineSlot.addView(inlinePill, new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.MATCH_PARENT
+			));
+			return;
+		}
+
+		// Jika di paling atas / scroll ke atas -> taruh melayang DI ATAS navbar
+		ViewGroup contentRoot = activity.findViewById(android.R.id.content);
+		if (contentRoot == null) return;
+
+		int bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
+			? (int) (92 * d)
+			: (int) (16 * d);
+
+		View floatingPill = buildMiniPlayerPillView(activity, false);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			floatingPill.setElevation(24 * d);
+		}
+
+		FrameLayout.LayoutParams rootLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			(int) (60 * d)
+		);
+		rootLp.gravity = Gravity.BOTTOM;
+		rootLp.setMargins((int)(14 * d), 0, (int)(14 * d), bottomMarginPx);
+		contentRoot.addView(floatingPill, rootLp);
 	}
 }
