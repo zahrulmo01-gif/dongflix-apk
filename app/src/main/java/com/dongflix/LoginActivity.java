@@ -35,7 +35,7 @@ import java.util.Queue;
 
 public class LoginActivity extends AppCompatActivity {
 
-	private static final String DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";[span_3](start_span)[span_3](end_span)
+	private static final String DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 	private FirebaseAuth mAuth;
 	private DatabaseReference usersRef;
@@ -54,9 +54,8 @@ public class LoginActivity extends AppCompatActivity {
 		super.onCreate(savedInstanceState);
 
 		mAuth = FirebaseAuth.getInstance();
-		usersRef = FirebaseDatabase.getInstance(DB_URL).getReference("users");[span_4](start_span)[span_4](end_span)
+		usersRef = FirebaseDatabase.getInstance(DB_URL).getReference("users");
 
-		// Jika sudah login di FirebaseAuth, langsung masuk ke MainActivity
 		if (mAuth.getCurrentUser() != null) {
 			goToMainActivity();
 			return;
@@ -270,7 +269,6 @@ public class LoginActivity extends AppCompatActivity {
 		setLoadingState(true);
 
 		if (!isRegisterMode) {
-			// 1. Login dengan Email & Password ke Firebase Authentication
 			mAuth.signInWithEmailAndPassword(email, password)
 				.addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
 					@Override
@@ -286,7 +284,6 @@ public class LoginActivity extends AppCompatActivity {
 						String userEmail = (user != null && user.getEmail() != null) ? user.getEmail() : email;
 						String userKey = emailToFirebaseKey(userEmail);
 
-						// 2. Baca profil dari node users/{email_dengan_koma} di Realtime Database
 						usersRef.child(userKey).addListenerForSingleValueEvent(new ValueEventListener() {
 							@Override
 							public void onDataChange(@NonNull DataSnapshot snapshot) {
@@ -308,7 +305,6 @@ public class LoginActivity extends AppCompatActivity {
 					}
 				});
 		} else {
-			// 1. Daftar akun baru ke Firebase Authentication
 			mAuth.createUserWithEmailAndPassword(email, password)
 				.addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
 					@Override
@@ -324,7 +320,6 @@ public class LoginActivity extends AppCompatActivity {
 						if (cleanUsername.isEmpty()) cleanUsername = email.split("@")[0];
 						String userKey = emailToFirebaseKey(email);
 
-						// 2. Simpan data profil ke node users/{email_dengan_koma}
 						HashMap<String, Object> profileMap = new HashMap<>();
 						profileMap.put("email", email);
 						profileMap.put("name", regName);
