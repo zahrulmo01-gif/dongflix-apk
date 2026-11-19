@@ -48,9 +48,13 @@ public class MainActivity extends AppCompatActivity {
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 	private String cover = "";
+	private String currentUserKey = "";
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> fullCatalogList = new ArrayList<>();
+	private ArrayList<HashMap<String, Object>> historyList = new ArrayList<>();
+	private ArrayList<HashMap<String, Object>> favoritesList = new ArrayList<>();
+	private ArrayList<HashMap<String, Object>> downloadsList = new ArrayList<>();
 	private final Map<String, Long> viewsTotalMap = new HashMap<>();
 	private final Map<String, Long> viewsDailyMap = new HashMap<>();
 
@@ -66,6 +70,17 @@ public class MainActivity extends AppCompatActivity {
 	private FrameLayout btnHeroFavorite, btnTopSearch, btnTopChat;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
+
+	// Lanjutkan Menonton (di atas Populer Hari Ini)
+	private LinearLayout continueWatchingContainer;
+	private RecyclerView recyclerContinueWatching;
+
+	// Pustaka (Riwayat, Daftarku, Unduhan)
+	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
+	private View linePustakaRiwayat, linePustakaDaftarku, linePustakaUnduhan;
+	private TextView textPustakaSectionLabel;
+	private RecyclerView recyclerPustakaList;
+	private int activePustakaTab = 0; // 0 = Riwayat, 1 = Daftarku, 2 = Unduhan
 
 	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
 	private LinearLayout tabBeranda, tabPustaka, tabAkun;
@@ -105,15 +120,121 @@ public class MainActivity extends AppCompatActivity {
 		}
 
 		initialize(_savedInstanceState);
+		setupContinueWatchingSection();
+		setupPustakaSection();
 		initializeLogic();
 		loadLoggedInUserProfile(currentUser);
+		loadUserHistoryAndFavoritesFromFirebase(currentUser);
+		loadLocalDownloads();
+	}
+
+	private String extractTwoInitials(String nameOrEmail) {
+		if (nameOrEmail == null || nameOrEmail.trim().isEmpty()) return "DF";
+		String clean = nameOrEmail.trim();
+		if (clean.contains("@")) {
+			clean = clean.substring(0, clean.indexOf("@"));
+		}
+		String[] parts = clean.split("[\\s._-]+");
+		StringBuilder initials = new StringBuilder();
+		for (String part : parts) {
+			if (!part.isEmpty()) {
+				initials.append(Character.toUpperCase(part.charAt(0)));
+				if (initials.length() == 2) break;
+			}
+		}
+		if (initials.length() == 1 && clean.length() >= 2) {
+			initials.append(Character.toUpperCase(clean.charAt(1)));
+		}
+		return initials.length() > 0 ? initials.toString() : "DF";
+	}
+
+	private Bitmap createInitialsAvatarBitmap(String text, int sizePx) {
+		Bitmap bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+		Canvas canvas = new Canvas(bmp);
+
+		Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		bgPaint.setColor(Color.parseColor("#38BDF8"));
+		canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, bgPaint);
+
+		Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		borderPaint.setStyle(Paint.Style.STROKE);
+		borderPaint.setStrokeWidth(Math.max(2f, sizePx * 0.05f));
+		borderPaint.setColor(Color.parseColor("#BAE6FD"));
+		canvas.drawCircle(sizePx / 2f, sizePx / 2f, (sizePx / 2f) - (borderPaint.getStrokeWidth() / 2f), borderPaint);
+
+		Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		textPaint.setColor(Color.parseColor("#041E3A"));
+		textPaint.setTextAlign(Paint.Align.CENTER);
+		textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+		textPaint.setTextSize(sizePx * 0.4f);
+
+		Paint.FontMetrics fm = textPaint.getFontMetrics();
+		float yCenter = (sizePx / 2f) - ((fm.ascent + fm.descent) / 2f);
+		canvas.drawText(text, sizePx / 2f, yCenter, textPaint);
+
+		return bmp;
+	}
+
+	private void applyCircularAvatar(ImageView target, String photoUrl, String displayName) {
+		if (target == null) return;
+		float d = getResources().getDisplayMetrics().density;
+		int sizePx = Math.max((int) (38 * d), target.getWidth() > 0 ? target.getWidth() : (int) (38 * d));
+		String initials = extractTwoInitials(displayName);
+		Bitmap fallbackBmp = createInitialsAvatarBitmap(initials, sizePx);
+
+		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
+			String cleanUrl = photoUrl.trim();
+			if (cleanUrl.startsWith("data:image")) {
+				try {
+					String base64Part = cleanUrl.substring(cleanUrl.indexOf(",") + 1);
+					byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
+					Bitmap rawBmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
+					if (rawBmp != null) {
+						Bitmap square = cropCenterSquare(rawBmp);
+						Bitmap circular = getCircularBitmap(Bitmap.createScaledBitmap(square, sizePx, sizePx, true));
+						target.setImageBitmap(circular);
+						return;
+					}
+				} catch (Exception ignored) {}
+			} else {
+				Glide.with(getApplicationContext())
+					.load(Uri.parse(cleanUrl))
+					.circleCrop()
+					.placeholder(new BitmapDrawable(getResources(), fallbackBmp))
+					.error(new BitmapDrawable(getResources(), fallbackBmp))
+					.into(target);
+				return;
+			}
+		}
+		target.setImageBitmap(fallbackBmp);
+	}
+
+	private Bitmap cropCenterSquare(Bitmap src) {
+		int w = src.getWidth();
+		int h = src.getHeight();
+		int edge = Math.min(w, h);
+		int x = (w - edge) / 2;
+		int y = (h - edge) / 2;
+		return Bitmap.createBitmap(src, x, y, edge, edge);
+	}
+
+	private Bitmap getCircularBitmap(Bitmap squareBmp) {
+		int size = Math.min(squareBmp.getWidth(), squareBmp.getHeight());
+		Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+		Canvas canvas = new Canvas(output);
+		Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		Rect rect = new Rect(0, 0, size, size);
+		canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
+		paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+		canvas.drawBitmap(squareBmp, rect, rect, paint);
+		return output;
 	}
 
 	private void loadLoggedInUserProfile(FirebaseUser currentUser) {
 		if (currentUser == null || currentUser.getEmail() == null) return;
 
 		String email = currentUser.getEmail().trim().toLowerCase();
-		String fallbackName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
+		final String fallbackName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
 
 		TextView tvUserHeader = findViewById(R.id.text_username);
 		if (tvUserHeader != null) tvUserHeader.setText(fallbackName);
@@ -121,45 +242,765 @@ public class MainActivity extends AppCompatActivity {
 		TextView tvProfileName = findViewById(R.id.textview65);
 		if (tvProfileName != null) tvProfileName.setText(fallbackName);
 
-		String userKey = email.replace(".", ",");
+		applyCircularAvatar(imgUserAvatar, "", fallbackName);
+
+		currentUserKey = email.replace(".", ",");
 		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 			.getReference("users")
-			.child(userKey)
+			.child(currentUserKey)
 			.addListenerForSingleValueEvent(new ValueEventListener() {
 				@Override
 				public void onDataChange(@NonNull DataSnapshot snapshot) {
 					if (!snapshot.exists()) return;
 
+					String resolvedName = fallbackName;
 					Object nameObj = snapshot.child("name").getValue();
 					if (nameObj != null && !nameObj.toString().trim().isEmpty()) {
-						String nameStr = nameObj.toString().trim();
-						if (tvUserHeader != null) tvUserHeader.setText(nameStr);
-						if (tvProfileName != null) tvProfileName.setText(nameStr);
+						resolvedName = nameObj.toString().trim();
 					}
 
+					if (tvUserHeader != null) tvUserHeader.setText(resolvedName);
+					if (tvProfileName != null) tvProfileName.setText(resolvedName);
+
+					String photoUrl = "";
 					Object photoObj = snapshot.child("photoURL").getValue();
-					if (photoObj != null && !photoObj.toString().trim().isEmpty() && imgUserAvatar != null) {
-						String photoUrl = photoObj.toString().trim();
-						if (photoUrl.startsWith("data:image")) {
-							try {
-								String base64Part = photoUrl.substring(photoUrl.indexOf(",") + 1);
-								byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
-								Bitmap bmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
-								if (bmp != null) imgUserAvatar.setImageBitmap(bmp);
-							} catch (Exception ignored) {}
-						} else {
-							Glide.with(getApplicationContext())
-								.load(Uri.parse(photoUrl))
-								.placeholder(R.drawable.ic_profile)
-								.error(R.drawable.ic_profile)
-								.into(imgUserAvatar);
-						}
+					if (photoObj != null && !photoObj.toString().trim().isEmpty()) {
+						photoUrl = photoObj.toString().trim();
 					}
+
+					applyCircularAvatar(imgUserAvatar, photoUrl, resolvedName);
 				}
 
 				@Override
 				public void onCancelled(@NonNull DatabaseError error) {}
 			});
+	}
+
+	private void setupContinueWatchingSection() {
+		if (recyclerPopular == null || !(recyclerPopular.getParent() instanceof ViewGroup)) return;
+		ViewGroup parent = (ViewGroup) recyclerPopular.getParent();
+		int idx = parent.indexOfChild(recyclerPopular);
+		if (idx < 0) return;
+
+		float d = getResources().getDisplayMetrics().density;
+
+		continueWatchingContainer = new LinearLayout(this);
+		continueWatchingContainer.setOrientation(LinearLayout.VERTICAL);
+		continueWatchingContainer.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		continueWatchingContainer.setPadding(0, (int) (8 * d), 0, (int) (18 * d));
+		continueWatchingContainer.setVisibility(View.GONE);
+
+		LinearLayout headerRow = new LinearLayout(this);
+		headerRow.setOrientation(LinearLayout.HORIZONTAL);
+		headerRow.setGravity(Gravity.CENTER_VERTICAL);
+		headerRow.setPadding((int) (16 * d), 0, (int) (16 * d), (int) (12 * d));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Lanjutkan Menonton");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+			0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+		);
+		tvTitle.setLayoutParams(titleLp);
+
+		TextView tvSeeAll = new TextView(this);
+		tvSeeAll.setText("Lihat Semua >");
+		tvSeeAll.setTextColor(Color.parseColor("#94A3B8"));
+		tvSeeAll.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvSeeAll.setTypeface(null, Typeface.BOLD);
+		tvSeeAll.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (tabPustaka != null) {
+					activePustakaTab = 0;
+					tabPustaka.performClick();
+				}
+			}
+		});
+
+		headerRow.addView(tvTitle);
+		headerRow.addView(tvSeeAll);
+
+		recyclerContinueWatching = new RecyclerView(this);
+		recyclerContinueWatching.setLayoutManager(
+			new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+		);
+		recyclerContinueWatching.setClipToPadding(false);
+		recyclerContinueWatching.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		recyclerContinueWatching.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			(int) (132 * d)
+		));
+
+		continueWatchingContainer.addView(headerRow);
+		continueWatchingContainer.addView(recyclerContinueWatching);
+		parent.addView(continueWatchingContainer, idx);
+	}
+
+	private void setupPustakaSection() {
+		View pageFavorite = findViewById(R.id.layout_favorite);
+		if (!(pageFavorite instanceof ViewGroup)) return;
+
+		ViewGroup favGroup = (ViewGroup) pageFavorite;
+		favGroup.removeAllViews();
+		favGroup.setBackgroundColor(Color.parseColor("#000000"));
+
+		float d = getResources().getDisplayMetrics().density;
+		int statusBarHeight = 0;
+		int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+		if (resId > 0) statusBarHeight = getResources().getDimensionPixelSize(resId);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setLayoutParams(new ViewGroup.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		root.setPadding((int) (16 * d), statusBarHeight + (int) (16 * d), (int) (16 * d), (int) (110 * d));
+
+		TextView tvHeaderTitle = new TextView(this);
+		tvHeaderTitle.setText("Pustaka");
+		tvHeaderTitle.setTextColor(Color.WHITE);
+		tvHeaderTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
+		tvHeaderTitle.setTypeface(null, Typeface.BOLD);
+		root.addView(tvHeaderTitle);
+
+		// Sub-tab bar: Riwayat | Daftarku | Unduhan
+		LinearLayout tabsBar = new LinearLayout(this);
+		tabsBar.setOrientation(LinearLayout.HORIZONTAL);
+		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		tabsLp.topMargin = (int) (18 * d);
+		tabsBar.setLayoutParams(tabsLp);
+
+		tabPustakaRiwayat = new TextView(this);
+		tabPustakaDaftarku = new TextView(this);
+		tabPustakaUnduhan = new TextView(this);
+
+		linePustakaRiwayat = new View(this);
+		linePustakaDaftarku = new View(this);
+		linePustakaUnduhan = new View(this);
+
+		tabsBar.addView(buildPustakaTabItem("Riwayat", tabPustakaRiwayat, linePustakaRiwayat, 0, d));
+		tabsBar.addView(buildPustakaTabItem("Daftarku", tabPustakaDaftarku, linePustakaDaftarku, 1, d));
+		tabsBar.addView(buildPustakaTabItem("Unduhan", tabPustakaUnduhan, linePustakaUnduhan, 2, d));
+		root.addView(tabsBar);
+
+		textPustakaSectionLabel = new TextView(this);
+		textPustakaSectionLabel.setText("Kemarin");
+		textPustakaSectionLabel.setTextColor(Color.WHITE);
+		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		textPustakaSectionLabel.setTypeface(null, Typeface.BOLD);
+		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		secLp.topMargin = (int) (22 * d);
+		secLp.bottomMargin = (int) (14 * d);
+		textPustakaSectionLabel.setLayoutParams(secLp);
+		root.addView(textPustakaSectionLabel);
+
+		recyclerPustakaList = new RecyclerView(this);
+		recyclerPustakaList.setLayoutManager(new LinearLayoutManager(this));
+		recyclerPustakaList.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		root.addView(recyclerPustakaList);
+
+		favGroup.addView(root);
+		updatePustakaTabVisual(activePustakaTab);
+	}
+
+	private LinearLayout buildPustakaTabItem(String label, TextView tv, View line, final int tabIndex, float d) {
+		LinearLayout wrapper = new LinearLayout(this);
+		wrapper.setOrientation(LinearLayout.VERTICAL);
+		wrapper.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		wrapper.setPadding(0, 0, (int) (12 * d), 0);
+		wrapper.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				activePustakaTab = tabIndex;
+				updatePustakaTabVisual(tabIndex);
+				renderActivePustakaTab();
+			}
+		});
+
+		tv.setText(label);
+		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+		tv.setTypeface(null, Typeface.BOLD);
+		tv.setPadding(0, 0, 0, (int) (8 * d));
+
+		line.setLayoutParams(new LinearLayout.LayoutParams((int) (24 * d), (int) (3 * d)));
+
+		wrapper.addView(tv);
+		wrapper.addView(line);
+		return wrapper;
+	}
+
+	private void updatePustakaTabVisual(int idx) {
+		int activeColor = Color.WHITE;
+		int inactiveColor = Color.parseColor("#94A3B8");
+		int indicatorColor = Color.parseColor("#38BDF8");
+
+		if (tabPustakaRiwayat != null) tabPustakaRiwayat.setTextColor(idx == 0 ? activeColor : inactiveColor);
+		if (tabPustakaDaftarku != null) tabPustakaDaftarku.setTextColor(idx == 1 ? activeColor : inactiveColor);
+		if (tabPustakaUnduhan != null) tabPustakaUnduhan.setTextColor(idx == 2 ? activeColor : inactiveColor);
+
+		if (linePustakaRiwayat != null) linePustakaRiwayat.setBackgroundColor(idx == 0 ? indicatorColor : Color.TRANSPARENT);
+		if (linePustakaDaftarku != null) linePustakaDaftarku.setBackgroundColor(idx == 1 ? indicatorColor : Color.TRANSPARENT);
+		if (linePustakaUnduhan != null) linePustakaUnduhan.setBackgroundColor(idx == 2 ? indicatorColor : Color.TRANSPARENT);
+	}
+
+	private void loadUserHistoryAndFavoritesFromFirebase(FirebaseUser user) {
+		if (user == null || user.getEmail() == null) return;
+		String key = user.getEmail().trim().toLowerCase().replace(".", ",");
+		currentUserKey = key;
+
+		DatabaseReference userNodeRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("users")
+			.child(key);
+
+		// 1. Ambil history dari Firebase Realtime Database
+		userNodeRef.child("history").addValueEventListener(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				ArrayList<HashMap<String, Object>> parsed = new ArrayList<>();
+				if (snapshot.exists()) {
+					for (DataSnapshot child : snapshot.getChildren()) {
+						HashMap<String, Object> item = extractMapFromSnapshot(child);
+						if (!item.isEmpty()) {
+							if (!item.containsKey("slug") && child.getKey() != null) {
+								item.put("slug", child.getKey());
+							}
+							parsed.add(item);
+						}
+					}
+					Collections.sort(parsed, new Comparator<HashMap<String, Object>>() {
+						@Override
+						public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+							long tsA = parseLongSafe(a.get("updatedAt") != null ? a.get("updatedAt") : a.get("timestamp"));
+							long tsB = parseLongSafe(b.get("updatedAt") != null ? b.get("updatedAt") : b.get("timestamp"));
+							return Long.compare(tsB, tsA);
+						}
+					});
+				}
+				historyList = parsed;
+				renderContinueWatchingCards();
+				if (activePustakaTab == 0) renderActivePustakaTab();
+			}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError error) {}
+		});
+
+		// 2. Ambil favorites dari Firebase Realtime Database
+		userNodeRef.child("favorites").addValueEventListener(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				ArrayList<HashMap<String, Object>> parsedFavs = new ArrayList<>();
+				if (snapshot.exists()) {
+					for (DataSnapshot child : snapshot.getChildren()) {
+						HashMap<String, Object> item = extractMapFromSnapshot(child);
+						if (!item.isEmpty()) {
+							if (!item.containsKey("slug") && child.getKey() != null) {
+								item.put("slug", child.getKey());
+							}
+							parsedFavs.add(item);
+						}
+					}
+				}
+				favoritesList = parsedFavs;
+				if (activePustakaTab == 1) renderActivePustakaTab();
+			}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError error) {}
+		});
+	}
+
+	private HashMap<String, Object> extractMapFromSnapshot(DataSnapshot snap) {
+		HashMap<String, Object> map = new HashMap<>();
+		if (snap == null || !snap.exists()) return map;
+		Object val = snap.getValue();
+		if (val instanceof Map) {
+			Map<?, ?> rawMap = (Map<?, ?>) val;
+			for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+				if (entry.getKey() != null) {
+					map.put(entry.getKey().toString(), entry.getValue());
+				}
+			}
+		} else if (val instanceof String) {
+			String s = val.toString().trim();
+			if (s.startsWith("{")) {
+				try {
+					HashMap<String, Object> jsonMap = new Gson().fromJson(s, new TypeToken<HashMap<String, Object>>(){}.getType());
+					if (jsonMap != null) map.putAll(jsonMap);
+				} catch (Exception ignored) {}
+			} else if (!s.isEmpty()) {
+				map.put("title", s);
+				map.put("slug", snap.getKey() != null ? snap.getKey() : s);
+			}
+		}
+		return map;
+	}
+
+	private long parseLongSafe(Object o) {
+		if (o == null) return 0L;
+		if (o instanceof Number) return ((Number) o).longValue();
+		try {
+			return Long.parseLong(o.toString().trim());
+		} catch (Exception e) {
+			return 0L;
+		}
+	}
+
+	private void renderContinueWatchingCards() {
+		if (continueWatchingContainer == null || recyclerContinueWatching == null) return;
+		if (historyList == null || historyList.isEmpty()) {
+			continueWatchingContainer.setVisibility(View.GONE);
+			return;
+		}
+		continueWatchingContainer.setVisibility(View.VISIBLE);
+		recyclerContinueWatching.setAdapter(new ContinueWatchingAdapter(historyList));
+	}
+
+	private void loadLocalDownloads() {
+		ArrayList<HashMap<String, Object>> found = new ArrayList<>();
+		File[] dirs = {
+			getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+			getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+			getFilesDir()
+		};
+		for (File dir : dirs) {
+			if (dir != null && dir.exists() && dir.isDirectory()) {
+				collectDownloadFiles(dir, found);
+			}
+		}
+		downloadsList = found;
+		if (activePustakaTab == 2) {
+			renderActivePustakaTab();
+		}
+	}
+
+	private void collectDownloadFiles(File dir, ArrayList<HashMap<String, Object>> out) {
+		File[] children = dir.listFiles();
+		if (children == null) return;
+		for (File f : children) {
+			if (f.isDirectory()) {
+				collectDownloadFiles(f, out);
+			} else {
+				String lower = f.getName().toLowerCase(Locale.US);
+				if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".m3u8") || lower.endsWith(".webm")) {
+					HashMap<String, Object> item = new HashMap<>();
+					String cleanName = f.getName().replaceAll("\\.[^.]+$", "").replace("_", " ");
+					item.put("title", cleanName);
+					item.put("episode", "Offline");
+					item.put("file_path", f.getAbsolutePath());
+					item.put("size_mb", String.format(Locale.US, "%.1f MB", f.length() / (1024f * 1024f)));
+					out.add(item);
+				}
+			}
+		}
+	}
+
+	private void renderActivePustakaTab() {
+		if (recyclerPustakaList == null) return;
+		if (activePustakaTab == 0) {
+			if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText("Kemarin");
+			recyclerPustakaList.setAdapter(new PustakaHistoryAdapter(historyList));
+		} else if (activePustakaTab == 1) {
+			if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText("Daftarku");
+			ArrayList<HashMap<String, Object>> combinedFavs = getMergedFavoritesList();
+			recyclerPustakaList.setAdapter(new PustakaFavoritesAdapter(combinedFavs));
+		} else {
+			loadLocalDownloads();
+			if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText("Unduhan Tersimpan");
+			recyclerPustakaList.setAdapter(new PustakaDownloadsAdapter(downloadsList));
+		}
+	}
+
+	private ArrayList<HashMap<String, Object>> getMergedFavoritesList() {
+		LinkedHashMap<String, HashMap<String, Object>> dedup = new LinkedHashMap<>();
+		for (HashMap<String, Object> item : favoritesList) {
+			String s = item.get("slug") != null ? item.get("slug").toString() : "";
+			if (!s.isEmpty()) dedup.put(s, item);
+		}
+		if (favPrefs != null) {
+			Map<String, ?> all = favPrefs.getAll();
+			for (Map.Entry<String, ?> e : all.entrySet()) {
+				if (e.getKey().startsWith("fav_") && e.getValue() instanceof String) {
+					try {
+						HashMap<String, Object> localMap = new Gson().fromJson(
+							e.getValue().toString(),
+							new TypeToken<HashMap<String, Object>>(){}.getType()
+						);
+						if (localMap != null) {
+							String s = localMap.get("slug") != null ? localMap.get("slug").toString() : e.getKey().substring(4);
+							if (!dedup.containsKey(s)) {
+								dedup.put(s, localMap);
+							}
+						}
+					} catch (Exception ignored) {}
+				}
+			}
+		}
+		return new ArrayList<>(dedup.values());
+	}
+
+	public class ContinueWatchingAdapter extends RecyclerView.Adapter<ContinueWatchingAdapter.ViewHolder> {
+		private final ArrayList<HashMap<String, Object>> data;
+
+		public ContinueWatchingAdapter(ArrayList<HashMap<String, Object>> arr) {
+			this.data = arr;
+		}
+
+		@NonNull
+		@Override
+		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+			float d = parent.getResources().getDisplayMetrics().density;
+
+			FrameLayout card = new FrameLayout(parent.getContext());
+			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+				(int) (220 * d),
+				(int) (124 * d)
+			);
+			lp.rightMargin = (int) (12 * d);
+			card.setLayoutParams(lp);
+
+			GradientDrawable cardBg = new GradientDrawable(
+				GradientDrawable.Orientation.LEFT_RIGHT,
+				new int[]{Color.parseColor("#081A33"), Color.parseColor("#0D2A4A")}
+			);
+			cardBg.setCornerRadius(16 * d);
+			card.setBackground(cardBg);
+			card.setClipToOutline(true);
+
+			ImageView thumb = new ImageView(parent.getContext());
+			thumb.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+			thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+			thumb.setAlpha(0.45f);
+			thumb.setTag("thumb");
+			card.addView(thumb);
+
+			LinearLayout content = new LinearLayout(parent.getContext());
+			content.setOrientation(LinearLayout.HORIZONTAL);
+			content.setGravity(Gravity.CENTER_VERTICAL);
+			content.setPadding((int) (14 * d), (int) (14 * d), (int) (14 * d), (int) (14 * d));
+			content.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+
+			FrameLayout playCircle = new FrameLayout(parent.getContext());
+			int playSize = (int) (36 * d);
+			LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(playSize, playSize);
+			playLp.rightMargin = (int) (12 * d);
+			playCircle.setLayoutParams(playLp);
+			GradientDrawable playBg = new GradientDrawable();
+			playBg.setShape(GradientDrawable.OVAL);
+			playBg.setColor(Color.parseColor("#38BDF8"));
+			playCircle.setBackground(playBg);
+
+			TextView playGlyph = new TextView(parent.getContext());
+			playGlyph.setText("▶");
+			playGlyph.setTextColor(Color.WHITE);
+			playGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+			playGlyph.setGravity(Gravity.CENTER);
+			playCircle.addView(playGlyph, new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+
+			LinearLayout textCol = new LinearLayout(parent.getContext());
+			textCol.setOrientation(LinearLayout.VERTICAL);
+			textCol.setLayoutParams(new LinearLayout.LayoutParams(
+				0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+			));
+
+			TextView tvTitle = new TextView(parent.getContext());
+			tvTitle.setTextColor(Color.WHITE);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+			tvTitle.setTypeface(null, Typeface.BOLD);
+			tvTitle.setMaxLines(2);
+			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
+			tvTitle.setTag("title");
+
+			TextView tvEp = new TextView(parent.getContext());
+			tvEp.setTextColor(Color.parseColor("#93C5FD"));
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+			tvEp.setTypeface(null, Typeface.BOLD);
+			tvEp.setTag("ep");
+
+			textCol.addView(tvTitle);
+			textCol.addView(tvEp);
+
+			content.addView(playCircle);
+			content.addView(textCol);
+			card.addView(content);
+
+			return new ViewHolder(card);
+		}
+
+		@Override
+		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+			final HashMap<String, Object> item = data.get(position);
+			ImageView thumb = holder.itemView.findViewWithTag("thumb");
+			TextView tvTitle = holder.itemView.findViewWithTag("title");
+			TextView tvEp = holder.itemView.findViewWithTag("ep");
+
+			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
+			String epRaw = item.get("episode") != null ? item.get("episode").toString().trim() : "1";
+			String epLabel = epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw;
+			String cov = item.get("cover") != null ? item.get("cover").toString() : (item.get("poster") != null ? item.get("poster").toString() : "");
+
+			if (tvTitle != null) tvTitle.setText(title);
+			if (tvEp != null) tvEp.setText(epLabel);
+			if (thumb != null && !cov.isEmpty()) {
+				Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(thumb);
+			}
+
+			holder.itemView.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+					openWatchBySlug(slug);
+				}
+			});
+		}
+
+		@Override
+		public int getItemCount() {
+			return data.size();
+		}
+
+		class ViewHolder extends RecyclerView.ViewHolder {
+			ViewHolder(@NonNull View itemView) {
+				super(itemView);
+			}
+		}
+	}
+
+	public class PustakaHistoryAdapter extends RecyclerView.Adapter<PustakaHistoryAdapter.ViewHolder> {
+		private final ArrayList<HashMap<String, Object>> data;
+
+		public PustakaHistoryAdapter(ArrayList<HashMap<String, Object>> arr) {
+			this.data = arr;
+		}
+
+		@NonNull
+		@Override
+		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+			return new ViewHolder(buildPustakaRowView(parent.getContext()));
+		}
+
+		@Override
+		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+			final HashMap<String, Object> item = data.get(position);
+			ImageView img = holder.itemView.findViewWithTag("thumb");
+			TextView tvTitle = holder.itemView.findViewWithTag("title");
+			TextView tvEp = holder.itemView.findViewWithTag("ep");
+			TextView tvSub = holder.itemView.findViewWithTag("sub");
+
+			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
+			String epRaw = item.get("episode") != null ? item.get("episode").toString().trim() : "1";
+			String epText = epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw;
+			String remText = item.get("remainingText") != null ? item.get("remainingText").toString() : "Lanjutkan menonton";
+			String cov = item.get("cover") != null ? item.get("cover").toString() : (item.get("poster") != null ? item.get("poster").toString() : "");
+
+			if (tvTitle != null) tvTitle.setText(title);
+			if (tvEp != null) tvEp.setText(epText);
+			if (tvSub != null) tvSub.setText(remText);
+			if (img != null && !cov.isEmpty()) {
+				Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(img);
+			}
+
+			holder.itemView.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+					openWatchBySlug(slug);
+				}
+			});
+		}
+
+		@Override
+		public int getItemCount() {
+			return data.size();
+		}
+
+		class ViewHolder extends RecyclerView.ViewHolder {
+			ViewHolder(@NonNull View itemView) {
+				super(itemView);
+			}
+		}
+	}
+
+	public class PustakaFavoritesAdapter extends RecyclerView.Adapter<PustakaFavoritesAdapter.ViewHolder> {
+		private final ArrayList<HashMap<String, Object>> data;
+
+		public PustakaFavoritesAdapter(ArrayList<HashMap<String, Object>> arr) {
+			this.data = arr;
+		}
+
+		@NonNull
+		@Override
+		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+			return new ViewHolder(buildPustakaRowView(parent.getContext()));
+		}
+
+		@Override
+		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+			final HashMap<String, Object> item = data.get(position);
+			ImageView img = holder.itemView.findViewWithTag("thumb");
+			TextView tvTitle = holder.itemView.findViewWithTag("title");
+			TextView tvEp = holder.itemView.findViewWithTag("ep");
+			TextView tvSub = holder.itemView.findViewWithTag("sub");
+
+			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
+			String status = item.get("status") != null ? item.get("status").toString() : "Favorit";
+			String ep = item.get("episode") != null ? item.get("episode").toString() : "";
+			String cov = item.get("cover") != null ? item.get("cover").toString() : (item.get("poster") != null ? item.get("poster").toString() : "");
+
+			if (tvTitle != null) tvTitle.setText(title);
+			if (tvEp != null) tvEp.setText(ep.isEmpty() ? "Daftarku" : ep);
+			if (tvSub != null) tvSub.setText(status);
+			if (img != null && !cov.isEmpty()) {
+				Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(img);
+			}
+
+			holder.itemView.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+					openWatchBySlug(slug);
+				}
+			});
+		}
+
+		@Override
+		public int getItemCount() {
+			return data.size();
+		}
+
+		class ViewHolder extends RecyclerView.ViewHolder {
+			ViewHolder(@NonNull View itemView) {
+				super(itemView);
+			}
+		}
+	}
+
+	public class PustakaDownloadsAdapter extends RecyclerView.Adapter<PustakaDownloadsAdapter.ViewHolder> {
+		private final ArrayList<HashMap<String, Object>> data;
+
+		public PustakaDownloadsAdapter(ArrayList<HashMap<String, Object>> arr) {
+			this.data = arr;
+		}
+
+		@NonNull
+		@Override
+		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+			return new ViewHolder(buildPustakaRowView(parent.getContext()));
+		}
+
+		@Override
+		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+			final HashMap<String, Object> item = data.get(position);
+			ImageView img = holder.itemView.findViewWithTag("thumb");
+			TextView tvTitle = holder.itemView.findViewWithTag("title");
+			TextView tvEp = holder.itemView.findViewWithTag("ep");
+			TextView tvSub = holder.itemView.findViewWithTag("sub");
+
+			String title = item.get("title") != null ? item.get("title").toString() : "Video";
+			String sizeMb = item.get("size_mb") != null ? item.get("size_mb").toString() : "";
+			final String path = item.get("file_path") != null ? item.get("file_path").toString() : "";
+
+			if (tvTitle != null) tvTitle.setText(title);
+			if (tvEp != null) tvEp.setText("OFFLINE");
+			if (tvSub != null) tvSub.setText(sizeMb);
+			if (img != null) img.setImageResource(R.drawable.default_image);
+
+			holder.itemView.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					if (!path.isEmpty()) {
+						Intent playIntent = new Intent(MainActivity.this, WatchActivity.class);
+						playIntent.putExtra("video_url", Uri.fromFile(new File(path)).toString());
+						playIntent.putExtra("title", title);
+						startActivity(playIntent);
+					}
+				}
+			});
+		}
+
+		@Override
+		public int getItemCount() {
+			return data.size();
+		}
+
+		class ViewHolder extends RecyclerView.ViewHolder {
+			ViewHolder(@NonNull View itemView) {
+				super(itemView);
+			}
+		}
+	}
+
+	private View buildPustakaRowView(Context ctx) {
+		float d = ctx.getResources().getDisplayMetrics().density;
+
+		LinearLayout row = new LinearLayout(ctx);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setGravity(Gravity.CENTER_VERTICAL);
+		RecyclerView.LayoutParams rowLp = new RecyclerView.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		rowLp.bottomMargin = (int) (14 * d);
+		row.setLayoutParams(rowLp);
+
+		ImageView thumb = new ImageView(ctx);
+		LinearLayout.LayoutParams thumbLp = new LinearLayout.LayoutParams(
+			(int) (68 * d), (int) (92 * d)
+		);
+		thumbLp.rightMargin = (int) (14 * d);
+		thumb.setLayoutParams(thumbLp);
+		thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		thumb.setTag("thumb");
+
+		LinearLayout info = new LinearLayout(ctx);
+		info.setOrientation(LinearLayout.VERTICAL);
+		info.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		TextView tvTitle = new TextView(ctx);
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		tvTitle.setMaxLines(1);
+		tvTitle.setEllipsize(TextUtils.TruncateAt.END);
+		tvTitle.setTag("title");
+
+		TextView tvEp = new TextView(ctx);
+		tvEp.setTextColor(Color.parseColor("#CBD5E1"));
+		tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvEp.setTypeface(null, Typeface.BOLD);
+		tvEp.setTag("ep");
+
+		TextView tvSub = new TextView(ctx);
+		tvSub.setTextColor(Color.parseColor("#94A3B8"));
+		tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvSub.setTag("sub");
+
+		info.addView(tvTitle);
+		info.addView(tvEp);
+		info.addView(tvSub);
+
+		row.addView(thumb);
+		row.addView(info);
+		return row;
 	}
 
 	private String getTodayDateString() {
@@ -322,14 +1163,21 @@ public class MainActivity extends AppCompatActivity {
 		String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
 		if (slug.isEmpty()) return;
 
+		DatabaseReference favNode = !currentUserKey.isEmpty()
+			? FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("users").child(currentUserKey).child("favorites").child(slug)
+			: null;
+
 		if (isFavoriteSlug(slug)) {
 			favPrefs.edit().remove("fav_" + slug).apply();
-			Toast.makeText(this, "Dihapus dari Favorit", Toast.LENGTH_SHORT).show();
+			if (favNode != null) favNode.removeValue();
+			Toast.makeText(this, "Dihapus dari Daftarku", Toast.LENGTH_SHORT).show();
 		} else {
 			favPrefs.edit().putString("fav_" + slug, new Gson().toJson(item)).apply();
-			Toast.makeText(this, "Disimpan ke Favorit: " + title, Toast.LENGTH_SHORT).show();
+			if (favNode != null) favNode.setValue(item);
+			Toast.makeText(this, "Disimpan ke Daftarku: " + title, Toast.LENGTH_SHORT).show();
 		}
 		updateHeroFavoriteIcon(slug);
+		if (activePustakaTab == 1) renderActivePustakaTab();
 	}
 
 	private void updateHeroFavoriteIcon(String slug) {
@@ -1041,6 +1889,7 @@ public class MainActivity extends AppCompatActivity {
 					tabPustaka.setBackground(activeTabPill);
 					if (imgFavorite != null) imgFavorite.setColorFilter(colorActive);
 					if (txtFavorite != null) txtFavorite.setTextColor(colorActive);
+					renderActivePustakaTab();
 				} else if (tabAkun != null && id == tabAkun.getId()) {
 					hideKeyboard();
 					if (pageProfile != null) pageProfile.setVisibility(View.VISIBLE);
