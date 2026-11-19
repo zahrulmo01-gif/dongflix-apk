@@ -3,6 +3,8 @@ name: Build Dongflix APK
 on:
   push:
     branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 concurrency:
@@ -55,14 +57,16 @@ jobs:
       - name: Kirim ZIP ke Telegram (Sukses)
         if: success()
         run: |
+          COMMIT_MSG="${{ github.event.head_commit.message || github.event.pull_request.title || github.sha }}"
           zip -j Dongflix-Build.zip app/build/outputs/apk/debug/app-debug.apk
           curl -F document=@"Dongflix-Build.zip" \
-               -F caption="Build Dongflix berhasil! (Commit: ${{ github.event.head_commit.message }})" \
+               -F caption="Build Dongflix berhasil! (Commit: ${COMMIT_MSG})" \
                "https://api.telegram.org/bot9240189258:AAE8k0uNjJ6QsS_uOga0JEVALb79Taax6yQ/sendDocument?chat_id=1163053213"
 
       - name: Kirim Log Error ke Telegram (Gagal)
         if: failure()
         run: |
+          COMMIT_MSG="${{ github.event.head_commit.message || github.event.pull_request.title || github.sha }}"
           if [ -f build_output.log ]; then
             ERR_SNIPPET=$(grep -E "error:|FAILURE:|Exception:|Execution failed" build_output.log | tail -n 25)
             if [ -z "$ERR_SNIPPET" ]; then
@@ -78,6 +82,6 @@ jobs:
                --data-urlencode "chat_id=1163053213" \
                --data-urlencode "parse_mode=HTML" \
                --data-urlencode "text=❌ <b>Build Dongflix Gagal!</b>
-<b>Commit:</b> ${{ github.event.head_commit.message }}
+<b>Commit:</b> ${COMMIT_MSG}
 
 <pre>${ERR_ESCAPED}</pre>"
