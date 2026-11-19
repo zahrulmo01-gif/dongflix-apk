@@ -41,7 +41,9 @@ jobs:
           keytool -genkey -v -keystore app/dongflix.jks -storepass dongflix123 -alias dongflix -keypass dongflix123 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Dongflix, OU=Dev, O=Rulsz, L=ID, S=ID, C=ID"
 
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: |
+          set -o pipefail
+          gradle assembleDebug 2>&1 | tee build_output.log
 
       - name: Upload APK Artifact
         if: success()
@@ -58,10 +60,24 @@ jobs:
                -F caption="Build Dongflix berhasil! (Commit: ${{ github.event.head_commit.message }})" \
                "https://api.telegram.org/bot9240189258:AAE8k0uNjJ6QsS_uOga0JEVALb79Taax6yQ/sendDocument?chat_id=1163053213"
 
-      - name: Kirim Notifikasi Error ke Telegram (Gagal)
+      - name: Kirim Log Error ke Telegram (Gagal)
         if: failure()
         run: |
+          if [ -f build_output.log ]; then
+            ERR_SNIPPET=$(grep -E "error:|FAILURE:|Exception:|Execution failed" build_output.log | tail -n 25)
+            if [ -z "$ERR_SNIPPET" ]; then
+              ERR_SNIPPET=$(tail -n 25 build_output.log)
+            fi
+          else
+            ERR_SNIPPET="Build gagal sebelum langkah gradle assembleDebug dijalankan."
+          fi
+
+          ERR_ESCAPED=$(printf '%s' "$ERR_SNIPPET" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' | cut -c 1-3200)
+
           curl -s -X POST "https://api.telegram.org/bot9240189258:AAE8k0uNjJ6QsS_uOga0JEVALb79Taax6yQ/sendMessage" \
-               -d chat_id="1163053213" \
-               -d parse_mode="HTML" \
-               -d text="❌ <b>Build Dongflix Gagal!</b>%0A%0A<b>Commit:</b> ${{ github.event.head_commit.message }}%0A<b>Cek Log Error:</b> https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+               --data-urlencode "chat_id=1163053213" \
+               --data-urlencode "parse_mode=HTML" \
+               --data-urlencode "text=❌ <b>Build Dongflix Gagal!</b>
+<b>Commit:</b> ${{ github.event.head_commit.message }}
+
+<pre>${ERR_ESCAPED}</pre>"
