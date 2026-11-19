@@ -98,7 +98,6 @@
 						</LinearLayout>
 					</LinearLayout>
 
-					<!-- HEADER KANAN: TOMBOL SEARCH BULAT BLUR + TOMBOL CHAT BULAT BLUR -->
 					<LinearLayout
 						android:id="@+id/linear82"
 						android:layout_width="wrap_content"
@@ -184,7 +183,6 @@
 						android:layout_marginTop="14dp"
 						android:layout_below="@id/layout_hero_text">
 
-						<!-- TOMBOL TONTON + TOMBOL SIMPAN FAVORITE BULAT BLUR -->
 						<LinearLayout
 							android:id="@+id/hero_action_group"
 							android:layout_width="wrap_content"
@@ -272,6 +270,57 @@
 				</RelativeLayout>
 			</RelativeLayout>
 
+			<!-- LANJUTKAN MENONTON (DI ATAS POPULER HARI INI) -->
+			<LinearLayout
+				android:id="@+id/layout_section_continue"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:orientation="vertical"
+				android:layout_marginTop="8dp"
+				android:visibility="gone">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingTop="14dp"
+					android:paddingRight="16dp"
+					android:paddingBottom="8dp">
+
+					<TextView
+						android:id="@+id/text_title_continue"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:text="Lanjutkan Menonton"
+						android:textSize="18sp"
+						android:textStyle="bold"
+						android:textColor="#FFFFFF"
+						android:layout_alignParentLeft="true"
+						android:layout_centerVertical="true" />
+
+					<TextView
+						android:id="@+id/text_continue_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:text="Lihat semua"
+						android:textSize="14sp"
+						android:textStyle="bold"
+						android:textColor="#3B82F6"
+						android:layout_alignParentRight="true"
+						android:layout_centerVertical="true" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerContinue"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp"
+					android:clipToPadding="false"
+					android:clipChildren="false" />
+			</LinearLayout>
+
+			<!-- POPULER HARI INI -->
 			<RelativeLayout
 				android:id="@+id/layout_section_popular"
 				android:layout_width="match_parent"
@@ -304,6 +353,7 @@
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
 
+			<!-- BARU DIUPDATE -->
 			<RelativeLayout
 				android:id="@+id/relativelayout72"
 				android:layout_width="match_parent"
@@ -351,6 +401,7 @@
 				android:nestedScrollingEnabled="false"
 				tools:listitem="@layout/custom_anime" />
 
+			<!-- POPULER -->
 			<RelativeLayout
 				android:id="@+id/layout_populary"
 				android:layout_width="match_parent"
