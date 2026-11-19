@@ -1,15 +1,25 @@
 package com.dongflix;
 
+import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -29,6 +39,7 @@ import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.LinearInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -114,6 +125,10 @@ public class ChatActivity extends AppCompatActivity {
 	private boolean wasPlayingBeforeChat = false;
 	private int baseBottomPaddingPx = 0;
 
+	private ValueAnimator chatShimmerAnimator;
+	private float chatShimmerPhase = 0f;
+	private boolean isChatLoading = true;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -133,6 +148,7 @@ public class ChatActivity extends AppCompatActivity {
 
 		buildActivityLayout();
 		setupKeyboardFollowBehavior();
+		showLoadingPlaceholders();
 		loadAllUsersDirectory();
 		loadStickersFromFirebase();
 		startListeningMessages();
@@ -169,6 +185,163 @@ public class ChatActivity extends AppCompatActivity {
 			}
 			mgr.updatePlaybackNotification(this);
 		}
+	}
+
+	private Drawable createChatShimmerDrawable(final float cornerRadiusPx) {
+		return new Drawable() {
+			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint shimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Matrix shaderMatrix = new Matrix();
+			private LinearGradient gradient;
+			private int lastWidth = -1;
+
+			{
+				basePaint.setColor(Color.parseColor("#141822"));
+			}
+
+			@Override
+			public void draw(Canvas canvas) {
+				Rect b = getBounds();
+				int w = b.width();
+				int h = b.height();
+				if (w <= 0 || h <= 0) return;
+
+				RectF rect = new RectF(b);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, basePaint);
+
+				if (gradient == null || lastWidth != w) {
+					lastWidth = w;
+					gradient = new LinearGradient(
+						0, 0, w, 0,
+						new int[]{
+							Color.TRANSPARENT,
+							Color.parseColor("#1AFFFFFF"),
+							Color.parseColor("#33FFFFFF"),
+							Color.parseColor("#1AFFFFFF"),
+							Color.TRANSPARENT
+						},
+						new float[]{0f, 0.35f, 0.5f, 0.65f, 1f},
+						Shader.TileMode.CLAMP
+					);
+					shimmerPaint.setShader(gradient);
+				}
+
+				float translateX = -w + (2f * w * chatShimmerPhase);
+				shaderMatrix.setTranslate(translateX, 0);
+				gradient.setLocalMatrix(shaderMatrix);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, shimmerPaint);
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+	}
+
+	private void startChatShimmer() {
+		isChatLoading = true;
+		stopChatShimmerOnly();
+		chatShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
+		chatShimmerAnimator.setDuration(1200);
+		chatShimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
+		chatShimmerAnimator.setInterpolator(new LinearInterpolator());
+		chatShimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+			@Override
+			public void onAnimationUpdate(ValueAnimator animation) {
+				if (!isChatLoading || messagesContainer == null) return;
+				chatShimmerPhase = (float) animation.getAnimatedValue();
+				invalidateShimmerRecursive(messagesContainer);
+			}
+		});
+		chatShimmerAnimator.start();
+	}
+
+	private void invalidateShimmerRecursive(View v) {
+		if (v == null) return;
+		v.invalidate();
+		if (v instanceof ViewGroup) {
+			ViewGroup vg = (ViewGroup) v;
+			for (int k = 0; k < vg.getChildCount(); k++) {
+				invalidateShimmerRecursive(vg.getChildAt(k));
+			}
+		}
+	}
+
+	private void stopChatShimmerOnly() {
+		if (chatShimmerAnimator != null) {
+			chatShimmerAnimator.cancel();
+			chatShimmerAnimator = null;
+		}
+	}
+
+	private void stopChatShimmer() {
+		isChatLoading = false;
+		stopChatShimmerOnly();
+	}
+
+	private void showLoadingPlaceholders() {
+		if (messagesContainer == null) return;
+		messagesContainer.removeAllViews();
+		isChatLoading = true;
+
+		float d = getResources().getDisplayMetrics().density;
+		boolean[] minePattern = {false, true, false, true, false};
+		int[] lineWidthsDp = {190, 220, 155, 205, 175};
+
+		for (int i = 0; i < minePattern.length; i++) {
+			boolean isMine = minePattern[i];
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(isMine ? Gravity.END : Gravity.START);
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int) (12 * d);
+			row.setLayoutParams(rowLp);
+
+			View avatarPh = new View(this);
+			int avSize = (int) (36 * d);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(avSize, avSize);
+			if (isMine) avLp.leftMargin = (int) (8 * d);
+			else avLp.rightMargin = (int) (8 * d);
+			avatarPh.setLayoutParams(avLp);
+			avatarPh.setBackground(createChatShimmerDrawable(100f));
+
+			LinearLayout bubblePh = new LinearLayout(this);
+			bubblePh.setOrientation(LinearLayout.VERTICAL);
+			bubblePh.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (12 * d));
+			bubblePh.setBackground(createChatShimmerDrawable(18 * d));
+			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+				(int) (lineWidthsDp[i] * d), ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			bLp.gravity = isMine ? Gravity.END : Gravity.START;
+			bubblePh.setLayoutParams(bLp);
+
+			View line1 = new View(this);
+			line1.setLayoutParams(new LinearLayout.LayoutParams((int) (88 * d), (int) (10 * d)));
+			line1.setBackground(createChatShimmerDrawable(6 * d));
+
+			View line2 = new View(this);
+			LinearLayout.LayoutParams l2Lp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, (int) (12 * d)
+			);
+			l2Lp.topMargin = (int) (8 * d);
+			line2.setLayoutParams(l2Lp);
+			line2.setBackground(createChatShimmerDrawable(6 * d));
+
+			bubblePh.addView(line1);
+			bubblePh.addView(line2);
+
+			if (isMine) {
+				row.addView(bubblePh);
+				row.addView(avatarPh);
+			} else {
+				row.addView(avatarPh);
+				row.addView(bubblePh);
+			}
+			messagesContainer.addView(row);
+		}
+		startChatShimmer();
 	}
 
 	private int calculateLevel(long exp) {
@@ -256,7 +429,6 @@ public class ChatActivity extends AppCompatActivity {
 			}
 		});
 
-		// Fallback untuk perangkat/ROM lama yang tidak mengirim WindowInsets IME secara konsisten
 		chatRoot.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
 			private int lastBottomInset = -1;
 
@@ -333,7 +505,6 @@ public class ChatActivity extends AppCompatActivity {
 		));
 		chatRoot.setBackgroundColor(Color.parseColor("#050608"));
 
-		// Daftar Pesan
 		chatScrollView = new ScrollView(this);
 		chatScrollView.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
@@ -355,7 +526,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatScrollView.addView(messagesContainer);
 		chatRoot.addView(chatScrollView);
 
-		// Header Floating Modern (Solid Dark Pill tanpa Blur)
 		chatHeader = new LinearLayout(this);
 		chatHeader.setOrientation(LinearLayout.HORIZONTAL);
 		chatHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -377,14 +547,14 @@ public class ChatActivity extends AppCompatActivity {
 		backBtn.setBackground(backBg);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) backBtn.setElevation(12f);
 
-		TextView backArrow = new TextView(this);
-		backArrow.setText("‹");
-		backArrow.setTextColor(Color.WHITE);
-		backArrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-		backArrow.setGravity(Gravity.CENTER);
-		backBtn.addView(backArrow, new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
+		ImageView backArrow = new ImageView(this);
+		int arrowSize = (int) (20 * d);
+		FrameLayout.LayoutParams arrowLp = new FrameLayout.LayoutParams(arrowSize, arrowSize, Gravity.CENTER);
+		backArrow.setLayoutParams(arrowLp);
+		backArrow.setImageResource(R.drawable.ic_back_arrow);
+		backArrow.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		backArrow.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		backBtn.addView(backArrow);
 		backBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -423,7 +593,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatHeader.addView(headerCapsule);
 		chatRoot.addView(chatHeader);
 
-		// Bottom Input Area (Solid Modern Dark tanpa Blur)
 		chatBottomBar = new LinearLayout(this);
 		chatBottomBar.setOrientation(LinearLayout.VERTICAL);
 		FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
@@ -434,7 +603,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatBottomBar.setClipChildren(false);
 		chatBottomBar.setClipToPadding(false);
 
-		// Reply Banner
 		replyBanner = new LinearLayout(this);
 		replyBanner.setOrientation(LinearLayout.HORIZONTAL);
 		replyBanner.setGravity(Gravity.CENTER_VERTICAL);
@@ -485,7 +653,6 @@ public class ChatActivity extends AppCompatActivity {
 		replyBanner.addView(cancelReplyBtn);
 		chatBottomBar.addView(replyBanner);
 
-		// Sticker Preview Box
 		stickerPreviewBox = new LinearLayout(this);
 		stickerPreviewBox.setOrientation(LinearLayout.HORIZONTAL);
 		stickerPreviewBox.setGravity(Gravity.CENTER_VERTICAL);
@@ -518,7 +685,6 @@ public class ChatActivity extends AppCompatActivity {
 		stickerPreviewBox.addView(removeStickerBtn);
 		chatBottomBar.addView(stickerPreviewBox);
 
-		// Mention Dropdown
 		mentionMenu = new LinearLayout(this);
 		mentionMenu.setOrientation(LinearLayout.VERTICAL);
 		GradientDrawable mBg = new GradientDrawable();
@@ -535,7 +701,6 @@ public class ChatActivity extends AppCompatActivity {
 		mentionMenu.setVisibility(View.GONE);
 		chatBottomBar.addView(mentionMenu);
 
-		// Bar Ketik Pesan + Stiker + Kirim (Solid Modern Pill tanpa Blur)
 		LinearLayout inputRow = new LinearLayout(this);
 		inputRow.setOrientation(LinearLayout.HORIZONTAL);
 		inputRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -623,7 +788,6 @@ public class ChatActivity extends AppCompatActivity {
 		inputRow.addView(sendBtn);
 		chatBottomBar.addView(inputRow);
 
-		// Sticker Picker Panel
 		stickerPanel = new LinearLayout(this);
 		stickerPanel.setOrientation(LinearLayout.VERTICAL);
 		GradientDrawable spPanelBg = new GradientDrawable();
@@ -835,6 +999,7 @@ public class ChatActivity extends AppCompatActivity {
 		chatListener = new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				stopChatShimmer();
 				List<HashMap<String, Object>> msgList = new ArrayList<>();
 				if (snapshot.exists()) {
 					for (DataSnapshot child : snapshot.getChildren()) {
@@ -862,7 +1027,9 @@ public class ChatActivity extends AppCompatActivity {
 			}
 
 			@Override
-			public void onCancelled(@NonNull DatabaseError error) {}
+			public void onCancelled(@NonNull DatabaseError error) {
+				stopChatShimmer();
+			}
 		};
 		liveChatRef.limitToLast(60).addValueEventListener(chatListener);
 	}
@@ -930,14 +1097,13 @@ public class ChatActivity extends AppCompatActivity {
 			else avLp.rightMargin = (int) (8 * d);
 			avatar.setLayoutParams(avLp);
 			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			bindChatAvatar(avatar, photoUrl, avSize);
+			bindChatAvatar(avatar, photoUrl);
 
 			LinearLayout bubbleCol = new LinearLayout(this);
 			bubbleCol.setOrientation(LinearLayout.VERTICAL);
-			LinearLayout.LayoutParams bColLp = new LinearLayout.LayoutParams(
+			bubbleCol.setLayoutParams(new LinearLayout.LayoutParams(
 				0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-			);
-			bubbleCol.setLayoutParams(bColLp);
+			));
 
 			LinearLayout bubble = new LinearLayout(this);
 			bubble.setOrientation(LinearLayout.VERTICAL);
@@ -1019,7 +1185,6 @@ public class ChatActivity extends AppCompatActivity {
 				bubble.addView(quoteBox);
 			}
 
-			// Baris Nama + Level + Badge Admin (dipastikan tidak terpotong di kanan)
 			LinearLayout metaRow = new LinearLayout(this);
 			metaRow.setOrientation(LinearLayout.HORIZONTAL);
 			metaRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1215,7 +1380,7 @@ public class ChatActivity extends AppCompatActivity {
 		return ss;
 	}
 
-	private void bindChatAvatar(ImageView target, String photoUrl, int sizePx) {
+	private void bindChatAvatar(ImageView target, String photoUrl) {
 		target.setOutlineProvider(new ViewOutlineProvider() {
 			@Override
 			public void getOutline(View view, Outline outline) {
@@ -1334,6 +1499,7 @@ public class ChatActivity extends AppCompatActivity {
 
 	@Override
 	protected void onDestroy() {
+		stopChatShimmer();
 		if (liveChatRef != null && chatListener != null) {
 			liveChatRef.removeEventListener(chatListener);
 		}
