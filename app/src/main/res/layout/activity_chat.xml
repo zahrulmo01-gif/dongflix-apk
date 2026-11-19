@@ -26,7 +26,7 @@
 			android:orientation="vertical" />
 	</ScrollView>
 
-	<!-- Header Floating Solid Glass-Style (Tanpa BlurView, tanpa angka 46) -->
+	<!-- Header Floating Modern (Pakai ic_back_arrow, tanpa angka 46) -->
 	<LinearLayout
 		android:id="@+id/chat_header"
 		android:layout_width="match_parent"
@@ -45,14 +45,14 @@
 			android:layout_height="42dp"
 			android:layout_marginEnd="10dp">
 
-			<TextView
-				android:id="@+id/text_chat_back_arrow"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:gravity="center"
-				android:text="‹"
-				android:textColor="#FFFFFF"
-				android:textSize="22sp" />
+			<ImageView
+				android:id="@+id/img_chat_back_arrow"
+				android:layout_width="20dp"
+				android:layout_height="20dp"
+				android:layout_gravity="center"
+				android:contentDescription="Kembali"
+				android:scaleType="fitCenter"
+				android:src="@drawable/ic_back_arrow" />
 		</FrameLayout>
 
 		<LinearLayout
@@ -82,10 +82,10 @@
 				android:textColor="#22C55E"
 				android:textSize="11sp"
 				android:textStyle="bold" />
-		</FrameLayout>
+		</LinearLayout>
 	</LinearLayout>
 
-	<!-- Area Input Bawah (Naik Otomatis Mengikuti Keyboard) -->
+	<!-- Area Input Bawah -->
 	<LinearLayout
 		android:id="@+id/chat_bottom_bar"
 		android:layout_width="match_parent"
@@ -187,7 +187,7 @@
 			android:padding="6dp"
 			android:visibility="gone" />
 
-		<!-- Bar Ketik Pesan + Stiker + Kirim (Tanpa Blur) -->
+		<!-- Bar Ketik Pesan + Stiker + Kirim -->
 		<LinearLayout
 			android:id="@+id/chat_input_row"
 			android:layout_width="match_parent"
