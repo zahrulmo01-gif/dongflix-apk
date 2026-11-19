@@ -417,7 +417,6 @@ public class ChatActivity extends AppCompatActivity {
 	private void setupKeyboardFollowBehavior() {
 		if (chatRoot == null || chatBottomBar == null) return;
 		final float d = getResources().getDisplayMetrics().density;
-		// Ruang aman di atas gesture bar / navigasi HP
 		baseBottomPaddingPx = (int) (26 * d);
 
 		getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -554,7 +553,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatScrollView.addView(messagesContainer);
 		chatRoot.addView(chatScrollView);
 
-		// Header dengan BlurView
 		chatHeader = new LinearLayout(this);
 		chatHeader.setOrientation(LinearLayout.HORIZONTAL);
 		chatHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -633,7 +631,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatHeader.addView(headerCapsule);
 		chatRoot.addView(chatHeader);
 
-		// Bilah Chat Bawah dengan BlurView
 		chatBottomBar = new LinearLayout(this);
 		chatBottomBar.setOrientation(LinearLayout.VERTICAL);
 		FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
@@ -789,14 +786,13 @@ public class ChatActivity extends AppCompatActivity {
 		stBtnBg.setColor(Color.parseColor("#26FFFFFF"));
 		stickerBtn.setBackground(stBtnBg);
 
-		TextView stLabel = new TextView(this);
-		stLabel.setText("☺");
-		stLabel.setTextColor(Color.WHITE);
-		stLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-		stLabel.setGravity(Gravity.CENTER);
-		stickerBtn.addView(stLabel, new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
+		ImageView stickerIcon = new ImageView(this);
+		int stIconSize = (int) (20 * d);
+		stickerIcon.setLayoutParams(new FrameLayout.LayoutParams(stIconSize, stIconSize, Gravity.CENTER));
+		stickerIcon.setImageResource(R.drawable.ic_sticker);
+		stickerIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		stickerIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		stickerBtn.addView(stickerIcon);
 		stickerBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -812,15 +808,13 @@ public class ChatActivity extends AppCompatActivity {
 		sendBg.setColor(Color.parseColor("#38BDF8"));
 		sendBtn.setBackground(sendBg);
 
-		TextView sendArrow = new TextView(this);
-		sendArrow.setText("➤");
-		sendArrow.setTextColor(Color.parseColor("#07101C"));
-		sendArrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-		sendArrow.setTypeface(null, Typeface.BOLD);
-		sendArrow.setGravity(Gravity.CENTER);
-		sendBtn.addView(sendArrow, new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
+		ImageView sendIcon = new ImageView(this);
+		int sendIconSize = (int) (18 * d);
+		sendIcon.setLayoutParams(new FrameLayout.LayoutParams(sendIconSize, sendIconSize, Gravity.CENTER));
+		sendIcon.setImageResource(R.drawable.ic_send);
+		sendIcon.setColorFilter(Color.parseColor("#07101C"), PorterDuff.Mode.SRC_IN);
+		sendIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		sendBtn.addView(sendIcon);
 		sendBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -1203,9 +1197,10 @@ public class ChatActivity extends AppCompatActivity {
 				qBg.setCornerRadius(12 * d);
 				qBg.setStroke((int) (1 * d), Color.parseColor("#2638BDF8"));
 				quoteBox.setBackground(qBg);
-				quoteBox.setPadding((int) (10 * d), (int) (6 * d), (int) (10 * d), (int) (6 * d));
+				quoteBox.setPadding((int) (10 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
+				// MATCH_PARENT agar kotak balasan ikut memanjang selebar bubble
 				LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(
-					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 				);
 				qLp.bottomMargin = (int) (7 * d);
 				quoteBox.setLayoutParams(qLp);
@@ -1220,7 +1215,7 @@ public class ChatActivity extends AppCompatActivity {
 				qSnip.setText(rSnippet);
 				qSnip.setTextColor(Color.parseColor("#CBD5E1"));
 				qSnip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-				qSnip.setMaxLines(1);
+				qSnip.setMaxLines(2);
 				qSnip.setEllipsize(TextUtils.TruncateAt.END);
 
 				quoteBox.addView(qAuthor);
@@ -1237,7 +1232,6 @@ public class ChatActivity extends AppCompatActivity {
 				bubble.addView(quoteBox);
 			}
 
-			// Baris Nama + Level + Badge Admin tampil penuh tanpa terpotong
 			LinearLayout metaRow = new LinearLayout(this);
 			metaRow.setOrientation(LinearLayout.HORIZONTAL);
 			metaRow.setGravity(Gravity.CENTER_VERTICAL);
