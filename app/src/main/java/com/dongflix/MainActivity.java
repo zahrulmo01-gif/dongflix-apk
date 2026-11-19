@@ -31,12 +31,20 @@ import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.*;
 import com.bumptech.glide.Glide;
 import com.google.android.exoplayer2.ui.*;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.*;
 import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
+
+	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";[span_1](start_span)[span_1](end_span)
 
 	private String cover = "";
 
@@ -50,7 +58,7 @@ public class MainActivity extends AppCompatActivity {
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
 	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
-	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopSearch, imgTopChat;
+	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopSearch, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
 	private FrameLayout btnHeroFavorite, btnTopSearch, btnTopChat;
 	private View dot0, dot1, dot2;
@@ -72,6 +80,16 @@ public class MainActivity extends AppCompatActivity {
 	@Override
 	protected void onCreate(Bundle _savedInstanceState) {
 		super.onCreate(_savedInstanceState);
+
+		FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+		if (currentUser == null) {
+			Intent loginIntent = new Intent(MainActivity.this, LoginActivity.class);
+			loginIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+			startActivity(loginIntent);
+			finish();
+			return;
+		}
+
 		setContentView(R.layout.activity_main);
 
 		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
@@ -85,6 +103,60 @@ public class MainActivity extends AppCompatActivity {
 
 		initialize(_savedInstanceState);
 		initializeLogic();
+		loadLoggedInUserProfile(currentUser);
+	}
+
+	private void loadLoggedInUserProfile(FirebaseUser currentUser) {
+		if (currentUser == null || currentUser.getEmail() == null) return;
+
+		String email = currentUser.getEmail().trim().toLowerCase();
+		String fallbackName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
+
+		TextView tvUserHeader = findViewById(R.id.text_username);
+		if (tvUserHeader != null) tvUserHeader.setText(fallbackName);
+
+		TextView tvProfileName = findViewById(R.id.textview65);
+		if (tvProfileName != null) tvProfileName.setText(fallbackName);
+
+		String userKey = email.replace(".", ",");
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("users")
+			.child(userKey)
+			.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snapshot) {
+					if (!snapshot.exists()) return;
+
+					Object nameObj = snapshot.child("name").getValue();
+					if (nameObj != null && !nameObj.toString().trim().isEmpty()) {
+						String nameStr = nameObj.toString().trim();
+						if (tvUserHeader != null) tvUserHeader.setText(nameStr);
+						if (tvProfileName != null) tvProfileName.setText(nameStr);
+					}
+
+					Object photoObj = snapshot.child("photoURL").getValue();
+					if (photoObj != null && !photoObj.toString().trim().isEmpty() && imgUserAvatar != null) {
+						String photoUrl = photoObj.toString().trim();
+						if (photoUrl.startsWith("data:image")) {
+							try {
+								String base64Part = photoUrl.substring(photoUrl.indexOf(",") + 1);
+								byte[] decoded = Base64.decode(base64Part, Base64.DEFAULT);
+								Bitmap bmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
+								if (bmp != null) imgUserAvatar.setImageBitmap(bmp);
+							} catch (Exception ignored) {}
+						} else {
+							Glide.with(getApplicationContext())
+								.load(Uri.parse(photoUrl))
+								.placeholder(R.drawable.ic_profile)
+								.error(R.drawable.ic_profile)
+								.into(imgUserAvatar);
+						}
+					}
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError error) {}
+			});
 	}
 
 	private void applyCustomFonts() {
@@ -151,8 +223,10 @@ public class MainActivity extends AppCompatActivity {
 	private void updateHeroFavoriteIcon(String slug) {
 		if (imgHeroFavorite == null) return;
 		if (isFavoriteSlug(slug)) {
-			imgHeroFavorite.setColorFilter(Color.parseColor("#EF4444"));
+			imgHeroFavorite.setImageResource(R.drawable.ic_bookmark_filled);
+			imgHeroFavorite.setColorFilter(Color.parseColor("#3B82F6"));
 		} else {
+			imgHeroFavorite.setImageResource(R.drawable.ic_bookmark);
 			imgHeroFavorite.setColorFilter(Color.WHITE);
 		}
 	}
@@ -318,6 +392,7 @@ public class MainActivity extends AppCompatActivity {
 		textHeroDesc = findViewById(R.id.text_hero_desc);
 		textSeeAll = findViewById(R.id.text_see_all);
 		imgHeroBanner = findViewById(R.id.img_hero_banner);
+		imgUserAvatar = findViewById(R.id.img_user_avatar);
 		btnHeroPlay = findViewById(R.id.btn_hero_play);
 		btnHeroFavorite = findViewById(R.id.btn_hero_favorite);
 		imgHeroFavorite = findViewById(R.id.img_hero_favorite);
@@ -709,7 +784,6 @@ public class MainActivity extends AppCompatActivity {
 			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
 		}
 
-		// Bulatan kaca buram pada tombol Search & Chat di header kanan atas
 		applyUniversalGlassStyle(btnTopSearch, btnTopSearch);
 		applyUniversalGlassStyle(btnTopChat, btnTopChat);
 		if (imgTopSearch != null) imgTopSearch.setColorFilter(Color.WHITE);
