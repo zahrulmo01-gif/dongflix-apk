@@ -87,6 +87,8 @@ public class MainActivity extends AppCompatActivity {
 	private LinearLayout tabBeranda, tabPustaka, tabAkun;
 	private ImageView imgHome, imgFavorite, imgProfile, imgSearch;
 	private TextView txtHome, txtFavorite, txtProfile;
+	private View liquidDragPill;
+	private int activeNavTabIndex = 0; // 0 = Beranda, 1 = Pustaka, 2 = Akun
 	private boolean isNavbarCompact = false;
 
 	private ValueAnimator mainShimmerAnimator;
@@ -631,7 +633,6 @@ public class MainActivity extends AppCompatActivity {
 			));
 			card.addView(scrim);
 
-			// Judul & Episode di bagian bawah tanpa tombol bulat play
 			LinearLayout textCol = new LinearLayout(parent.getContext());
 			textCol.setOrientation(LinearLayout.VERTICAL);
 			textCol.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (12 * d));
@@ -1572,6 +1573,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private void initializeLogic() {
 		_UI();
+		setupIos26DraggableNavbar();
 		_Nav();
 		setupScrollResponsiveNavbar();
 		applyCustomFonts();
@@ -1647,27 +1649,182 @@ public class MainActivity extends AppCompatActivity {
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
+	// Liquid Glass bening ber-highlight tanpa RenderEffect blur merata
 	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
 		float d = getResources().getDisplayMetrics().density;
 		if (blurTarget != null) {
-			GradientDrawable glass = new GradientDrawable(
-				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#9911141E"), Color.parseColor("#B8080A10")}
-			);
-			glass.setCornerRadius(100f);
-			glass.setStroke((int)(1.2f * d), Color.parseColor("#44FFFFFF"));
-			blurTarget.setBackground(glass);
-
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 				try {
-					blurTarget.setRenderEffect(
-						RenderEffect.createBlurEffect(28f, 28f, Shader.TileMode.CLAMP)
-					);
+					blurTarget.setRenderEffect(null);
 				} catch (Exception ignored) {}
 			}
+			GradientDrawable glass = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[]{Color.parseColor("#801A1F2E"), Color.parseColor("#990D1018")}
+			);
+			glass.setCornerRadius(100f);
+			glass.setStroke((int)(1.2f * d), Color.parseColor("#55FFFFFF"));
+			blurTarget.setBackground(glass);
 		}
 		if (containerTarget != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			containerTarget.setElevation(20f);
+			containerTarget.setElevation(16f);
+		}
+	}
+
+	private void setupIos26DraggableNavbar() {
+		if (navbarExpanded == null || tabBeranda == null) return;
+		if (!(navbarExpanded.getChildAt(0) instanceof ViewGroup)) return;
+
+		ViewGroup rootTrack = (ViewGroup) navbarExpanded.getChildAt(0);
+		float d = getResources().getDisplayMetrics().density;
+
+		if (liquidDragPill == null) {
+			liquidDragPill = new View(this);
+			GradientDrawable pillBg = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[]{Color.parseColor("#59FFFFFF"), Color.parseColor("#29FFFFFF")}
+			);
+			pillBg.setCornerRadius(100f);
+			pillBg.setStroke((int) (1 * d), Color.parseColor("#77FFFFFF"));
+			liquidDragPill.setBackground(pillBg);
+
+			FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
+				(int) (96 * d),
+				(int) (54 * d),
+				Gravity.CENTER_VERTICAL
+			);
+			pillLp.leftMargin = (int) (5 * d);
+			liquidDragPill.setLayoutParams(pillLp);
+			rootTrack.addView(liquidDragPill, 0);
+		}
+
+		rootTrack.post(new Runnable() {
+			@Override
+			public void run() {
+				snapPillToTab(activeNavTabIndex, false);
+			}
+		});
+
+		rootTrack.setOnTouchListener(new View.OnTouchListener() {
+			private float downRawX = 0f;
+			private float initialPillTx = 0f;
+			private boolean isDragging = false;
+
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				int trackW = rootTrack.getWidth();
+				int pillW = liquidDragPill != null ? liquidDragPill.getWidth() : 0;
+				float minTx = 0f;
+				float maxTx = Math.max(0f, trackW - pillW - (10 * d));
+
+				switch (event.getActionMasked()) {
+					case MotionEvent.ACTION_DOWN:
+						downRawX = event.getRawX();
+						initialPillTx = liquidDragPill != null ? liquidDragPill.getTranslationX() : 0f;
+						isDragging = false;
+						return true;
+
+					case MotionEvent.ACTION_MOVE:
+						float dx = event.getRawX() - downRawX;
+						if (Math.abs(dx) > (8 * d)) {
+							isDragging = true;
+							if (liquidDragPill != null) {
+								float nextTx = Math.max(minTx, Math.min(maxTx, initialPillTx + dx));
+								liquidDragPill.setTranslationX(nextTx);
+								liquidDragPill.setScaleX(1.06f);
+								liquidDragPill.setScaleY(1.04f);
+							}
+						}
+						return true;
+
+					case MotionEvent.ACTION_UP:
+					case MotionEvent.ACTION_CANCEL:
+						if (liquidDragPill != null) {
+							liquidDragPill.animate()
+								.scaleX(1f)
+								.scaleY(1f)
+								.setDuration(140)
+								.start();
+						}
+						if (isDragging) {
+							float currentTx = liquidDragPill != null ? liquidDragPill.getTranslationX() : 0f;
+							float slotW = Math.max(1f, (trackW - (10 * d)) / 3f);
+							int targetIdx = Math.max(0, Math.min(2, Math.round(currentTx / slotW)));
+							selectNavTabByIndex(targetIdx, true);
+						} else {
+							float localX = event.getX();
+							int slotW = Math.max(1, rootTrack.getWidth() / 3);
+							int tappedIdx = Math.max(0, Math.min(2, (int) (localX / slotW)));
+							selectNavTabByIndex(tappedIdx, true);
+						}
+						return true;
+				}
+				return false;
+			}
+		});
+	}
+
+	private void snapPillToTab(int idx, boolean animate) {
+		if (liquidDragPill == null || tabBeranda == null || tabPustaka == null || tabAkun == null) return;
+		View targetTab = (idx == 1) ? tabPustaka : (idx == 2 ? tabAkun : tabBeranda);
+		float d = getResources().getDisplayMetrics().density;
+
+		int targetW = Math.max((int) (72 * d), targetTab.getWidth());
+		ViewGroup.LayoutParams lp = liquidDragPill.getLayoutParams();
+		if (lp.width != targetW) {
+			lp.width = targetW;
+			liquidDragPill.setLayoutParams(lp);
+		}
+
+		float baseLeft = (5 * d);
+		float targetTx = Math.max(0f, targetTab.getLeft() - baseLeft);
+
+		if (animate) {
+			liquidDragPill.animate()
+				.translationX(targetTx)
+				.setInterpolator(new OvershootInterpolator(1.1f))
+				.setDuration(220)
+				.start();
+		} else {
+			liquidDragPill.setTranslationX(targetTx);
+		}
+	}
+
+	private void selectNavTabByIndex(int idx, boolean animatePill) {
+		activeNavTabIndex = idx;
+		snapPillToTab(idx, animatePill);
+
+		final View pageHome = findViewById(R.id.main_scroll_view);
+		final View pageSearch = findViewById(R.id.layout_search);
+		final View pageFavorite = findViewById(R.id.layout_favorite);
+		final View pageProfile = findViewById(R.id.layout_profile);
+
+		if (pageHome != null) pageHome.setVisibility(View.GONE);
+		if (pageSearch != null) pageSearch.setVisibility(View.GONE);
+		if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
+		if (pageProfile != null) pageProfile.setVisibility(View.GONE);
+
+		final int colorActive = Color.WHITE;
+		final int colorInactive = Color.parseColor("#94A3B8");
+
+		if (imgHome != null) imgHome.setColorFilter(idx == 0 ? colorActive : colorInactive);
+		if (imgFavorite != null) imgFavorite.setColorFilter(idx == 1 ? colorActive : colorInactive);
+		if (imgProfile != null) imgProfile.setColorFilter(idx == 2 ? colorActive : colorInactive);
+		if (imgSearch != null) imgSearch.setColorFilter(colorInactive);
+
+		if (txtHome != null) txtHome.setTextColor(idx == 0 ? colorActive : colorInactive);
+		if (txtFavorite != null) txtFavorite.setTextColor(idx == 1 ? colorActive : colorInactive);
+		if (txtProfile != null) txtProfile.setTextColor(idx == 2 ? colorActive : colorInactive);
+
+		hideKeyboard();
+		if (idx == 0) {
+			if (pageHome != null) pageHome.setVisibility(View.VISIBLE);
+			setNavbarCompactState(false);
+		} else if (idx == 1) {
+			if (pageFavorite != null) pageFavorite.setVisibility(View.VISIBLE);
+			renderActivePustakaTab();
+		} else {
+			if (pageProfile != null) pageProfile.setVisibility(View.VISIBLE);
 		}
 	}
 
@@ -1785,6 +1942,7 @@ public class MainActivity extends AppCompatActivity {
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.GONE);
 			if (miniPlayerInlineSlot != null) miniPlayerInlineSlot.setVisibility(View.GONE);
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.VISIBLE);
+			snapPillToTab(activeNavTabIndex, false);
 		}
 
 		DongflixPlayerManager.getInstance().setCompactScrollMode(this, compact);
@@ -1796,59 +1954,23 @@ public class MainActivity extends AppCompatActivity {
 		final View pageFavorite = findViewById(R.id.layout_favorite);
 		final View pageProfile = findViewById(R.id.layout_profile);
 
-		final GradientDrawable activeTabPill = new GradientDrawable();
-		activeTabPill.setColor(Color.parseColor("#33FFFFFF"));
-		activeTabPill.setCornerRadius(100f);
-
-		final int colorActive = Color.WHITE;
-		final int colorInactive = Color.parseColor("#94A3B8");
-
 		View.OnClickListener tabClickListener = new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				int id = v.getId();
 
-				if (pageHome != null) pageHome.setVisibility(View.GONE);
-				if (pageSearch != null) pageSearch.setVisibility(View.GONE);
-				if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
-				if (pageProfile != null) pageProfile.setVisibility(View.GONE);
-
-				if (tabBeranda != null) tabBeranda.setBackground(null);
-				if (tabPustaka != null) tabPustaka.setBackground(null);
-				if (tabAkun != null) tabAkun.setBackground(null);
-
-				if (imgHome != null) imgHome.setColorFilter(colorInactive);
-				if (imgFavorite != null) imgFavorite.setColorFilter(colorInactive);
-				if (imgProfile != null) imgProfile.setColorFilter(colorInactive);
-				if (imgSearch != null) imgSearch.setColorFilter(colorInactive);
-
-				if (txtHome != null) txtHome.setTextColor(colorInactive);
-				if (txtFavorite != null) txtFavorite.setTextColor(colorInactive);
-				if (txtProfile != null) txtProfile.setTextColor(colorInactive);
-
 				if ((tabBeranda != null && id == tabBeranda.getId()) || (btnCompactHome != null && id == btnCompactHome.getId())) {
-					hideKeyboard();
-					if (pageHome != null) pageHome.setVisibility(View.VISIBLE);
-					if (tabBeranda != null) tabBeranda.setBackground(activeTabPill);
-					if (imgHome != null) imgHome.setColorFilter(colorActive);
-					if (txtHome != null) txtHome.setTextColor(colorActive);
-					setNavbarCompactState(false);
+					selectNavTabByIndex(0, true);
 				} else if (tabPustaka != null && id == tabPustaka.getId()) {
-					hideKeyboard();
-					if (pageFavorite != null) pageFavorite.setVisibility(View.VISIBLE);
-					tabPustaka.setBackground(activeTabPill);
-					if (imgFavorite != null) imgFavorite.setColorFilter(colorActive);
-					if (txtFavorite != null) txtFavorite.setTextColor(colorActive);
-					renderActivePustakaTab();
+					selectNavTabByIndex(1, true);
 				} else if (tabAkun != null && id == tabAkun.getId()) {
-					hideKeyboard();
-					if (pageProfile != null) pageProfile.setVisibility(View.VISIBLE);
-					tabAkun.setBackground(activeTabPill);
-					if (imgProfile != null) imgProfile.setColorFilter(colorActive);
-					if (txtProfile != null) txtProfile.setTextColor(colorActive);
+					selectNavTabByIndex(2, true);
 				} else if (btnCircleSearch != null && id == btnCircleSearch.getId()) {
+					if (pageHome != null) pageHome.setVisibility(View.GONE);
+					if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
+					if (pageProfile != null) pageProfile.setVisibility(View.GONE);
 					if (pageSearch != null) pageSearch.setVisibility(View.VISIBLE);
-					if (imgSearch != null) imgSearch.setColorFilter(colorActive);
+					if (imgSearch != null) imgSearch.setColorFilter(Color.WHITE);
 					showKeyboardOnSearch();
 				}
 			}
@@ -1860,7 +1982,7 @@ public class MainActivity extends AppCompatActivity {
 		if (tabAkun != null) tabAkun.setOnClickListener(tabClickListener);
 		if (btnCircleSearch != null) btnCircleSearch.setOnClickListener(tabClickListener);
 
-		if (tabBeranda != null) tabBeranda.performClick();
+		selectNavTabByIndex(0, false);
 	}
 
 	public void setGridViewHeightBasedOnChildren(final GridView gridView, final int columns) {
