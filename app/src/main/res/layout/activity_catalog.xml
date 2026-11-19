@@ -25,7 +25,7 @@
 			android:paddingTop="6dp"
 			android:paddingBottom="32dp">
 
-			<!-- Baris Filter: Semua, Donghua, Anime -->
+			<!-- Baris Filter: Filter, Semua, Donghua -->
 			<HorizontalScrollView
 				android:id="@+id/catalog_filter_scroll"
 				android:layout_width="match_parent"
@@ -44,6 +44,19 @@
 					android:orientation="horizontal">
 
 					<TextView
+						android:id="@+id/filter_menu"
+						android:layout_width="wrap_content"
+						android:layout_height="36dp"
+						android:layout_marginEnd="8dp"
+						android:gravity="center"
+						android:paddingLeft="16dp"
+						android:paddingRight="16dp"
+						android:text="Filter"
+						android:textColor="#CBD5E1"
+						android:textSize="13sp"
+						android:textStyle="bold" />
+
+					<TextView
 						android:id="@+id/filter_semua"
 						android:layout_width="wrap_content"
 						android:layout_height="36dp"
@@ -60,23 +73,10 @@
 						android:id="@+id/filter_donghua"
 						android:layout_width="wrap_content"
 						android:layout_height="36dp"
-						android:layout_marginEnd="8dp"
 						android:gravity="center"
 						android:paddingLeft="18dp"
 						android:paddingRight="18dp"
 						android:text="Donghua"
-						android:textColor="#CBD5E1"
-						android:textSize="13sp"
-						android:textStyle="bold" />
-
-					<TextView
-						android:id="@+id/filter_anime"
-						android:layout_width="wrap_content"
-						android:layout_height="36dp"
-						android:gravity="center"
-						android:paddingLeft="18dp"
-						android:paddingRight="18dp"
-						android:text="Anime"
 						android:textColor="#CBD5E1"
 						android:textSize="13sp"
 						android:textStyle="bold" />
@@ -95,24 +95,36 @@
 				android:stretchMode="columnWidth"
 				android:verticalSpacing="16dp" />
 
-			<!-- Footer Shimmer Saat Scroll Mentok Memuat Data Baru -->
-			<GridView
-				android:id="@+id/grid_catalog_loading_more"
+			<!-- Indikator Ringan Saat Memuat Halaman Berikutnya -->
+			<LinearLayout
+				android:id="@+id/layout_loading_more"
 				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:layout_marginTop="16dp"
-				android:horizontalSpacing="12dp"
-				android:nestedScrollingEnabled="false"
-				android:numColumns="3"
-				android:paddingLeft="16dp"
-				android:paddingRight="16dp"
-				android:stretchMode="columnWidth"
-				android:verticalSpacing="16dp"
-				android:visibility="gone" />
+				android:layout_height="48dp"
+				android:layout_marginTop="14dp"
+				android:gravity="center"
+				android:orientation="horizontal"
+				android:visibility="gone">
+
+				<ProgressBar
+					android:id="@+id/progress_load_more"
+					android:layout_width="20dp"
+					android:layout_height="20dp"
+					android:layout_marginEnd="8dp"
+					android:indeterminateTint="#38BDF8" />
+
+				<TextView
+					android:id="@+id/text_load_more_status"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Memuat lainnya..."
+					android:textColor="#94A3B8"
+					android:textSize="12.5sp"
+					android:textStyle="bold" />
+			</LinearLayout>
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
 
-	<!-- Header Floating Blur (Seragam dengan Live Chat, Judul Kiri + Terbaru di Bawahnya) -->
+	<!-- Header Floating Blur (Judul Kiri + Terbaru di Bawahnya) -->
 	<LinearLayout
 		android:id="@+id/catalog_header"
 		android:layout_width="match_parent"
@@ -190,4 +202,32 @@
 			</LinearLayout>
 		</FrameLayout>
 	</LinearLayout>
+
+	<!-- Tombol OnTop di Kanan Bawah -->
+	<FrameLayout
+		android:id="@+id/btn_scroll_top"
+		android:layout_width="46dp"
+		android:layout_height="46dp"
+		android:layout_gravity="bottom|end"
+		android:layout_marginEnd="16dp"
+		android:layout_marginBottom="28dp"
+		android:alpha="0f"
+		android:visibility="gone">
+
+		<eightbitlab.com.blurview.BlurView
+			android:id="@+id/scroll_top_blur_bg"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			app:blurOverlayColor="#66141824" />
+
+		<ImageView
+			android:id="@+id/img_scroll_top_arrow"
+			android:layout_width="18dp"
+			android:layout_height="18dp"
+			android:layout_gravity="center"
+			android:contentDescription="Kembali ke Atas"
+			android:rotation="90"
+			android:scaleType="fitCenter"
+			android:src="@drawable/ic_back_arrow" />
+	</FrameLayout>
 </FrameLayout>
