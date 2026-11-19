@@ -91,6 +91,10 @@ public class MainActivity extends AppCompatActivity {
 	private int activeNavTabIndex = 0;
 	private boolean isNavbarCompact = false;
 
+	private boolean isDraggingNavbarPill = false;
+	private float navDownRawX = 0f;
+	private float navInitialPillTx = 0f;
+
 	private ValueAnimator mainShimmerAnimator;
 	private float mainShimmerPhase = 0f;
 	private boolean isMainLoading = true;
@@ -129,6 +133,71 @@ public class MainActivity extends AppCompatActivity {
 		loadLoggedInUserProfile(currentUser);
 		loadUserHistoryAndFavoritesFromFirebase(currentUser);
 		loadLocalDownloads();
+	}
+
+	@Override
+	public boolean dispatchTouchEvent(MotionEvent ev) {
+		if (navbarExpanded != null && navbarExpanded.getVisibility() == View.VISIBLE && liquidDragPill != null) {
+			int[] loc = new int[2];
+			navbarExpanded.getLocationOnScreen(loc);
+			float rawX = ev.getRawX();
+			float rawY = ev.getRawY();
+			boolean insideNav = rawX >= loc[0] && rawX <= (loc[0] + navbarExpanded.getWidth())
+				&& rawY >= loc[1] && rawY <= (loc[1] + navbarExpanded.getHeight());
+
+			float d = getResources().getDisplayMetrics().density;
+			int trackW = navbarExpanded.getWidth();
+			int pillW = liquidDragPill.getWidth();
+			float minTx = 0f;
+			float maxTx = Math.max(0f, trackW - pillW - (10 * d));
+
+			switch (ev.getActionMasked()) {
+				case MotionEvent.ACTION_DOWN:
+					if (insideNav) {
+						navDownRawX = rawX;
+						navInitialPillTx = liquidDragPill.getTranslationX();
+						isDraggingNavbarPill = false;
+						liquidDragPill.animate().scaleX(1.06f).scaleY(1.04f).setDuration(100).start();
+						return true;
+					}
+					break;
+
+				case MotionEvent.ACTION_MOVE:
+					if (navDownRawX > 0f) {
+						float dx = rawX - navDownRawX;
+						if (Math.abs(dx) > (6 * d)) {
+							isDraggingNavbarPill = true;
+						}
+						if (isDraggingNavbarPill) {
+							float nextTx = Math.max(minTx, Math.min(maxTx, navInitialPillTx + dx));
+							liquidDragPill.setTranslationX(nextTx);
+							return true;
+						}
+					}
+					break;
+
+				case MotionEvent.ACTION_UP:
+				case MotionEvent.ACTION_CANCEL:
+					if (navDownRawX > 0f) {
+						liquidDragPill.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
+						float slotW = Math.max(1f, (trackW - (10 * d)) / 3f);
+						int targetIdx;
+						if (isDraggingNavbarPill) {
+							float currentTx = liquidDragPill.getTranslationX();
+							targetIdx = Math.max(0, Math.min(2, Math.round(currentTx / slotW)));
+						} else {
+							float localX = rawX - loc[0];
+							targetIdx = Math.max(0, Math.min(2, (int) (localX / Math.max(1f, trackW / 3f))));
+						}
+						navDownRawX = 0f;
+						isDraggingNavbarPill = false;
+						selectNavTabByIndex(targetIdx, true);
+						return true;
+					}
+					break;
+			}
+		}
+		return super.dispatchTouchEvent(ev);
 	}
 
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
@@ -1696,64 +1765,6 @@ public class MainActivity extends AppCompatActivity {
 				snapPillToTab(activeNavTabIndex, false);
 			}
 		});
-
-		tabsRow.setOnTouchListener(new View.OnTouchListener() {
-			private float downRawX = 0f;
-			private float initialPillTx = 0f;
-			private boolean isDragging = false;
-
-			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				int trackW = tabsRow.getWidth();
-				int pillW = liquidDragPill != null ? liquidDragPill.getWidth() : 0;
-				float minTx = 0f;
-				float maxTx = Math.max(0f, trackW - pillW - (10 * d));
-
-				switch (event.getActionMasked()) {
-					case MotionEvent.ACTION_DOWN:
-						downRawX = event.getRawX();
-						initialPillTx = liquidDragPill != null ? liquidDragPill.getTranslationX() : 0f;
-						isDragging = false;
-						return true;
-
-					case MotionEvent.ACTION_MOVE:
-						float dx = event.getRawX() - downRawX;
-						if (Math.abs(dx) > (8 * d)) {
-							isDragging = true;
-							if (liquidDragPill != null) {
-								float nextTx = Math.max(minTx, Math.min(maxTx, initialPillTx + dx));
-								liquidDragPill.setTranslationX(nextTx);
-								liquidDragPill.setScaleX(1.05f);
-								liquidDragPill.setScaleY(1.03f);
-							}
-						}
-						return true;
-
-					case MotionEvent.ACTION_UP:
-					case MotionEvent.ACTION_CANCEL:
-						if (liquidDragPill != null) {
-							liquidDragPill.animate()
-								.scaleX(1f)
-								.scaleY(1f)
-								.setDuration(140)
-								.start();
-						}
-						if (isDragging) {
-							float currentTx = liquidDragPill != null ? liquidDragPill.getTranslationX() : 0f;
-							float slotW = Math.max(1f, (trackW - (10 * d)) / 3f);
-							int targetIdx = Math.max(0, Math.min(2, Math.round(currentTx / slotW)));
-							selectNavTabByIndex(targetIdx, true);
-						} else {
-							float localX = event.getX();
-							int slotW = Math.max(1, tabsRow.getWidth() / 3);
-							int tappedIdx = Math.max(0, Math.min(2, (int) (localX / slotW)));
-							selectNavTabByIndex(tappedIdx, true);
-						}
-						return true;
-				}
-				return false;
-			}
-		});
 	}
 
 	private void snapPillToTab(int idx, boolean animate) {
@@ -1953,18 +1964,19 @@ public class MainActivity extends AppCompatActivity {
 		final View pageFavorite = findViewById(R.id.layout_favorite);
 		final View pageProfile = findViewById(R.id.layout_profile);
 
-		View.OnClickListener tabClickListener = new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				int id = v.getId();
-
-				if ((tabBeranda != null && id == tabBeranda.getId()) || (btnCompactHome != null && id == btnCompactHome.getId())) {
+		if (btnCompactHome != null) {
+			btnCompactHome.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
 					selectNavTabByIndex(0, true);
-				} else if (tabPustaka != null && id == tabPustaka.getId()) {
-					selectNavTabByIndex(1, true);
-				} else if (tabAkun != null && id == tabAkun.getId()) {
-					selectNavTabByIndex(2, true);
-				} else if (btnCircleSearch != null && id == btnCircleSearch.getId()) {
+				}
+			});
+		}
+
+		if (btnCircleSearch != null) {
+			btnCircleSearch.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
 					if (pageHome != null) pageHome.setVisibility(View.GONE);
 					if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
 					if (pageProfile != null) pageProfile.setVisibility(View.GONE);
@@ -1972,14 +1984,8 @@ public class MainActivity extends AppCompatActivity {
 					if (imgSearch != null) imgSearch.setColorFilter(Color.WHITE);
 					showKeyboardOnSearch();
 				}
-			}
-		};
-
-		if (tabBeranda != null) tabBeranda.setOnClickListener(tabClickListener);
-		if (btnCompactHome != null) btnCompactHome.setOnClickListener(tabClickListener);
-		if (tabPustaka != null) tabPustaka.setOnClickListener(tabClickListener);
-		if (tabAkun != null) tabAkun.setOnClickListener(tabClickListener);
-		if (btnCircleSearch != null) btnCircleSearch.setOnClickListener(tabClickListener);
+			});
+		}
 
 		selectNavTabByIndex(0, false);
 	}
