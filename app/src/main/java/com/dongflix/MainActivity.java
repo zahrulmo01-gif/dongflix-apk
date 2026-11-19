@@ -40,6 +40,8 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import eightbitlab.com.blurview.BlurView;
+import eightbitlab.com.blurview.RenderScriptBlur;
 import java.io.*;
 import java.util.*;
 
@@ -1716,19 +1718,42 @@ public class MainActivity extends AppCompatActivity {
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
+	private void setupRealTimeBlurView(View blurViewTarget, ViewGroup rootContainer, float radius) {
+		if (!(blurViewTarget instanceof BlurView) || rootContainer == null) return;
+		BlurView bv = (BlurView) blurViewTarget;
+		Drawable windowBackground = getWindow().getDecorView().getBackground();
+		bv.setupWith(rootContainer, new RenderScriptBlur(this))
+			.setFrameClearDrawable(windowBackground)
+			.setBlurRadius(radius);
+		bv.setOutlineProvider(new ViewOutlineProvider() {
+			@Override
+			public void getOutline(View view, Outline outline) {
+				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f);
+			}
+		});
+		bv.setClipToOutline(true);
+	}
+
 	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
 		float d = getResources().getDisplayMetrics().density;
-		if (blurTarget != null) {
+		if (blurTarget != null && !(blurTarget instanceof BlurView)) {
 			GradientDrawable glass = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#D9161923"), Color.parseColor("#E60A0C12")}
+				new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
 			);
 			glass.setCornerRadius(100f);
 			glass.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
 			blurTarget.setBackground(glass);
 		}
-		if (containerTarget != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			containerTarget.setElevation(18f);
+		if (containerTarget != null) {
+			GradientDrawable borderOverlay = new GradientDrawable();
+			borderOverlay.setColor(Color.TRANSPARENT);
+			borderOverlay.setCornerRadius(1000f);
+			borderOverlay.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
+			containerTarget.setForeground(borderOverlay);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				containerTarget.setElevation(18f);
+			}
 		}
 	}
 
@@ -1746,7 +1771,7 @@ public class MainActivity extends AppCompatActivity {
 				new int[]{Color.parseColor("#38FFFFFF"), Color.parseColor("#22FFFFFF")}
 			);
 			pillBg.setCornerRadius(100f);
-			pillBg.setStroke((int) (1 * d), Color.parseColor("#4DFFFFFF"));
+			// Tanpa stroke sesuai permintaan
 			liquidDragPill.setBackground(pillBg);
 
 			FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
@@ -1907,9 +1932,18 @@ public class MainActivity extends AppCompatActivity {
 			heroShadow.setBackground(bottomGradient);
 		}
 
-		applyUniversalGlassStyle(findViewById(R.id.navbar_blur_bg), navbarExpanded);
-		applyUniversalGlassStyle(findViewById(R.id.compact_home_blur_bg), btnCompactHome);
-		applyUniversalGlassStyle(findViewById(R.id.search_blur_bg), btnCircleSearch);
+		ViewGroup rootMain = findViewById(R.id.root_main_container);
+		View navBlur = findViewById(R.id.navbar_blur_bg);
+		View compactBlur = findViewById(R.id.compact_home_blur_bg);
+		View searchBlur = findViewById(R.id.search_blur_bg);
+
+		setupRealTimeBlurView(navBlur, rootMain, 20f);
+		setupRealTimeBlurView(compactBlur, rootMain, 20f);
+		setupRealTimeBlurView(searchBlur, rootMain, 20f);
+
+		applyUniversalGlassStyle(navBlur, navbarExpanded);
+		applyUniversalGlassStyle(compactBlur, btnCompactHome);
+		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
 	}
 
 	private void setupScrollResponsiveNavbar() {
