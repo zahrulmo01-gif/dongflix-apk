@@ -215,13 +215,15 @@
 						android:src="@drawable/ic_cast"
 						android:scaleType="fitCenter" />
 
-					<ImageView
+										<ImageView
 						android:id="@+id/btnLock"
 						android:layout_width="24dp"
 						android:layout_height="24dp"
 						android:layout_marginRight="14dp"
 						android:src="@drawable/ic_lock"
-						android:scaleType="fitCenter" />
+						android:scaleType="fitCenter"
+						android:visibility="gone" />
+
 
 					<ImageView
 						android:id="@+id/btnSettings"
