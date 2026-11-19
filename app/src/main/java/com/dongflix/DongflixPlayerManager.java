@@ -10,8 +10,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.MediaPlayer;
 import android.os.Build;
@@ -22,11 +24,14 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.app.NotificationCompat;
+import eightbitlab.com.blurview.BlurView;
+import eightbitlab.com.blurview.RenderScriptBlur;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -280,27 +285,51 @@ public class DongflixPlayerManager {
 
 		final FrameLayout glassRoot = new FrameLayout(activity);
 		glassRoot.setTag("DONGFLIX_MINI_PLAYER");
+		glassRoot.setOutlineProvider(new ViewOutlineProvider() {
+			@Override
+			public void getOutline(View view, Outline outline) {
+				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f);
+			}
+		});
+		glassRoot.setClipToOutline(true);
 
-		// Frosted glass universal (tanpa RenderEffect agar kompati di semua versi Android)
-		GradientDrawable glassBg = new GradientDrawable(
+		BlurView blurBg = new BlurView(activity);
+		blurBg.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		ViewGroup rootMain = activity.findViewById(R.id.root_main_container);
+		if (rootMain == null && activity.getWindow().getDecorView() instanceof ViewGroup) {
+			rootMain = (ViewGroup) activity.getWindow().getDecorView();
+		}
+		if (rootMain != null) {
+			Drawable windowBackground = activity.getWindow().getDecorView().getBackground();
+			blurBg.setupWith(rootMain, new RenderScriptBlur(activity))
+				.setFrameClearDrawable(windowBackground)
+				.setBlurRadius(20f);
+			blurBg.setOverlayColor(Color.parseColor("#9910131C"));
+		}
+
+		GradientDrawable glassOverlay = new GradientDrawable(
 			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#E6141822"), Color.parseColor("#F20A0C12")}
+			new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
 		);
-		glassBg.setCornerRadius(100f);
-		glassBg.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
-		glassRoot.setBackground(glassBg);
+		glassOverlay.setCornerRadius(1000f);
+		glassOverlay.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
+		blurBg.setBackground(glassOverlay);
+		glassRoot.addView(blurBg);
 
 		LinearLayout row = new LinearLayout(activity);
 		row.setOrientation(LinearLayout.HORIZONTAL);
 		row.setGravity(Gravity.CENTER_VERTICAL);
-		int hPad = isInlineCompact ? (int)(8 * d) : (int)(10 * d);
-		int vPad = isInlineCompact ? (int)(6 * d) : (int)(8 * d);
+		int hPad = isInlineCompact ? (int) (8 * d) : (int) (10 * d);
+		int vPad = isInlineCompact ? (int) (6 * d) : (int) (8 * d);
 		row.setPadding(hPad, vPad, hPad, vPad);
 		glassRoot.addView(row);
 
 		androidx.cardview.widget.CardView thumbCard = new androidx.cardview.widget.CardView(activity);
-		int thumbW = isInlineCompact ? (int)(44 * d) : (int)(56 * d);
-		int thumbH = isInlineCompact ? (int)(44 * d) : (int)(44 * d);
+		int thumbW = isInlineCompact ? (int) (44 * d) : (int) (56 * d);
+		int thumbH = isInlineCompact ? (int) (44 * d) : (int) (44 * d);
 		thumbCard.setLayoutParams(new LinearLayout.LayoutParams(thumbW, thumbH));
 		thumbCard.setRadius(isInlineCompact ? 22 * d : 12 * d);
 		thumbCard.setCardElevation(0f);
@@ -330,7 +359,7 @@ public class DongflixPlayerManager {
 		LinearLayout infoCol = new LinearLayout(activity);
 		infoCol.setOrientation(LinearLayout.VERTICAL);
 		LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-		infoLp.setMargins((int)(10 * d), 0, (int)(6 * d), 0);
+		infoLp.setMargins((int) (10 * d), 0, (int) (6 * d), 0);
 		infoCol.setLayoutParams(infoLp);
 
 		TextView tvTitle = new TextView(activity);
@@ -353,9 +382,9 @@ public class DongflixPlayerManager {
 		row.addView(infoCol);
 
 		final ImageView btnMiniPlay = new ImageView(activity);
-		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int)(34 * d), (int)(34 * d));
+		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
 		btnMiniPlay.setLayoutParams(playLp);
-		btnMiniPlay.setPadding((int)(7 * d), (int)(7 * d), (int)(7 * d), (int)(7 * d));
+		btnMiniPlay.setPadding((int) (7 * d), (int) (7 * d), (int) (7 * d), (int) (7 * d));
 		btnMiniPlay.setColorFilter(Color.WHITE);
 		boolean playingNow = false;
 		try { playingNow = sharedMediaPlayer.isPlaying(); } catch (Exception ignored) {}
@@ -383,8 +412,8 @@ public class DongflixPlayerManager {
 
 		if (!isInlineCompact) {
 			TextView btnClose = new TextView(activity);
-			LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int)(30 * d), (int)(30 * d));
-			closeLp.leftMargin = (int)(2 * d);
+			LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int) (30 * d), (int) (30 * d));
+			closeLp.leftMargin = (int) (2 * d);
 			btnClose.setLayoutParams(closeLp);
 			btnClose.setGravity(Gravity.CENTER);
 			btnClose.setText("✕");
@@ -450,7 +479,7 @@ public class DongflixPlayerManager {
 			(int) (60 * d)
 		);
 		rootLp.gravity = Gravity.BOTTOM;
-		rootLp.setMargins((int)(14 * d), 0, (int)(14 * d), bottomMarginPx);
+		rootLp.setMargins((int) (14 * d), 0, (int) (14 * d), bottomMarginPx);
 		contentRoot.addView(floatingPill, rootLp);
 	}
 }
