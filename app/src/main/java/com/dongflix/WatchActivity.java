@@ -161,6 +161,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	public String dmSessionCookie = "";
 	private boolean isWebViewFallbackActive = false;
+	private boolean isResumingFromMiniPlayer = false;
 
 	private static class ScoredAnimeItem {
 		final HashMap<String, Object> item;
@@ -176,6 +177,7 @@ public class WatchActivity extends AppCompatActivity {
 	protected void onCreate(Bundle _savedInstanceState) {
 		super.onCreate(_savedInstanceState);
 		setContentView(R.layout.activity_watch);
+		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
 		initialize(_savedInstanceState);
 		initializeLogic();
 	}
@@ -252,21 +254,33 @@ public class WatchActivity extends AppCompatActivity {
 							recyclerEpisode.setAdapter(new RecyclerEpisodeAdapter(eps));
 						}
 						episodeList = eps;
-						currentEpisodeIndex = 0;
 
-						if (playerTextureView != null && playerTextureView.isAvailable()) {
-							playEpisodeByIndex(0);
-						} else if (playerTextureView != null) {
-							playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-								@Override
-								public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-									playerSurface = new Surface(st);
-									playEpisodeByIndex(0);
+						if (isResumingFromMiniPlayer && mediaPlayer != null) {
+							DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
+							currentEpisodeIndex = mgr.activeEpisodeIndex;
+							if (recyclerEpisode != null) {
+								recyclerEpisode.scrollToPosition(currentEpisodeIndex);
+								if (recyclerEpisode.getAdapter() != null) {
+									recyclerEpisode.getAdapter().notifyDataSetChanged();
 								}
-								@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
-								@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-								@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
-							});
+							}
+							updateEpisodeNavButtons();
+						} else {
+							currentEpisodeIndex = 0;
+							if (playerTextureView != null && playerTextureView.isAvailable()) {
+								playEpisodeByIndex(0);
+							} else if (playerTextureView != null) {
+								playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+									@Override
+									public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+										playerSurface = new Surface(st);
+										playEpisodeByIndex(0);
+									}
+									@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
+									@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
+									@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+								});
+							}
 						}
 					}
 					checkStopShimmerIfDone();
@@ -328,6 +342,10 @@ public class WatchActivity extends AppCompatActivity {
 									if (imagePoster != null && !detailCover.isEmpty()) {
 										Glide.with(getApplicationContext()).load(Uri.parse(detailCover)).into(imagePoster);
 									}
+
+									DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
+									mgr.activeTitle = detailTitle;
+									mgr.activeCoverUrl = detailCover;
 									break;
 								}
 							}
@@ -618,11 +636,49 @@ public class WatchActivity extends AppCompatActivity {
 		String slug = getIntent().getStringExtra("slug");
 		if (slug == null) slug = "";
 
+		DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
+		boolean resumeFlag = getIntent().getBooleanExtra("resume_mini_player", false);
+		if ((resumeFlag || (mgr.isMiniPlayerActive && slug.equals(mgr.activeSlug))) && mgr.sharedMediaPlayer != null) {
+			isResumingFromMiniPlayer = true;
+			mediaPlayer = mgr.sharedMediaPlayer;
+			mgr.isMiniPlayerActive = false;
+			currentPlayingUrl = mgr.activeStreamUrl;
+			currentEpisodeIndex = mgr.activeEpisodeIndex;
+			if (!mgr.activeEpisodeList.isEmpty()) {
+				episodeList = new ArrayList<>(mgr.activeEpisodeList);
+			}
+		} else {
+			mgr.stopAndCloseEverything(this);
+		}
+
 		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
 		req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
 
 		_initPlayerViews();
 		applyCustomFonts();
+
+		if (isResumingFromMiniPlayer && mediaPlayer != null) {
+			try {
+				int dur = mediaPlayer.getDuration();
+				if (playerSeekBar != null && dur > 0) playerSeekBar.setMax(dur);
+				if (btnPlay != null) {
+					btnPlay.setEnabled(true);
+					btnPlay.setAlpha(1.0f);
+					btnPlay.setImageResource(mediaPlayer.isPlaying() ? R.drawable.ic_pause : R.drawable.ic_play1);
+				}
+				int vw = mediaPlayer.getVideoWidth();
+				int vh = mediaPlayer.getVideoHeight();
+				if (vw > 0 && vh > 0) {
+					currentVideoWidth = vw;
+					currentVideoHeight = vh;
+					adjustVideoAspectRatio();
+				}
+				if (playerHandler != null && progressLoop != null) {
+					playerHandler.removeCallbacks(progressLoop);
+					playerHandler.post(progressLoop);
+				}
+			} catch (Exception ignored) {}
+		}
 	}
 
 	private void applyCustomFonts() {
@@ -719,9 +775,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// ========================================================
-	// PEMBATAS BAWAH VIDEO TANPA KEDUTAN (VISIBLE <-> INVISIBLE)
-	// ========================================================
 	private void updateBottomDividerState() {
 		if (dividerLineView == null || miniVideoProgressBar == null) return;
 
@@ -969,7 +1022,6 @@ public class WatchActivity extends AppCompatActivity {
 							bottomSheet.setElevation(0f);
 						}
 
-						// Hitung tinggi presisi tepat dari bawah pemutar video sampai batas bawah layar
 						Rect visibleFrame = new Rect();
 						getWindow().getDecorView().getWindowVisibleDisplayFrame(visibleFrame);
 
@@ -1606,6 +1658,29 @@ public class WatchActivity extends AppCompatActivity {
 		);
 	}
 
+	private void minimizeToMiniPlayer() {
+		if (mediaPlayer != null && !currentPlayingUrl.isEmpty()) {
+			DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
+			mgr.sharedMediaPlayer = mediaPlayer;
+			mgr.isMiniPlayerActive = true;
+			mgr.activeSlug = getIntent().getStringExtra("slug") != null ? getIntent().getStringExtra("slug") : "";
+			mgr.activeTitle = detailTitle.isEmpty() ? (textJudul != null ? textJudul.getText().toString() : "Dongflix") : detailTitle;
+			mgr.activeCoverUrl = detailCover;
+			mgr.activeStreamUrl = currentPlayingUrl;
+			mgr.activeEpisodeIndex = currentEpisodeIndex;
+			mgr.activeEpisodeList = new ArrayList<>(episodeList);
+
+			if (episodeList != null && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.size()) {
+				Object epObj = episodeList.get(currentEpisodeIndex).get("episode");
+				mgr.activeEpisodeLabel = epObj != null ? epObj.toString().replace("Ep ", "").replace("Eps ", "").trim() : String.valueOf(currentEpisodeIndex + 1);
+			}
+
+			mgr.updatePlaybackNotification(this);
+			mediaPlayer = null;
+		}
+		finish();
+	}
+
 	@Override
 	public void onDestroy() {
 		if (shimmerAnimator != null) {
@@ -1620,7 +1695,8 @@ public class WatchActivity extends AppCompatActivity {
 			playerHandler.removeCallbacksAndMessages(null);
 		}
 
-		if (mediaPlayer != null) {
+		// Hanya release mediaPlayer jika tidak sedang dipindahkan ke Mini Player
+		if (mediaPlayer != null && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 			try {
 				if (mediaPlayer.isPlaying()) {
 					mediaPlayer.stop();
@@ -1652,7 +1728,7 @@ public class WatchActivity extends AppCompatActivity {
 	public void onPause() {
 		super.onPause();
 		stopHold2xSpeed();
-		if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+		if (mediaPlayer != null && mediaPlayer.isPlaying() && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 			mediaPlayer.pause();
 			if (btnPlay != null) {
 				btnPlay.setImageResource(R.drawable.ic_play1);
@@ -1680,7 +1756,7 @@ public class WatchActivity extends AppCompatActivity {
 		if (isFullscreen) {
 			toggleFullscreen();
 		} else if (!isFinishing()) {
-			finish();
+			minimizeToMiniPlayer();
 		}
 	}
 
@@ -2591,7 +2667,6 @@ public class WatchActivity extends AppCompatActivity {
 			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
 		};
 
-		// Custom Drawable untuk Mini ProgressBar di pembatas bawah video (gaya + cache identik dengan SeekBar utama)
 		Drawable miniTrackDrawable = new Drawable() {
 			private final Paint paintBg = new Paint(Paint.ANTI_ALIAS_FLAG);
 			private final Paint paintCache = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -2781,8 +2856,10 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
 					playerSurface = new Surface(surfaceTexture);
-					if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-						mediaPlayer.setSurface(playerSurface);
+					if (mediaPlayer != null) {
+						try {
+							mediaPlayer.setSurface(playerSurface);
+						} catch (Exception ignored) {}
 					}
 					adjustVideoAspectRatio();
 				}
@@ -2793,7 +2870,7 @@ public class WatchActivity extends AppCompatActivity {
 						playerSurface.release();
 						playerSurface = null;
 					}
-					if (mediaPlayer != null) {
+					if (mediaPlayer != null && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 						mediaPlayer.release();
 						mediaPlayer = null;
 					}
@@ -3047,7 +3124,7 @@ public class WatchActivity extends AppCompatActivity {
 					if (isFullscreen) {
 						toggleFullscreen();
 					} else {
-						finish();
+						minimizeToMiniPlayer();
 					}
 				}
 			});
