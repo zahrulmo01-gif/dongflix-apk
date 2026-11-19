@@ -44,7 +44,7 @@ import java.util.*;
 
 public class MainActivity extends AppCompatActivity {
 
-	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";[span_1](start_span)[span_1](end_span)
+	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 	private String cover = "";
 
