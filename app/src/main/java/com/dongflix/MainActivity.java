@@ -65,9 +65,9 @@ public class MainActivity extends AppCompatActivity {
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
 	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
-	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopSearch, imgTopChat, imgUserAvatar;
+	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
-	private FrameLayout btnHeroFavorite, btnTopSearch, btnTopChat;
+	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
@@ -164,7 +164,6 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 
-		// Jika tidak ada profil: tanpa background biru, ic_profile lebih besar & warna putih
 		int pad = (int) (3 * d);
 		target.setBackground(null);
 		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -618,7 +617,7 @@ public class MainActivity extends AppCompatActivity {
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 			));
 			thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			thumb.setAlpha(0.65f);
+			thumb.setAlpha(0.7f);
 			thumb.setTag("thumb");
 			card.addView(thumb);
 
@@ -628,48 +627,22 @@ public class MainActivity extends AppCompatActivity {
 			));
 			scrim.setBackground(new GradientDrawable(
 				GradientDrawable.Orientation.BOTTOM_TOP,
-				new int[]{Color.parseColor("#D9040E1C"), Color.parseColor("#55040E1C"), Color.TRANSPARENT}
+				new int[]{Color.parseColor("#E6030A14"), Color.parseColor("#66030A14"), Color.TRANSPARENT}
 			));
 			card.addView(scrim);
 
-			// Judul & Episode di bagian bawah kartu (seperti contoh)
-			LinearLayout bottomRow = new LinearLayout(parent.getContext());
-			bottomRow.setOrientation(LinearLayout.HORIZONTAL);
-			bottomRow.setGravity(Gravity.CENTER_VERTICAL);
-			bottomRow.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
-			FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
-			);
-			bottomRow.setLayoutParams(bottomLp);
-
-			FrameLayout playCircle = new FrameLayout(parent.getContext());
-			int playSize = (int) (34 * d);
-			LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(playSize, playSize);
-			playLp.rightMargin = (int) (10 * d);
-			playCircle.setLayoutParams(playLp);
-			GradientDrawable playBg = new GradientDrawable();
-			playBg.setShape(GradientDrawable.OVAL);
-			playBg.setColor(Color.parseColor("#38BDF8"));
-			playCircle.setBackground(playBg);
-
-			TextView playGlyph = new TextView(parent.getContext());
-			playGlyph.setText("▶");
-			playGlyph.setTextColor(Color.parseColor("#041E3A"));
-			playGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-			playGlyph.setGravity(Gravity.CENTER);
-			playCircle.addView(playGlyph, new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-			));
-
+			// Judul & Episode di bagian bawah tanpa tombol bulat play
 			LinearLayout textCol = new LinearLayout(parent.getContext());
 			textCol.setOrientation(LinearLayout.VERTICAL);
-			textCol.setLayoutParams(new LinearLayout.LayoutParams(
-				0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-			));
+			textCol.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (12 * d));
+			FrameLayout.LayoutParams textLp = new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
+			);
+			textCol.setLayoutParams(textLp);
 
 			TextView tvTitle = new TextView(parent.getContext());
 			tvTitle.setTextColor(Color.WHITE);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
 			tvTitle.setTypeface(null, Typeface.BOLD);
 			tvTitle.setMaxLines(2);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
@@ -677,16 +650,13 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView tvEp = new TextView(parent.getContext());
 			tvEp.setTextColor(Color.parseColor("#CBD5E1"));
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
 			tvEp.setTypeface(null, Typeface.BOLD);
 			tvEp.setTag("ep");
 
 			textCol.addView(tvTitle);
 			textCol.addView(tvEp);
-
-			bottomRow.addView(playCircle);
-			bottomRow.addView(textCol);
-			card.addView(bottomRow);
+			card.addView(textCol);
 
 			View progressBar = new View(parent.getContext());
 			FrameLayout.LayoutParams progLp = new FrameLayout.LayoutParams(
@@ -1152,6 +1122,17 @@ public class MainActivity extends AppCompatActivity {
 		overridePendingTransition(R.anim.slide_up_enter, R.anim.no_anim);
 	}
 
+	private void openNotificationsSheet() {
+		String latestTitle = (currentHeroItem != null && currentHeroItem.get("title") != null)
+			? currentHeroItem.get("title").toString()
+			: "Episode terbaru Dongflix telah tersedia.";
+		new AlertDialog.Builder(this)
+			.setTitle("Notifikasi")
+			.setMessage("• Update katalog harian aktif\n• " + latestTitle)
+			.setPositiveButton("Tutup", null)
+			.show();
+	}
+
 	private void showKeyboardOnSearch() {
 		if (inputSearch == null) return;
 		inputSearch.requestFocus();
@@ -1314,9 +1295,9 @@ public class MainActivity extends AppCompatActivity {
 		dot1 = findViewById(R.id.dot_1);
 		dot2 = findViewById(R.id.dot_2);
 
-		btnTopSearch = findViewById(R.id.btn_top_search);
+		btnTopNotif = findViewById(R.id.btn_top_search);
 		btnTopChat = findViewById(R.id.btn_top_chat);
-		imgTopSearch = findViewById(R.id.img_top_search);
+		imgTopNotif = findViewById(R.id.img_top_search);
 		imgTopChat = findViewById(R.id.img_top_chat);
 
 		navbarExpanded = findViewById(R.id.navbar);
@@ -1333,6 +1314,20 @@ public class MainActivity extends AppCompatActivity {
 		txtHome = findViewById(R.id.txt_home);
 		txtFavorite = findViewById(R.id.txt_favorite);
 		txtProfile = findViewById(R.id.txt_profile);
+
+		if (imgTopNotif != null) {
+			int notifResId = getResources().getIdentifier("ic_notifications", "drawable", getPackageName());
+			imgTopNotif.setImageResource(notifResId > 0 ? notifResId : R.drawable.ic_search);
+		}
+
+		if (btnTopNotif != null) {
+			btnTopNotif.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					openNotificationsSheet();
+				}
+			});
+		}
 
 		if (textSeeAll != null) {
 			textSeeAll.setOnClickListener(new View.OnClickListener() {
@@ -1657,14 +1652,22 @@ public class MainActivity extends AppCompatActivity {
 		if (blurTarget != null) {
 			GradientDrawable glass = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
+				new int[]{Color.parseColor("#9911141E"), Color.parseColor("#B8080A10")}
 			);
 			glass.setCornerRadius(100f);
-			glass.setStroke((int)(1 * d), Color.parseColor("#33FFFFFF"));
+			glass.setStroke((int)(1.2f * d), Color.parseColor("#44FFFFFF"));
 			blurTarget.setBackground(glass);
+
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+				try {
+					blurTarget.setRenderEffect(
+						RenderEffect.createBlurEffect(28f, 28f, Shader.TileMode.CLAMP)
+					);
+				} catch (Exception ignored) {}
+			}
 		}
 		if (containerTarget != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			containerTarget.setElevation(16f);
+			containerTarget.setElevation(20f);
 		}
 	}
 
@@ -1694,9 +1697,9 @@ public class MainActivity extends AppCompatActivity {
 			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
 		}
 
-		applyUniversalGlassStyle(btnTopSearch, btnTopSearch);
+		applyUniversalGlassStyle(btnTopNotif, btnTopNotif);
 		applyUniversalGlassStyle(btnTopChat, btnTopChat);
-		if (imgTopSearch != null) imgTopSearch.setColorFilter(Color.WHITE);
+		if (imgTopNotif != null) imgTopNotif.setColorFilter(Color.WHITE);
 		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE);
 		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
@@ -1794,7 +1797,7 @@ public class MainActivity extends AppCompatActivity {
 		final View pageProfile = findViewById(R.id.layout_profile);
 
 		final GradientDrawable activeTabPill = new GradientDrawable();
-		activeTabPill.setColor(Color.parseColor("#26FFFFFF"));
+		activeTabPill.setColor(Color.parseColor("#33FFFFFF"));
 		activeTabPill.setCornerRadius(100f);
 
 		final int colorActive = Color.WHITE;
@@ -1856,15 +1859,6 @@ public class MainActivity extends AppCompatActivity {
 		if (tabPustaka != null) tabPustaka.setOnClickListener(tabClickListener);
 		if (tabAkun != null) tabAkun.setOnClickListener(tabClickListener);
 		if (btnCircleSearch != null) btnCircleSearch.setOnClickListener(tabClickListener);
-
-		if (btnTopSearch != null && btnCircleSearch != null) {
-			btnTopSearch.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					btnCircleSearch.performClick();
-				}
-			});
-		}
 
 		if (tabBeranda != null) tabBeranda.performClick();
 	}
