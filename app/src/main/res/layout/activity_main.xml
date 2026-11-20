@@ -318,7 +318,7 @@
 					android:clipChildren="false" />
 			</LinearLayout>
 
-			<!-- POPULER HARI INI (Tanpa Lihat semua) -->
+			<!-- POPULER HARI INI -->
 			<RelativeLayout
 				android:id="@+id/layout_section_popular"
 				android:layout_width="match_parent"
@@ -327,7 +327,7 @@
 				android:paddingLeft="16dp"
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_popular"
@@ -346,10 +346,9 @@
 				android:layout_height="wrap_content"
 				android:clipToPadding="false"
 				android:clipChildren="false"
-				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-				tools:listitem="@layout/item_popular_donghua" />
+				android:nestedScrollingEnabled="false" />
 
-			<!-- BARU DIUPDATE (Ada Lihat semua abu-abu) -->
+			<!-- BARU DIUPDATE -->
 			<RelativeLayout
 				android:id="@+id/relativelayout72"
 				android:layout_width="match_parent"
@@ -358,7 +357,7 @@
 				android:paddingLeft="16dp"
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/textview77"
@@ -395,22 +394,82 @@
 				android:nestedScrollingEnabled="false"
 				tools:listitem="@layout/custom_anime" />
 
-			<!-- KULTIVASI MENUJU KEABADIAN -->
+			<!-- POPULER DI DONGFLIX (Di bawah Baru Diupdate, gaya seperti Populer Hari Ini) -->
 			<RelativeLayout
-				android:id="@+id/layout_section_cultivation"
+				android:id="@+id/layout_section_popular_dongflix"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:layout_marginTop="10dp"
 				android:paddingLeft="16dp"
 				android:paddingTop="18dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
+
+				<TextView
+					android:id="@+id/text_title_popular_dongflix"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Populer di Dongflix"
+					android:textSize="18sp"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerPopularDongflix"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:nestedScrollingEnabled="false" />
+
+			<!-- DONGHUA ROMANTIS (Tipis-tipis) -->
+			<RelativeLayout
+				android:id="@+id/layout_section_romance"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="6dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="14dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="6dp">
+
+				<TextView
+					android:id="@+id/text_title_romance"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Donghua Romantis"
+					android:textSize="16sp"
+					android:textColor="#E2E8F0"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerRomanceDonghua"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:nestedScrollingEnabled="false" />
+
+			<!-- KULTIVASI / ABADI -->
+			<RelativeLayout
+				android:id="@+id/layout_section_cultivation"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="16dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_cultivation"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:text="Kultivasi Menuju Keabadian"
+					android:text="Kultivasi &amp; Keabadian"
 					android:textSize="18sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
@@ -442,9 +501,9 @@
 				android:layout_height="wrap_content"
 				android:layout_marginTop="10dp"
 				android:paddingLeft="16dp"
-				android:paddingTop="18dp"
+				android:paddingTop="16dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_completed"
@@ -482,9 +541,9 @@
 				android:layout_height="wrap_content"
 				android:layout_marginTop="10dp"
 				android:paddingLeft="16dp"
-				android:paddingTop="18dp"
+				android:paddingTop="16dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_comedy"
@@ -522,15 +581,15 @@
 				android:layout_height="wrap_content"
 				android:layout_marginTop="10dp"
 				android:paddingLeft="16dp"
-				android:paddingTop="18dp"
+				android:paddingTop="16dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_mystery"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:text="Misteri dan Teka-Teki"
+					android:text="Misteri &amp; Teka-Teki"
 					android:textSize="18sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
@@ -562,9 +621,9 @@
 				android:layout_height="wrap_content"
 				android:layout_marginTop="10dp"
 				android:paddingLeft="16dp"
-				android:paddingTop="18dp"
+				android:paddingTop="16dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_movie"
@@ -591,40 +650,10 @@
 				android:id="@+id/recyclerMovieDonghua"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
+				android:layout_marginBottom="40dp"
 				android:clipToPadding="false"
 				android:clipChildren="false"
 				android:nestedScrollingEnabled="false" />
-
-			<!-- POPULER -->
-			<RelativeLayout
-				android:id="@+id/layout_populary"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:layout_marginTop="10dp"
-				android:paddingLeft="16dp"
-				android:paddingTop="18dp"
-				android:paddingRight="16dp"
-				android:paddingBottom="4dp">
-
-				<TextView
-					android:id="@+id/text_popular"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:text="Populer"
-					android:textSize="18sp"
-					android:textColor="#FFFFFF"
-					android:layout_alignParentLeft="true"
-					android:layout_centerVertical="true" />
-			</RelativeLayout>
-
-			<androidx.recyclerview.widget.RecyclerView
-				android:id="@+id/listPopular"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:layout_marginBottom="40dp"
-				android:clipChildren="false"
-				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-				tools:listitem="@layout/item_popular_donghua" />
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
 
@@ -713,7 +742,7 @@
 			android:layout_height="wrap_content"
 			android:layout_marginLeft="16dp"
 			android:layout_marginBottom="8dp"
-			android:text="Populer"
+			android:text="Populer di Dongflix"
 			android:textSize="15sp"
 			android:textColor="#94A3B8" />
 
