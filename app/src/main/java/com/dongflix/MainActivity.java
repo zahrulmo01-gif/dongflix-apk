@@ -516,7 +516,7 @@ public class MainActivity extends AppCompatActivity {
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
 		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		int sizePx = Math.max((int) (40 * d), target.getWidth() > 0 ? target.getWidth() : (int) (40 * d));
+		int sizePx = Math.max((int) (38 * d), target.getWidth() > 0 ? target.getWidth() : (int) (38 * d));
 
 		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
 			String cleanUrl = photoUrl.trim();
