@@ -303,7 +303,7 @@
 						android:layout_height="wrap_content"
 						android:text="Lihat riwayat"
 						android:textSize="14sp"
-						android:textColor="#3B82F6"
+						android:textColor="#94A3B8"
 						android:layout_alignParentRight="true"
 						android:layout_centerVertical="true" />
 				</RelativeLayout>
@@ -318,7 +318,7 @@
 					android:clipChildren="false" />
 			</LinearLayout>
 
-			<!-- POPULER HARI INI -->
+			<!-- POPULER HARI INI (Tanpa Lihat semua) -->
 			<RelativeLayout
 				android:id="@+id/layout_section_popular"
 				android:layout_width="match_parent"
@@ -346,11 +346,10 @@
 				android:layout_height="wrap_content"
 				android:clipToPadding="false"
 				android:clipChildren="false"
-				android:paddingEnd="56dp"
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
 
-			<!-- BARU DIUPDATE -->
+			<!-- BARU DIUPDATE (Ada Lihat semua abu-abu) -->
 			<RelativeLayout
 				android:id="@+id/relativelayout72"
 				android:layout_width="match_parent"
@@ -377,7 +376,7 @@
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
 					android:textSize="14sp"
-					android:textColor="#3B82F6"
+					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
@@ -395,6 +394,166 @@
 				android:stretchMode="columnWidth"
 				android:nestedScrollingEnabled="false"
 				tools:listitem="@layout/custom_anime" />
+
+			<!-- KULTIVASI MENUJU KEABADIAN -->
+			<RelativeLayout
+				android:id="@+id/layout_section_cultivation"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="18dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="4dp">
+
+				<TextView
+					android:id="@+id/text_title_cultivation"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Kultivasi Menuju Keabadian"
+					android:textSize="18sp"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+
+				<TextView
+					android:id="@+id/text_cultivation_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textColor="#94A3B8"
+					android:layout_alignParentRight="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerCultivationDonghua"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:nestedScrollingEnabled="false" />
+
+			<!-- DONGHUA TAMAT -->
+			<RelativeLayout
+				android:id="@+id/layout_section_completed"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="18dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="4dp">
+
+				<TextView
+					android:id="@+id/text_title_completed"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Donghua Tamat"
+					android:textSize="18sp"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+
+				<TextView
+					android:id="@+id/text_completed_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textColor="#94A3B8"
+					android:layout_alignParentRight="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerCompletedDonghua"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:nestedScrollingEnabled="false" />
+
+			<!-- DONGHUA KOMEDI RINGAN -->
+			<RelativeLayout
+				android:id="@+id/layout_section_comedy"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="18dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="4dp">
+
+				<TextView
+					android:id="@+id/text_title_comedy"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Donghua Komedi Ringan"
+					android:textSize="18sp"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+
+				<TextView
+					android:id="@+id/text_comedy_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textColor="#94A3B8"
+					android:layout_alignParentRight="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerComedyDonghua"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:nestedScrollingEnabled="false" />
+
+			<!-- MISTERI DAN TEKA-TEKI -->
+			<RelativeLayout
+				android:id="@+id/layout_section_mystery"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="10dp"
+				android:paddingLeft="16dp"
+				android:paddingTop="18dp"
+				android:paddingRight="16dp"
+				android:paddingBottom="4dp">
+
+				<TextView
+					android:id="@+id/text_title_mystery"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Misteri dan Teka-Teki"
+					android:textSize="18sp"
+					android:textColor="#FFFFFF"
+					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+
+				<TextView
+					android:id="@+id/text_mystery_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textColor="#94A3B8"
+					android:layout_alignParentRight="true"
+					android:layout_centerVertical="true" />
+			</RelativeLayout>
+
+			<androidx.recyclerview.widget.RecyclerView
+				android:id="@+id/recyclerMysteryDonghua"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:clipToPadding="false"
+				android:clipChildren="false"
+				android:nestedScrollingEnabled="false" />
 
 			<!-- DONGHUA MOVIE -->
 			<RelativeLayout
@@ -423,7 +582,7 @@
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
 					android:textSize="14sp"
-					android:textColor="#3B82F6"
+					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
@@ -434,8 +593,6 @@
 				android:layout_height="wrap_content"
 				android:clipToPadding="false"
 				android:clipChildren="false"
-				android:paddingLeft="16dp"
-				android:paddingRight="16dp"
 				android:nestedScrollingEnabled="false" />
 
 			<!-- POPULER -->
