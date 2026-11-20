@@ -5,7 +5,6 @@ import android.animation.*;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.content.res.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
 import android.net.*;
@@ -46,11 +45,16 @@ public class MainActivity extends AppCompatActivity {
 	private final Map<String, Long> viewsTotalMap = new HashMap<>();
 	private final Map<String, Long> viewsDailyMap = new HashMap<>();
 
+	private DatabaseReference viewsTotalRef;
+	private DatabaseReference viewsDailyTodayRef;
+	private ValueEventListener viewsTotalListener;
+	private ValueEventListener viewsDailyListener;
+
 	private RequestNetwork dongflix_req;
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
 
 	private GridView gridview1;
-	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
+	private RecyclerView recyclerPopular, recyclerPopularDongflix, recyclerRomanceDonghua, recyclerSearchList;
 	private RecyclerView recyclerCultivationDonghua, recyclerCompletedDonghua, recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua;
 	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
 	private TextView textCultivationSeeAll, textCompletedSeeAll, textComedySeeAll, textMysterySeeAll, textMovieSeeAll;
@@ -132,6 +136,7 @@ public class MainActivity extends AppCompatActivity {
 		initializeLogic();
 		loadLoggedInUserProfile(currentUser);
 		loadUserHistoryAndFavoritesFromFirebase(currentUser);
+		attachFirebasePopularityListeners();
 		loadLocalDownloads();
 	}
 
@@ -492,7 +497,18 @@ public class MainActivity extends AppCompatActivity {
 		rv.setOnFlingListener(null);
 		rv.setClipToPadding(false);
 		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162));
+		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162, 16f, 10, 12.5f));
+	}
+
+	private void bindSlimRomanceSection(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
+		if (rv == null) return;
+		float d = getResources().getDisplayMetrics().density;
+		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		rv.setNestedScrollingEnabled(false);
+		rv.setOnFlingListener(null);
+		rv.setClipToPadding(false);
+		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		rv.setAdapter(new HorizontalPosterAdapter(items, 102, 144, 14f, 8, 11.5f));
 	}
 
 	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
@@ -513,10 +529,12 @@ public class MainActivity extends AppCompatActivity {
 		ArrayList<HashMap<String, Object>> comedy = new ArrayList<>();
 		ArrayList<HashMap<String, Object>> mystery = new ArrayList<>();
 		ArrayList<HashMap<String, Object>> movie = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> romance = new ArrayList<>();
 
 		for (HashMap<String, Object> item : fullCatalogList) {
 			String status = safeStr(item, "status", "").toLowerCase(Locale.US);
-			String meta = (safeStr(item, "genres", "") + " " + safeStr(item, "title", "") + " "
+			String genres = safeStr(item, "genres", "").toLowerCase(Locale.US);
+			String meta = (genres + " " + safeStr(item, "title", "") + " "
 				+ safeStr(item, "synopsis", "") + " " + safeStr(item, "type", "") + " " + safeStr(item, "episode", ""))
 				.toLowerCase(Locale.US);
 
@@ -530,6 +548,10 @@ public class MainActivity extends AppCompatActivity {
 				mystery.add(item);
 			}
 			if (meta.contains("movie") || meta.contains("film")) movie.add(item);
+			if (genres.contains("romance") || genres.contains("romantis") || genres.contains("romansa")
+				|| meta.contains("romance") || meta.contains("romantis")) {
+				romance.add(item);
+			}
 		}
 
 		ArrayList<HashMap<String, Object>> fallback = new ArrayList<>(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
@@ -538,12 +560,14 @@ public class MainActivity extends AppCompatActivity {
 		if (comedy.isEmpty()) comedy.addAll(fallback);
 		if (mystery.isEmpty()) mystery.addAll(fallback);
 		if (movie.isEmpty()) movie.addAll(fallback);
+		if (romance.isEmpty()) romance.addAll(fallback);
 
 		bindSectionLikePopularToday(recyclerCultivationDonghua, new ArrayList<>(cultivation.subList(0, Math.min(10, cultivation.size()))));
 		bindSectionLikePopularToday(recyclerCompletedDonghua, new ArrayList<>(completed.subList(0, Math.min(10, completed.size()))));
 		bindSectionLikePopularToday(recyclerComedyDonghua, new ArrayList<>(comedy.subList(0, Math.min(10, comedy.size()))));
 		bindSectionLikePopularToday(recyclerMysteryDonghua, new ArrayList<>(mystery.subList(0, Math.min(10, mystery.size()))));
 		bindSectionLikePopularToday(recyclerMovieDonghua, new ArrayList<>(movie.subList(0, Math.min(10, movie.size()))));
+		bindSlimRomanceSection(recyclerRomanceDonghua, new ArrayList<>(romance.subList(0, Math.min(10, romance.size()))));
 	}
 
 	private void setupContinueWatchingSection() {
@@ -838,7 +862,7 @@ public class MainActivity extends AppCompatActivity {
 		return new ArrayList<>(dedup.values());
 	}
 
-	private ArrayList<HashMap<String, Object>> sortCatalogByPrimaryAndSecondary(
+	private ArrayList<HashMap<String, Object>> sortCatalogByViews(
 		List<HashMap<String, Object>> src, final Map<String, Long> primary, final Map<String, Long> secondary
 	) {
 		ArrayList<HashMap<String, Object>> sorted = new ArrayList<>(src);
@@ -862,51 +886,79 @@ public class MainActivity extends AppCompatActivity {
 	private void sortAndRenderPopularSections() {
 		if (fullCatalogList == null || fullCatalogList.isEmpty()) return;
 
-		ArrayList<HashMap<String, Object>> todaySorted = sortCatalogByPrimaryAndSecondary(fullCatalogList, viewsDailyMap, viewsTotalMap);
-		ArrayList<HashMap<String, Object>> totalSorted = sortCatalogByPrimaryAndSecondary(fullCatalogList, viewsTotalMap, null);
+		ArrayList<HashMap<String, Object>> todaySorted = sortCatalogByViews(fullCatalogList, viewsDailyMap, viewsTotalMap);
+		ArrayList<HashMap<String, Object>> dongflixSorted = sortCatalogByViews(fullCatalogList, viewsTotalMap, viewsDailyMap);
 
 		ArrayList<HashMap<String, Object>> todaySlice = new ArrayList<>(todaySorted.subList(0, Math.min(8, todaySorted.size())));
-		ArrayList<HashMap<String, Object>> popularSlice = new ArrayList<>(totalSorted.subList(0, Math.min(10, totalSorted.size())));
+		ArrayList<HashMap<String, Object>> dongflixPopularSlice = new ArrayList<>(dongflixSorted.subList(0, Math.min(10, dongflixSorted.size())));
 
 		bindSectionLikePopularToday(recyclerPopular, todaySlice);
-		if (listPopular != null) listPopular.setAdapter(new ListPopularAdapter(popularSlice));
+		bindSectionLikePopularToday(recyclerPopularDongflix, dongflixPopularSlice);
+
 		if (recyclerSearchList != null && (inputSearch == null || inputSearch.getText().toString().trim().isEmpty())) {
-			recyclerSearchList.setAdapter(new ListPopularAdapter(popularSlice));
+			recyclerSearchList.setAdapter(new ListPopularAdapter(dongflixPopularSlice));
 		}
 		populateCategorizedSections();
 	}
 
-	private void syncFirebaseViewsAndSort() {
+	private void attachFirebasePopularityListeners() {
+		detachFirebasePopularityListeners();
+
 		Calendar cal = Calendar.getInstance();
 		String todayStr = String.format(Locale.US, "%04d-%02d-%02d",
 			cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH));
-		DatabaseReference rootDb = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference();
 
-		rootDb.child("views_total").addListenerForSingleValueEvent(new ValueEventListener() {
+		DatabaseReference rootDb = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference();
+		viewsTotalRef = rootDb.child("views_total");
+		viewsDailyTodayRef = rootDb.child("views_daily").child(todayStr);
+
+		viewsTotalListener = new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snap) {
 				if (isFinishing() || isDestroyed()) return;
 				viewsTotalMap.clear();
-				for (DataSnapshot child : snap.getChildren()) {
-					if (child.getKey() != null) viewsTotalMap.put(child.getKey(), parseLongSafe(child.getValue()));
+				if (snap.exists()) {
+					for (DataSnapshot child : snap.getChildren()) {
+						if (child.getKey() != null) {
+							viewsTotalMap.put(child.getKey(), parseLongSafe(child.getValue()));
+						}
+					}
 				}
 				sortAndRenderPopularSections();
 			}
-			@Override public void onCancelled(@NonNull DatabaseError error) {}
-		});
 
-		rootDb.child("views_daily").child(todayStr).addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override public void onCancelled(@NonNull DatabaseError error) {}
+		};
+
+		viewsDailyListener = new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snap) {
 				if (isFinishing() || isDestroyed()) return;
 				viewsDailyMap.clear();
-				for (DataSnapshot child : snap.getChildren()) {
-					if (child.getKey() != null) viewsDailyMap.put(child.getKey(), parseLongSafe(child.getValue()));
+				if (snap.exists()) {
+					for (DataSnapshot child : snap.getChildren()) {
+						if (child.getKey() != null) {
+							viewsDailyMap.put(child.getKey(), parseLongSafe(child.getValue()));
+						}
+					}
 				}
 				sortAndRenderPopularSections();
 			}
+
 			@Override public void onCancelled(@NonNull DatabaseError error) {}
-		});
+		};
+
+		viewsTotalRef.addValueEventListener(viewsTotalListener);
+		viewsDailyTodayRef.addValueEventListener(viewsDailyListener);
+	}
+
+	private void detachFirebasePopularityListeners() {
+		if (viewsTotalRef != null && viewsTotalListener != null) {
+			viewsTotalRef.removeEventListener(viewsTotalListener);
+		}
+		if (viewsDailyTodayRef != null && viewsDailyListener != null) {
+			viewsDailyTodayRef.removeEventListener(viewsDailyListener);
+		}
 	}
 
 	private boolean isFavoriteSlug(String slug) {
@@ -1033,8 +1085,9 @@ public class MainActivity extends AppCompatActivity {
 				for (View v : singles) if (v != null) v.invalidate();
 
 				RecyclerView[] hRecyclers = {
-					recyclerPopular, recyclerCultivationDonghua, recyclerCompletedDonghua,
-					recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua, listPopular
+					recyclerPopular, recyclerPopularDongflix, recyclerRomanceDonghua,
+					recyclerCultivationDonghua, recyclerCompletedDonghua,
+					recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
 				};
 				for (RecyclerView rv : hRecyclers) {
 					if (rv != null) for (int i = 0; i < rv.getChildCount(); i++) invalidateRecursive(rv.getChildAt(i));
@@ -1068,6 +1121,7 @@ public class MainActivity extends AppCompatActivity {
 	protected void onDestroy() {
 		stopMainShimmer();
 		stopHeroAutoSlider();
+		detachFirebasePopularityListeners();
 		super.onDestroy();
 	}
 
@@ -1080,12 +1134,13 @@ public class MainActivity extends AppCompatActivity {
 
 		gridview1 = findViewById(R.id.gridview1);
 		recyclerPopular = findViewById(R.id.recyclerPopular);
+		recyclerPopularDongflix = findViewById(R.id.recyclerPopularDongflix);
+		recyclerRomanceDonghua = findViewById(R.id.recyclerRomanceDonghua);
 		recyclerCultivationDonghua = findViewById(R.id.recyclerCultivationDonghua);
 		recyclerCompletedDonghua = findViewById(R.id.recyclerCompletedDonghua);
 		recyclerComedyDonghua = findViewById(R.id.recyclerComedyDonghua);
 		recyclerMysteryDonghua = findViewById(R.id.recyclerMysteryDonghua);
 		recyclerMovieDonghua = findViewById(R.id.recyclerMovieDonghua);
-		listPopular = findViewById(R.id.listPopular);
 
 		recyclerSearchList = findViewById(R.id.recycler_search_list);
 		searchBarContainer = findViewById(R.id.search_bar_container);
@@ -1201,7 +1256,7 @@ public class MainActivity extends AppCompatActivity {
 					if (q.isEmpty()) {
 						if (textSearchSectionLabel != null) {
 							textSearchSectionLabel.setVisibility(View.VISIBLE);
-							textSearchSectionLabel.setText("Populer");
+							textSearchSectionLabel.setText("Populer di Dongflix");
 						}
 						if (recyclerSearchList != null) recyclerSearchList.setAdapter(new ListPopularAdapter(listMap));
 					} else {
@@ -1268,7 +1323,7 @@ public class MainActivity extends AppCompatActivity {
 				}
 
 				bindSectionLikePopularToday(recyclerPopular, listMap);
-				if (listPopular != null) listPopular.setAdapter(new ListPopularAdapter(listMap));
+				bindSectionLikePopularToday(recyclerPopularDongflix, listMap);
 				populateCategorizedSections();
 				sortAndRenderPopularSections();
 				applyOutfitFontsWithoutBold();
@@ -1317,17 +1372,13 @@ public class MainActivity extends AppCompatActivity {
 		if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.INVISIBLE);
 		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
 
-		RecyclerView[] hList = {
-			recyclerPopular, recyclerCultivationDonghua, recyclerCompletedDonghua,
-			recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
+		RecyclerView[] standardList = {
+			recyclerPopular, recyclerPopularDongflix, recyclerCultivationDonghua,
+			recyclerCompletedDonghua, recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
 		};
-		for (RecyclerView rv : hList) bindSectionLikePopularToday(rv, dummy);
+		for (RecyclerView rv : standardList) bindSectionLikePopularToday(rv, dummy);
+		bindSlimRomanceSection(recyclerRomanceDonghua, dummy);
 
-		if (listPopular != null) {
-			listPopular.setLayoutManager(new LinearLayoutManager(this));
-			listPopular.setNestedScrollingEnabled(false);
-			listPopular.setAdapter(new ListPopularAdapter(dummy));
-		}
 		if (recyclerSearchList != null) {
 			recyclerSearchList.setLayoutManager(new LinearLayoutManager(this));
 			recyclerSearchList.setAdapter(new ListPopularAdapter(dummy));
@@ -1526,12 +1577,12 @@ public class MainActivity extends AppCompatActivity {
 		if (mainScroll != null) {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
-				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldX, int oldY) {
 					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 						resetNavbarToExpanded();
 						return;
 					}
-					int dy = scrollY - oldScrollY;
+					int dy = scrollY - oldY;
 					if (scrollY <= 20 || dy < -12) setNavbarCompactState(false);
 					else if (dy > 14 && scrollY > 80) setNavbarCompactState(true);
 				}
@@ -1698,12 +1749,16 @@ public class MainActivity extends AppCompatActivity {
 
 	public class HorizontalPosterAdapter extends RecyclerView.Adapter<HorizontalPosterAdapter.ViewHolder> {
 		private final ArrayList<HashMap<String, Object>> data;
-		private final int cardWidthDp, cardHeightDp;
+		private final int cardWidthDp, cardHeightDp, rightMarginDp;
+		private final float radiusDp, titleSp;
 
-		public HorizontalPosterAdapter(ArrayList<HashMap<String, Object>> arr, int wDp, int hDp) {
+		public HorizontalPosterAdapter(ArrayList<HashMap<String, Object>> arr, int wDp, int hDp, float radDp, int gapDp, float tSp) {
 			this.data = arr;
 			this.cardWidthDp = wDp;
 			this.cardHeightDp = hDp;
+			this.radiusDp = radDp;
+			this.rightMarginDp = gapDp;
+			this.titleSp = tSp;
 		}
 
 		@Override
@@ -1714,12 +1769,12 @@ public class MainActivity extends AppCompatActivity {
 			LinearLayout root = new LinearLayout(parent.getContext());
 			root.setOrientation(LinearLayout.VERTICAL);
 			RecyclerView.LayoutParams rlp = new RecyclerView.LayoutParams(wPx, ViewGroup.LayoutParams.WRAP_CONTENT);
-			rlp.rightMargin = (int) (10 * d);
+			rlp.rightMargin = (int) (rightMarginDp * d);
 			root.setLayoutParams(rlp);
 
 			androidx.cardview.widget.CardView card = new androidx.cardview.widget.CardView(parent.getContext());
 			card.setLayoutParams(new LinearLayout.LayoutParams(wPx, hPx));
-			card.setRadius(16 * d);
+			card.setRadius(radiusDp * d);
 			card.setCardElevation(0f);
 			card.setCardBackgroundColor(Color.parseColor("#12141A"));
 
@@ -1733,17 +1788,17 @@ public class MainActivity extends AppCompatActivity {
 			overlay.addView(imgCover);
 
 			View scrim = new View(parent.getContext());
-			scrim.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (60 * d), Gravity.BOTTOM));
+			scrim.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (56 * d), Gravity.BOTTOM));
 			scrim.setTag("bottom_scrim");
 			overlay.addView(scrim);
 
 			TextView tvStatus = new TextView(parent.getContext());
 			FrameLayout.LayoutParams sLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
-			sLp.setMargins((int) (8 * d), (int) (8 * d), (int) (8 * d), 0);
+			sLp.setMargins((int) (7 * d), (int) (7 * d), (int) (7 * d), 0);
 			tvStatus.setLayoutParams(sLp);
-			tvStatus.setPadding((int) (8 * d), (int) (3 * d), (int) (8 * d), (int) (3 * d));
+			tvStatus.setPadding((int) (7 * d), (int) (2 * d), (int) (7 * d), (int) (2 * d));
 			tvStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+			tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
 			tvStatus.setTextColor(Color.WHITE);
 			tvStatus.setMaxLines(1);
 			tvStatus.setTag("text_status");
@@ -1751,10 +1806,10 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView tvEp = new TextView(parent.getContext());
 			FrameLayout.LayoutParams eLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
-			eLp.setMargins((int) (9 * d), 0, (int) (9 * d), (int) (8 * d));
+			eLp.setMargins((int) (8 * d), 0, (int) (8 * d), (int) (7 * d));
 			tvEp.setLayoutParams(eLp);
 			tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
 			tvEp.setTextColor(Color.WHITE);
 			tvEp.setMaxLines(1);
 			tvEp.setEllipsize(TextUtils.TruncateAt.END);
@@ -1765,13 +1820,13 @@ public class MainActivity extends AppCompatActivity {
 			root.addView(card);
 
 			TextView tvTitle = new TextView(parent.getContext());
-			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (36 * d));
-			tLp.topMargin = (int) (7 * d);
+			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (34 * d));
+			tLp.topMargin = (int) (6 * d);
 			tvTitle.setLayoutParams(tLp);
 			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-			tvTitle.setTextColor(Color.WHITE);
-			tvTitle.setLineSpacing(0f, 1.12f);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleSp);
+			tvTitle.setTextColor(Color.parseColor("#E2E8F0"));
+			tvTitle.setLineSpacing(0f, 1.1f);
 			tvTitle.setMaxLines(2);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 			tvTitle.setTag("text_title");
@@ -1786,7 +1841,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = v.getResources().getDisplayMetrics().density;
 			if (v.getLayoutParams() instanceof RecyclerView.LayoutParams) {
 				RecyclerView.LayoutParams rlp = (RecyclerView.LayoutParams) v.getLayoutParams();
-				rlp.rightMargin = (pos == data.size() - 1) ? 0 : (int) (10 * d);
+				rlp.rightMargin = (pos == data.size() - 1) ? 0 : (int) (rightMarginDp * d);
 				v.setLayoutParams(rlp);
 			}
 
@@ -1800,7 +1855,7 @@ public class MainActivity extends AppCompatActivity {
 			if (item == null) return;
 
 			if (item.containsKey("is_loading")) {
-				if (imgCover != null) { imgCover.setImageResource(android.R.color.transparent); imgCover.setBackground(createMainShimmerDrawable(16 * d)); }
+				if (imgCover != null) { imgCover.setImageResource(android.R.color.transparent); imgCover.setBackground(createMainShimmerDrawable(radiusDp * d)); }
 				if (scrim != null) scrim.setVisibility(View.GONE);
 				if (tvStatus != null) { tvStatus.setText(""); tvStatus.setVisibility(View.INVISIBLE); }
 				if (tvEp != null) { tvEp.setText(""); tvEp.setVisibility(View.INVISIBLE); }
