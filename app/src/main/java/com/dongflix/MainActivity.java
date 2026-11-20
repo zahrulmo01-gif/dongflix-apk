@@ -4,6 +4,7 @@ import android.Manifest;
 import android.animation.*;
 import android.app.*;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.content.res.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
@@ -555,7 +556,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayoutManager.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
@@ -1525,12 +1526,12 @@ public class MainActivity extends AppCompatActivity {
 		if (mainScroll != null) {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
-				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldX, int oldY) {
+				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
 					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 						resetNavbarToExpanded();
 						return;
 					}
-					int dy = scrollY - oldY;
+					int dy = scrollY - oldScrollY;
 					if (scrollY <= 20 || dy < -12) setNavbarCompactState(false);
 					else if (dy > 14 && scrollY > 80) setNavbarCompactState(true);
 				}
@@ -1839,7 +1840,7 @@ public class MainActivity extends AppCompatActivity {
 
 	public class PustakaListAdapter extends RecyclerView.Adapter<PustakaListAdapter.ViewHolder> {
 		private final ArrayList<HashMap<String, Object>> data;
-		private final int mode; // 0 = Riwayat, 1 = Daftarku, 2 = Unduhan
+		private final int mode;
 
 		public PustakaListAdapter(ArrayList<HashMap<String, Object>> arr, int mode) {
 			this.data = arr;
