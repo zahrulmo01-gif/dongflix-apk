@@ -24,39 +24,13 @@
 			android:layout_height="wrap_content"
 			android:orientation="vertical">
 
-			<!-- Indikator Icon Refresh Saja (Gaya YouTube) -->
-			<FrameLayout
-				android:id="@+id/pull_refresh_indicator"
-				android:layout_width="40dp"
-				android:layout_height="40dp"
-				android:layout_gravity="center_horizontal"
-				android:layout_marginTop="12dp"
-				android:layout_marginBottom="4dp"
-				android:visibility="gone">
-
-				<ProgressBar
-					android:id="@+id/pull_refresh_spinner"
-					android:layout_width="24dp"
-					android:layout_height="24dp"
-					android:layout_gravity="center"
-					android:indeterminateTint="#FFFFFF" />
-
-				<ImageView
-					android:id="@+id/img_pull_refresh_icon"
-					android:layout_width="20dp"
-					android:layout_height="20dp"
-					android:layout_gravity="center"
-					android:contentDescription="Refresh"
-					android:src="@android:drawable/ic_popup_sync" />
-			</FrameLayout>
-
-			<!-- Header Top (Tidak Melayang) -->
+			<!-- Header Top (Tidak Melayang, Tanpa Background/Stroke di Notif & Pesan) -->
 			<RelativeLayout
 				android:id="@+id/relativelayout69"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:paddingLeft="16dp"
-				android:paddingTop="12dp"
+				android:paddingTop="14dp"
 				android:paddingRight="16dp"
 				android:paddingBottom="10dp">
 
@@ -81,6 +55,8 @@
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
 						android:layout_marginStart="10dp"
+						android:ellipsize="end"
+						android:maxLines="1"
 						android:textColor="#FFFFFF"
 						android:textSize="15sp" />
 				</LinearLayout>
@@ -96,34 +72,36 @@
 
 					<FrameLayout
 						android:id="@+id/btn_top_search"
-						android:layout_width="40dp"
-						android:layout_height="40dp"
-						android:layout_marginEnd="8dp">
+						android:layout_width="38dp"
+						android:layout_height="38dp"
+						android:layout_marginEnd="6dp"
+						android:background="@android:color/transparent">
 
 						<ImageView
 							android:id="@+id/img_top_search"
-							android:layout_width="19dp"
-							android:layout_height="19dp"
+							android:layout_width="21dp"
+							android:layout_height="21dp"
 							android:layout_gravity="center"
 							android:src="@drawable/ic_search" />
 					</FrameLayout>
 
 					<FrameLayout
 						android:id="@+id/btn_top_chat"
-						android:layout_width="40dp"
-						android:layout_height="40dp">
+						android:layout_width="38dp"
+						android:layout_height="38dp"
+						android:background="@android:color/transparent">
 
 						<ImageView
 							android:id="@+id/img_top_chat"
-							android:layout_width="19dp"
-							android:layout_height="19dp"
+							android:layout_width="21dp"
+							android:layout_height="21dp"
 							android:layout_gravity="center"
 							android:src="@drawable/ic_chat" />
 					</FrameLayout>
 				</LinearLayout>
 			</RelativeLayout>
 
-			<!-- Hero Banner -->
+			<!-- Hero Banner / Slider -->
 			<FrameLayout
 				android:id="@+id/hero_container"
 				android:layout_width="match_parent"
@@ -151,16 +129,18 @@
 					android:paddingRight="16dp"
 					android:paddingBottom="14dp">
 
+					<!-- Judul Slider: Maksimal 1 Baris -->
 					<TextView
 						android:id="@+id/text_hero_title"
 						android:layout_width="match_parent"
 						android:layout_height="wrap_content"
 						android:ellipsize="end"
-						android:lineSpacingExtra="2dp"
-						android:maxLines="2"
+						android:maxLines="1"
+						android:singleLine="true"
 						android:textColor="#FFFFFF"
 						android:textSize="22sp" />
 
+					<!-- Deskripsi Slider: Maksimal 2 Baris -->
 					<TextView
 						android:id="@+id/text_hero_desc"
 						android:layout_width="match_parent"
@@ -611,6 +591,31 @@
 			</LinearLayout>
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
+
+	<!-- Indikator Icon Refresh Melayang (Gaya YouTube, Tidak Menggeser Header) -->
+	<FrameLayout
+		android:id="@+id/pull_refresh_indicator"
+		android:layout_width="40dp"
+		android:layout_height="40dp"
+		android:layout_gravity="top|center_horizontal"
+		android:layout_marginTop="16dp"
+		android:visibility="gone">
+
+		<ProgressBar
+			android:id="@+id/pull_refresh_spinner"
+			android:layout_width="22dp"
+			android:layout_height="22dp"
+			android:layout_gravity="center"
+			android:indeterminateTint="#FFFFFF" />
+
+		<ImageView
+			android:id="@+id/img_pull_refresh_icon"
+			android:layout_width="20dp"
+			android:layout_height="20dp"
+			android:layout_gravity="center"
+			android:contentDescription="Refresh"
+			android:src="@android:drawable/ic_popup_sync" />
+	</FrameLayout>
 
 	<!-- Halaman Pencarian -->
 	<LinearLayout
