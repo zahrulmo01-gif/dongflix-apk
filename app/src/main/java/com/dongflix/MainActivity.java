@@ -1188,20 +1188,36 @@ public class MainActivity extends AppCompatActivity {
 		txtFavorite = findViewById(R.id.txt_favorite);
 		txtProfile = findViewById(R.id.txt_profile);
 
-		TextView[] seeAllList = {
-			textSeeAll, textPopularDongflixSeeAll, textRomanceSeeAll,
-			textCultivationSeeAll, textCompletedSeeAll, textComedySeeAll,
-			textMysterySeeAll, textMovieSeeAll, textContinueSeeAll
-		};
-		View.OnClickListener openCatalog = new View.OnClickListener() {
-			@Override
-			public void onClick(View v) { startActivity(new Intent(MainActivity.this, CatalogActivity.class)); }
-		};
-		for (TextView tv : seeAllList) {
+		final Map<TextView, String[]> seeAllConfig = new LinkedHashMap<>();
+		seeAllConfig.put(textSeeAll, new String[]{"Baru Diupdate", "all"});
+		seeAllConfig.put(textPopularDongflixSeeAll, new String[]{"Populer di Dongflix", "popular_dongflix"});
+		seeAllConfig.put(textRomanceSeeAll, new String[]{"Donghua Romantis Tipis-Tipis", "romance"});
+		seeAllConfig.put(textCultivationSeeAll, new String[]{"Kultivasi & Keabadian", "cultivation"});
+		seeAllConfig.put(textCompletedSeeAll, new String[]{"Donghua Tamat", "completed"});
+		seeAllConfig.put(textComedySeeAll, new String[]{"Donghua Komedi Ringan", "comedy"});
+		seeAllConfig.put(textMysterySeeAll, new String[]{"Misteri & Teka-Teki", "mystery"});
+		seeAllConfig.put(textMovieSeeAll, new String[]{"Donghua Movie", "movie"});
+
+		for (Map.Entry<TextView, String[]> entry : seeAllConfig.entrySet()) {
+			TextView tv = entry.getKey();
+			final String sectionTitle = entry.getValue()[0];
+			final String filterKey = entry.getValue()[1];
 			if (tv != null) {
 				tv.setTextColor(Color.parseColor("#94A3B8"));
-				if (tv != textContinueSeeAll) tv.setOnClickListener(openCatalog);
+				tv.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						Intent intent = new Intent(MainActivity.this, CatalogActivity.class);
+						intent.putExtra("section_title", sectionTitle);
+						intent.putExtra("filter_type", filterKey);
+						startActivity(intent);
+					}
+				});
 			}
+		}
+
+		if (textContinueSeeAll != null) {
+			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
 		}
 
 		if (imgTopNotif != null) {
