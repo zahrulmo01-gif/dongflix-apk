@@ -37,7 +37,7 @@ import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.text.format.DateUtils;
+import android.text.format.DateFormat;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -96,9 +96,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -211,7 +211,7 @@ public class WatchActivity extends AppCompatActivity {
 	private DatabaseReference commentsRef;
 	private ValueEventListener commentsListener;
 	private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
-	private final List<String> allUserMentions = new ArrayList<>();
+	private final List<HashMap<String, String>> allUsersDirectory = new ArrayList<>();
 	private final ArrayList<HashMap<String, Object>> mainCommentList = new ArrayList<>();
 	private final Map<String, List<HashMap<String, Object>>> repliesByParentMap = new HashMap<>();
 	private final ArrayList<String> stickerList = new ArrayList<>();
@@ -300,6 +300,15 @@ public class WatchActivity extends AppCompatActivity {
 		return (int) ((expVal - 1L) / 1000L) + 1;
 	}
 
+	private String formatShortDate(long ts) {
+		if (ts <= 0L) return "Baru";
+		try {
+			return DateFormat.format("M-d", new Date(ts)).toString();
+		} catch (Exception e) {
+			return "Baru";
+		}
+	}
+
 	private void addExpToCurrentUser(final long amount) {
 		String key = getCurrentUserKey();
 		if (key.isEmpty() || amount <= 0L) return;
@@ -341,13 +350,13 @@ public class WatchActivity extends AppCompatActivity {
 	private void loadUsersAndStickersFromFirebase() {
 		DatabaseReference rootDb = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference();
 
-		rootDb.child("users").addListenerForSingleValueEvent(new ValueEventListener() {
+		rootDb.child("users").addValueEventListener(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snap) {
 				if (isFinishing() || isDestroyed() || !snap.exists()) return;
 				userProfileMap.clear();
-				allUserMentions.clear();
-				Set<String> mentionSet = new HashSet<>();
+				allUsersDirectory.clear();
+				Set<String> seenKeys = new HashSet<>();
 
 				for (DataSnapshot child : snap.getChildren()) {
 					String key = child.getKey();
@@ -376,9 +385,9 @@ public class WatchActivity extends AppCompatActivity {
 						userProfileMap.put(email.toLowerCase(Locale.US).replace(".", ","), profile);
 					}
 
-					String mTag = !fallbackUser.isEmpty() ? fallbackUser : displayName;
-					if (!mTag.isEmpty() && mentionSet.add(mTag.toLowerCase(Locale.US))) {
-						allUserMentions.add(mTag);
+					String dedupKey = fallbackUser.toLowerCase(Locale.US);
+					if (!dedupKey.isEmpty() && seenKeys.add(dedupKey)) {
+						allUsersDirectory.add(profile);
 					}
 				}
 
@@ -437,6 +446,35 @@ public class WatchActivity extends AppCompatActivity {
 		fallback.put("photoURL", "");
 		fallback.put("exp", "0");
 		return fallback;
+	}
+
+	private void bindAvatarOrInitial(ImageView avatarView, TextView initialView, String photoUrl, String displayName, float d) {
+		String initial = (displayName != null && !displayName.trim().isEmpty())
+			? displayName.trim().substring(0, 1).toUpperCase(Locale.US)
+			: "U";
+
+		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
+			if (avatarView != null) {
+				avatarView.setVisibility(View.VISIBLE);
+				avatarView.clearColorFilter();
+				avatarView.setPadding(0, 0, 0, 0);
+				if (!isFinishing() && !isDestroyed()) {
+					Glide.with(WatchActivity.this).load(Uri.parse(photoUrl.trim())).circleCrop()
+						.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(avatarView);
+				}
+			}
+			if (initialView != null) initialView.setVisibility(View.GONE);
+		} else {
+			if (avatarView != null) avatarView.setVisibility(View.GONE);
+			if (initialView != null) {
+				initialView.setVisibility(View.VISIBLE);
+				initialView.setText(initial);
+				GradientDrawable circle = new GradientDrawable();
+				circle.setShape(GradientDrawable.OVAL);
+				circle.setColor(Color.parseColor("#262B36"));
+				initialView.setBackground(circle);
+			}
+		}
 	}
 
 	private void loadWatchHistoryFromFirebase() {
@@ -590,9 +628,10 @@ public class WatchActivity extends AppCompatActivity {
 		if (currentSlug.isEmpty()) return;
 		detachCommentsListener();
 
+		String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
 		commentsRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 			.getReference("comments")
-			.child(currentSlug);
+			.child(cleanKey);
 
 		commentsListener = new ValueEventListener() {
 			@Override
@@ -654,7 +693,7 @@ public class WatchActivity extends AppCompatActivity {
 
 				int total = allItems.size();
 				if (textCommentCount != null) textCommentCount.setText(String.valueOf(total));
-				if (activeCommentSheetHeader != null) activeCommentSheetHeader.setText(total + " komentar");
+				if (activeCommentSheetHeader != null) activeCommentSheetHeader.setText("Komentar " + total);
 				if (activeCommentSheetAdapter != null) activeCommentSheetAdapter.notifyDataSetChanged();
 			}
 
@@ -692,12 +731,11 @@ public class WatchActivity extends AppCompatActivity {
 		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, sheetHeight));
 
 		GradientDrawable sheetBg = new GradientDrawable();
-		sheetBg.setColor(Color.parseColor("#12151E"));
-		sheetBg.setCornerRadii(new float[]{20 * d, 20 * d, 20 * d, 20 * d, 0f, 0f, 0f, 0f});
-		sheetBg.setStroke((int) (1 * d), Color.parseColor("#1FFFFFFF"));
+		sheetBg.setColor(Color.parseColor("#161616"));
+		sheetBg.setCornerRadii(new float[]{18 * d, 18 * d, 18 * d, 18 * d, 0f, 0f, 0f, 0f});
 		root.setBackground(sheetBg);
 
-		// Header Gaya TikTok
+		// Header: "Komentar X" kiri + tombol X kanan (tanpa jumlah suka, tanpa unlike)
 		FrameLayout header = new FrameLayout(this);
 		header.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (46 * d)));
 		header.setPadding((int) (16 * d), 0, (int) (12 * d), 0);
@@ -707,9 +745,9 @@ public class WatchActivity extends AppCompatActivity {
 		totalCount += mainCommentList.size();
 
 		TextView tvHeader = new TextView(this);
-		tvHeader.setText(totalCount + " komentar");
+		tvHeader.setText("Komentar " + totalCount);
 		tvHeader.setTextColor(Color.WHITE);
-		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
 		tvHeader.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvHeader.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER
@@ -718,7 +756,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		TextView btnClose = new TextView(this);
 		btnClose.setText("✕");
-		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+		btnClose.setTextColor(Color.parseColor("#E2E8F0"));
 		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
 		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnClose.setGravity(Gravity.CENTER);
@@ -731,94 +769,79 @@ public class WatchActivity extends AppCompatActivity {
 		header.addView(btnClose);
 		root.addView(header);
 
-		View topDiv = new View(this);
-		topDiv.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * d)));
-		topDiv.setBackgroundColor(Color.parseColor("#14FFFFFF"));
-		root.addView(topDiv);
-
-		// Daftar Komentar + Balasan
+		// Daftar Komentar
 		RecyclerView rvComments = new RecyclerView(this);
 		rvComments.setLayoutManager(new LinearLayoutManager(this));
 		rvComments.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-		rvComments.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+		rvComments.setPadding((int) (14 * d), (int) (6 * d), (int) (14 * d), (int) (8 * d));
 		rvComments.setClipToPadding(false);
 
-		final String[] selectedMainSticker = {""};
+		final String[] selectedStickerUrl = {""};
 		final String[] activeReplyParentId = {""};
-		final String[] selectedReplySticker = {""};
 
-		final ImageView ivMainStickerPreview = new ImageView(this);
-		final FrameLayout mainStickerBox = new FrameLayout(this);
-		mainStickerBox.setVisibility(View.GONE);
-		LinearLayout.LayoutParams msLp = new LinearLayout.LayoutParams((int) (64 * d), (int) (64 * d));
-		msLp.leftMargin = (int) (16 * d);
-		msLp.bottomMargin = (int) (6 * d);
-		mainStickerBox.setLayoutParams(msLp);
-		ivMainStickerPreview.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		ivMainStickerPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		final ImageView ivStickerPreview = new ImageView(this);
+		final FrameLayout stickerPreviewBox = new FrameLayout(this);
+		stickerPreviewBox.setVisibility(View.GONE);
+		LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams((int) (64 * d), (int) (64 * d));
+		spLp.leftMargin = (int) (54 * d);
+		spLp.bottomMargin = (int) (6 * d);
+		stickerPreviewBox.setLayoutParams(spLp);
+		ivStickerPreview.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		ivStickerPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
-		TextView btnRemoveMainSticker = new TextView(this);
-		btnRemoveMainSticker.setText("✕");
-		btnRemoveMainSticker.setTextColor(Color.WHITE);
-		btnRemoveMainSticker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
-		btnRemoveMainSticker.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnRemoveMainSticker.setGravity(Gravity.CENTER);
-		btnRemoveMainSticker.setBackgroundColor(Color.parseColor("#EF4444"));
-		btnRemoveMainSticker.setLayoutParams(new FrameLayout.LayoutParams((int) (18 * d), (int) (18 * d), Gravity.TOP | Gravity.END));
-		btnRemoveMainSticker.setOnClickListener(new View.OnClickListener() {
+		TextView btnRemoveSticker = new TextView(this);
+		btnRemoveSticker.setText("✕");
+		btnRemoveSticker.setTextColor(Color.WHITE);
+		btnRemoveSticker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+		btnRemoveSticker.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnRemoveSticker.setGravity(Gravity.CENTER);
+		btnRemoveSticker.setBackgroundColor(Color.parseColor("#EF4444"));
+		btnRemoveSticker.setLayoutParams(new FrameLayout.LayoutParams((int) (18 * d), (int) (18 * d), Gravity.TOP | Gravity.END));
+		btnRemoveSticker.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				selectedMainSticker[0] = "";
-				mainStickerBox.setVisibility(View.GONE);
+				selectedStickerUrl[0] = "";
+				stickerPreviewBox.setVisibility(View.GONE);
 			}
 		});
-		mainStickerBox.addView(ivMainStickerPreview);
-		mainStickerBox.addView(btnRemoveMainSticker);
+		stickerPreviewBox.addView(ivStickerPreview);
+		stickerPreviewBox.addView(btnRemoveSticker);
 
 		final LinearLayout replyBanner = new LinearLayout(this);
 		replyBanner.setOrientation(LinearLayout.HORIZONTAL);
 		replyBanner.setGravity(Gravity.CENTER_VERTICAL);
 		replyBanner.setVisibility(View.GONE);
-		replyBanner.setPadding((int) (16 * d), (int) (6 * d), (int) (16 * d), (int) (6 * d));
-		replyBanner.setBackgroundColor(Color.parseColor("#181D2B"));
+		replyBanner.setPadding((int) (16 * d), (int) (5 * d), (int) (16 * d), (int) (5 * d));
+		replyBanner.setBackgroundColor(Color.parseColor("#202024"));
 
 		final TextView tvReplyBanner = new TextView(this);
 		tvReplyBanner.setTextColor(Color.parseColor("#38BDF8"));
-		tvReplyBanner.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		tvReplyBanner.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		tvReplyBanner.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvReplyBanner.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
 		final EditText etInput = new EditText(this);
-		etInput.setHint("Tambah komentar... (ketik @ untuk tag)");
-		etInput.setHintTextColor(Color.parseColor("#64748B"));
+		etInput.setHint("Tambahkan komentar...");
+		etInput.setHintTextColor(Color.parseColor("#8E8E93"));
 		etInput.setTextColor(Color.WHITE);
 		etInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 		etInput.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		etInput.setMaxLines(3);
-		etInput.setPadding((int) (16 * d), (int) (9 * d), (int) (16 * d), (int) (9 * d));
-
-		GradientDrawable inputBg = new GradientDrawable();
-		inputBg.setColor(Color.parseColor("#1C212E"));
-		inputBg.setCornerRadius(1000f);
-		etInput.setBackground(inputBg);
-
-		LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-		etLp.rightMargin = (int) (8 * d);
-		etInput.setLayoutParams(etLp);
+		etInput.setBackgroundColor(Color.TRANSPARENT);
+		etInput.setPadding((int) (10 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
+		etInput.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
 		TextView btnCancelReply = new TextView(this);
 		btnCancelReply.setText("Batal");
 		btnCancelReply.setTextColor(Color.parseColor("#94A3B8"));
-		btnCancelReply.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		btnCancelReply.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		btnCancelReply.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnCancelReply.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				activeReplyParentId[0] = "";
-				selectedReplySticker[0] = "";
 				replyBanner.setVisibility(View.GONE);
 				etInput.setText("");
-				etInput.setHint("Tambah komentar... (ketik @ untuk tag)");
 			}
 		});
 		replyBanner.addView(tvReplyBanner);
@@ -831,10 +854,8 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onReplyRequested(String parentCommentId, String mentionTag) {
 					activeReplyParentId[0] = parentCommentId;
-					selectedReplySticker[0] = "";
-					mainStickerBox.setVisibility(View.GONE);
 					replyBanner.setVisibility(View.VISIBLE);
-					tvReplyBanner.setText("Membalas @" + mentionTag);
+					tvReplyBanner.setText("Balas @" + mentionTag);
 
 					String prefix = "@" + mentionTag + " ";
 					etInput.setText(prefix);
@@ -848,12 +869,120 @@ public class WatchActivity extends AppCompatActivity {
 		rvComments.setAdapter(activeCommentSheetAdapter);
 		root.addView(rvComments);
 
-		// Saran Mention @ saat mengetik @
-		final LinearLayout mentionBar = new LinearLayout(this);
-		mentionBar.setOrientation(LinearLayout.HORIZONTAL);
-		mentionBar.setVisibility(View.GONE);
-		mentionBar.setPadding((int) (14 * d), (int) (6 * d), (int) (14 * d), (int) (6 * d));
-		mentionBar.setBackgroundColor(Color.parseColor("#0B1329"));
+		// List Saran Tag @ Rapi (Card per User dengan Avatar/Inisial, Nama & @username)
+		final RecyclerView rvMentionList = new RecyclerView(this);
+		rvMentionList.setLayoutManager(new LinearLayoutManager(this));
+		rvMentionList.setVisibility(View.GONE);
+		LinearLayout.LayoutParams mListLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (144 * d)
+		);
+		mListLp.setMargins((int) (14 * d), 0, (int) (14 * d), (int) (6 * d));
+		rvMentionList.setLayoutParams(mListLp);
+		GradientDrawable mListBg = new GradientDrawable();
+		mListBg.setColor(Color.parseColor("#1F1F23"));
+		mListBg.setCornerRadius(14 * d);
+		mListBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
+		rvMentionList.setBackground(mListBg);
+		rvMentionList.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
+
+		final ArrayList<HashMap<String, String>> filteredMentions = new ArrayList<>();
+		final RecyclerView.Adapter<RecyclerView.ViewHolder> mentionAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+			@NonNull
+			@Override
+			public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+				LinearLayout row = new LinearLayout(parent.getContext());
+				row.setOrientation(LinearLayout.HORIZONTAL);
+				row.setGravity(Gravity.CENTER_VERTICAL);
+				RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				lp.bottomMargin = (int) (4 * d);
+				row.setLayoutParams(lp);
+				row.setPadding((int) (8 * d), (int) (6 * d), (int) (10 * d), (int) (6 * d));
+				GradientDrawable rBg = new GradientDrawable();
+				rBg.setColor(Color.parseColor("#28282E"));
+				rBg.setCornerRadius(10 * d);
+				row.setBackground(rBg);
+
+				ImageView av = new ImageView(parent.getContext());
+				LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (26 * d), (int) (26 * d));
+				avLp.rightMargin = (int) (10 * d);
+				av.setLayoutParams(avLp);
+				av.setScaleType(ImageView.ScaleType.CENTER_CROP);
+				av.setTag("m_av");
+
+				TextView avIni = new TextView(parent.getContext());
+				LinearLayout.LayoutParams iniLp = new LinearLayout.LayoutParams((int) (26 * d), (int) (26 * d));
+				iniLp.rightMargin = (int) (10 * d);
+				avIni.setLayoutParams(iniLp);
+				avIni.setGravity(Gravity.CENTER);
+				avIni.setTextColor(Color.WHITE);
+				avIni.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+				avIni.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				avIni.setTag("m_ini");
+
+				LinearLayout txtCol = new LinearLayout(parent.getContext());
+				txtCol.setOrientation(LinearLayout.VERTICAL);
+				txtCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+				TextView tvN = new TextView(parent.getContext());
+				tvN.setTextColor(Color.WHITE);
+				tvN.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+				tvN.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				tvN.setTag("m_name");
+
+				TextView tvU = new TextView(parent.getContext());
+				tvU.setTextColor(Color.parseColor("#38BDF8"));
+				tvU.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+				tvU.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				tvU.setTag("m_user");
+
+				txtCol.addView(tvN);
+				txtCol.addView(tvU);
+				row.addView(av);
+				row.addView(avIni);
+				row.addView(txtCol);
+				return new RecyclerView.ViewHolder(row) {};
+			}
+
+			@Override
+			public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int pos) {
+				HashMap<String, String> u = filteredMentions.get(pos);
+				String name = u.get("name") != null ? u.get("name") : "User";
+				final String tag = u.get("username") != null && !u.get("username").isEmpty() ? u.get("username") : name;
+				String photo = u.get("photoURL");
+
+				ImageView av = holder.itemView.findViewWithTag("m_av");
+				TextView avIni = holder.itemView.findViewWithTag("m_ini");
+				TextView tvN = holder.itemView.findViewWithTag("m_name");
+				TextView tvU = holder.itemView.findViewWithTag("m_user");
+
+				bindAvatarOrInitial(av, avIni, photo, name, d);
+				if (tvN != null) tvN.setText(name);
+				if (tvU != null) tvU.setText("@" + tag);
+
+				holder.itemView.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						String cur = etInput.getText().toString();
+						int cursorPos = Math.min(cur.length(), Math.max(0, etInput.getSelectionStart()));
+						int atPos = cur.substring(0, cursorPos).lastIndexOf('@');
+						if (atPos >= 0) {
+							String next = cur.substring(0, atPos) + "@" + tag + " " + cur.substring(cursorPos);
+							etInput.setText(next);
+							etInput.setSelection(Math.min(next.length(), atPos + tag.length() + 2));
+						}
+						rvMentionList.setVisibility(View.GONE);
+					}
+				});
+			}
+
+			@Override
+			public int getItemCount() {
+				return filteredMentions.size();
+			}
+		};
+		rvMentionList.setAdapter(mentionAdapter);
 
 		etInput.addTextChangedListener(new TextWatcher() {
 			@Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -865,110 +994,126 @@ public class WatchActivity extends AppCompatActivity {
 				int atIdx = beforeCursor.lastIndexOf('@');
 				if (atIdx >= 0 && (atIdx == 0 || Character.isWhitespace(beforeCursor.charAt(atIdx - 1)))) {
 					String q = beforeCursor.substring(atIdx + 1).toLowerCase(Locale.US);
-					mentionBar.removeAllViews();
-					int added = 0;
-					for (String mTag : allUserMentions) {
-						if (mTag.toLowerCase(Locale.US).contains(q)) {
-							TextView chip = new TextView(WatchActivity.this);
-							chip.setText("@" + mTag);
-							chip.setTextColor(Color.parseColor("#38BDF8"));
-							chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-							chip.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-							chip.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
-							GradientDrawable cBg = new GradientDrawable();
-							cBg.setColor(Color.parseColor("#162038"));
-							cBg.setCornerRadius(100f);
-							chip.setBackground(cBg);
-							LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
-								ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-							);
-							cLp.rightMargin = (int) (8 * d);
-							chip.setLayoutParams(cLp);
-							final String picked = mTag;
-							chip.setOnClickListener(new View.OnClickListener() {
-								@Override
-								public void onClick(View v) {
-									String curText = etInput.getText().toString();
-									int pos = Math.min(curText.length(), Math.max(0, etInput.getSelectionStart()));
-									int atPos = curText.substring(0, pos).lastIndexOf('@');
-									if (atPos >= 0) {
-										String nextText = curText.substring(0, atPos) + "@" + picked + " " + curText.substring(pos);
-										etInput.setText(nextText);
-										etInput.setSelection(Math.min(nextText.length(), atPos + picked.length() + 2));
-									}
-									mentionBar.setVisibility(View.GONE);
-								}
-							});
-							mentionBar.addView(chip);
-							added++;
-							if (added >= 6) break;
+					filteredMentions.clear();
+					for (HashMap<String, String> u : allUsersDirectory) {
+						String n = u.get("name") != null ? u.get("name").toLowerCase(Locale.US) : "";
+						String un = u.get("username") != null ? u.get("username").toLowerCase(Locale.US) : "";
+						if (q.isEmpty() || n.contains(q) || un.contains(q)) {
+							filteredMentions.add(u);
+							if (filteredMentions.size() >= 8) break;
 						}
 					}
-					mentionBar.setVisibility(added > 0 ? View.VISIBLE : View.GONE);
+					mentionAdapter.notifyDataSetChanged();
+					rvMentionList.setVisibility(filteredMentions.isEmpty() ? View.GONE : View.VISIBLE);
 				} else {
-					mentionBar.setVisibility(View.GONE);
+					rvMentionList.setVisibility(View.GONE);
 				}
 			}
 			@Override public void afterTextChanged(Editable s) {}
 		});
 
-		root.addView(mentionBar);
+		root.addView(rvMentionList);
 		root.addView(replyBanner);
-		root.addView(mainStickerBox);
+		root.addView(stickerPreviewBox);
 
-		View botDiv = new View(this);
-		botDiv.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * d)));
-		botDiv.setBackgroundColor(Color.parseColor("#14FFFFFF"));
-		root.addView(botDiv);
+		// Bottom Input Bar: Avatar/Inisial Kiri + Pill Input ("Tambahkan komentar..." + Stiker + @) + Kirim
+		LinearLayout bottomBar = new LinearLayout(this);
+		bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+		bottomBar.setGravity(Gravity.CENTER_VERTICAL);
+		bottomBar.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (12 * d));
+		bottomBar.setBackgroundColor(Color.parseColor("#161616"));
 
-		// Input Bar + Tombol Stiker di Samping Tombol Kirim
-		LinearLayout inputBar = new LinearLayout(this);
-		inputBar.setOrientation(LinearLayout.HORIZONTAL);
-		inputBar.setGravity(Gravity.CENTER_VERTICAL);
-		inputBar.setPadding((int) (12 * d), (int) (8 * d), (int) (12 * d), (int) (10 * d));
-		inputBar.setBackgroundColor(Color.parseColor("#12151E"));
+		FirebaseUser curUser = FirebaseAuth.getInstance().getCurrentUser();
+		HashMap<String, String> myProf = curUser != null
+			? resolveUserProfile(curUser.getEmail(), curUser.getUid())
+			: new HashMap<String, String>();
+		String myName = myProf.get("name") != null ? myProf.get("name") : "U";
+		String myPhoto = myProf.get("photoURL") != null ? myProf.get("photoURL") : "";
+
+		ImageView ivMyAvatar = new ImageView(this);
+		LinearLayout.LayoutParams myAvLp = new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d));
+		myAvLp.rightMargin = (int) (10 * d);
+		ivMyAvatar.setLayoutParams(myAvLp);
+		ivMyAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+
+		TextView tvMyInitial = new TextView(this);
+		LinearLayout.LayoutParams myIniLp = new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d));
+		myIniLp.rightMargin = (int) (10 * d);
+		tvMyInitial.setLayoutParams(myIniLp);
+		tvMyInitial.setGravity(Gravity.CENTER);
+		tvMyInitial.setTextColor(Color.WHITE);
+		tvMyInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		tvMyInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		bindAvatarOrInitial(ivMyAvatar, tvMyInitial, myPhoto, myName, d);
+		bottomBar.addView(ivMyAvatar);
+		bottomBar.addView(tvMyInitial);
+
+		LinearLayout inputPill = new LinearLayout(this);
+		inputPill.setOrientation(LinearLayout.HORIZONTAL);
+		inputPill.setGravity(Gravity.CENTER_VERTICAL);
+		inputPill.setPadding((int) (6 * d), (int) (2 * d), (int) (8 * d), (int) (2 * d));
+		LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+		pillLp.rightMargin = (int) (8 * d);
+		inputPill.setLayoutParams(pillLp);
+		GradientDrawable pillInputBg = new GradientDrawable();
+		pillInputBg.setColor(Color.parseColor("#262629"));
+		pillInputBg.setCornerRadius(1000f);
+		inputPill.setBackground(pillInputBg);
 
 		TextView btnSticker = new TextView(this);
 		btnSticker.setText("☺");
-		btnSticker.setTextColor(Color.parseColor("#CBD5E1"));
+		btnSticker.setTextColor(Color.parseColor("#D1D5DB"));
 		btnSticker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
 		btnSticker.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnSticker.setGravity(Gravity.CENTER);
-		LinearLayout.LayoutParams stBtnLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
-		stBtnLp.rightMargin = (int) (6 * d);
-		btnSticker.setLayoutParams(stBtnLp);
-		GradientDrawable stBtnBg = new GradientDrawable();
-		stBtnBg.setShape(GradientDrawable.OVAL);
-		stBtnBg.setColor(Color.parseColor("#1C212E"));
-		btnSticker.setBackground(stBtnBg);
-
+		btnSticker.setLayoutParams(new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d)));
 		btnSticker.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				openStickerPickerDialog(new OnStickerPickedListener() {
 					@Override
 					public void onStickerPicked(String url) {
-						if (!activeReplyParentId[0].isEmpty()) {
-							selectedReplySticker[0] = url;
-						} else {
-							selectedMainSticker[0] = url;
-						}
-						ivMainStickerPreview.setImageURI(null);
-						Glide.with(WatchActivity.this).load(Uri.parse(url)).into(ivMainStickerPreview);
-						mainStickerBox.setVisibility(View.VISIBLE);
+						selectedStickerUrl[0] = url;
+						ivStickerPreview.setImageURI(null);
+						Glide.with(WatchActivity.this).load(Uri.parse(url)).into(ivStickerPreview);
+						stickerPreviewBox.setVisibility(View.VISIBLE);
 					}
 				});
 			}
 		});
 
+		TextView btnAtMention = new TextView(this);
+		btnAtMention.setText("@");
+		btnAtMention.setTextColor(Color.parseColor("#D1D5DB"));
+		btnAtMention.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+		btnAtMention.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnAtMention.setGravity(Gravity.CENTER);
+		btnAtMention.setLayoutParams(new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d)));
+		btnAtMention.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String cur = etInput.getText().toString();
+				int pos = Math.min(cur.length(), Math.max(0, etInput.getSelectionStart()));
+				String needSpace = (pos > 0 && !Character.isWhitespace(cur.charAt(pos - 1))) ? " @" : "@";
+				String next = cur.substring(0, pos) + needSpace + cur.substring(pos);
+				etInput.setText(next);
+				etInput.setSelection(Math.min(next.length(), pos + needSpace.length()));
+				etInput.requestFocus();
+			}
+		});
+
+		inputPill.addView(etInput);
+		inputPill.addView(btnSticker);
+		inputPill.addView(btnAtMention);
+
 		TextView btnSend = new TextView(this);
 		btnSend.setText("Kirim");
 		btnSend.setTextColor(Color.WHITE);
-		btnSend.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		btnSend.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 		btnSend.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnSend.setGravity(Gravity.CENTER);
-		btnSend.setPadding((int) (14 * d), (int) (9 * d), (int) (14 * d), (int) (9 * d));
-
+		btnSend.setPadding((int) (13 * d), (int) (8 * d), (int) (13 * d), (int) (8 * d));
 		GradientDrawable sendBg = new GradientDrawable();
 		sendBg.setColor(Color.parseColor("#2563EB"));
 		sendBg.setCornerRadius(1000f);
@@ -978,55 +1123,52 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void onClick(View v) {
 				String text = etInput.getText().toString().trim();
-				String parentId = activeReplyParentId[0];
-				String stickerUrl = !parentId.isEmpty() ? selectedReplySticker[0] : selectedMainSticker[0];
+				String stUrl = selectedStickerUrl[0];
+				String pId = activeReplyParentId[0];
 
-				if ((text.isEmpty() && (stickerUrl == null || stickerUrl.isEmpty())) || currentSlug.isEmpty()) return;
+				if ((text.isEmpty() && stUrl.isEmpty()) || currentSlug.isEmpty()) return;
 
-				FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-				if (user == null) {
+				FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
+				if (u == null) {
 					Toast.makeText(WatchActivity.this, "Silakan login untuk berkomentar", Toast.LENGTH_SHORT).show();
 					return;
 				}
 
-				String userKey = sanitizeUserKey(user.getEmail(), user.getUid());
-				HashMap<String, String> myProf = resolveUserProfile(user.getEmail(), user.getUid());
-				boolean isAdmin = user.getEmail() != null && ADMIN_EMAIL.equalsIgnoreCase(user.getEmail().trim());
+				String uKey = sanitizeUserKey(u.getEmail(), u.getUid());
+				HashMap<String, String> p = resolveUserProfile(u.getEmail(), u.getUid());
+				boolean isAdm = u.getEmail() != null && ADMIN_EMAIL.equalsIgnoreCase(u.getEmail().trim());
 
+				// Hanya simpan uid, email, text, stickerUrl, timestamp, parentId, isAdmin (nama & profil ambil dari users)
 				Map<String, Object> payload = new HashMap<>();
-				payload.put("uid", user.getUid());
-				payload.put("email", user.getEmail() != null ? user.getEmail() : "");
-				payload.put("author", myProf.get("name"));
-				payload.put("username", myProf.get("username"));
-				payload.put("photoURL", myProf.get("photoURL"));
+				payload.put("uid", u.getUid());
+				payload.put("email", u.getEmail() != null ? u.getEmail() : "");
 				payload.put("text", text);
-				payload.put("stickerUrl", stickerUrl != null ? stickerUrl : "");
+				payload.put("stickerUrl", stUrl);
 				payload.put("timestamp", System.currentTimeMillis());
-				payload.put("isAdmin", isAdmin);
-				if (!parentId.isEmpty()) {
-					payload.put("parentId", parentId);
+				payload.put("isAdmin", isAdm);
+				if (!pId.isEmpty()) {
+					payload.put("parentId", pId);
 				}
 
-				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+				String cleanSlugKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
 				String entryId = String.valueOf(System.currentTimeMillis());
 				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 					.getReference("comments")
-					.child(cleanKey)
+					.child(cleanSlugKey)
 					.child(entryId)
 					.setValue(payload);
 
 				addExpToCurrentUser(500L);
 
 				etInput.setText("");
-				selectedMainSticker[0] = "";
-				selectedReplySticker[0] = "";
+				selectedStickerUrl[0] = "";
 				activeReplyParentId[0] = "";
-				mainStickerBox.setVisibility(View.GONE);
+				stickerPreviewBox.setVisibility(View.GONE);
 				replyBanner.setVisibility(View.GONE);
-				mentionBar.setVisibility(View.GONE);
+				rvMentionList.setVisibility(View.GONE);
 
-				if (!userKey.isEmpty() && !userProfileMap.containsKey(userKey)) {
-					userProfileMap.put(userKey, myProf);
+				if (!uKey.isEmpty() && !userProfileMap.containsKey(uKey)) {
+					userProfileMap.put(uKey, p);
 				}
 
 				InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -1034,10 +1176,9 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		});
 
-		inputBar.addView(etInput);
-		inputBar.addView(btnSticker);
-		inputBar.addView(btnSend);
-		root.addView(inputBar);
+		bottomBar.addView(inputPill);
+		bottomBar.addView(btnSend);
+		root.addView(bottomBar);
 
 		sheet.setContentView(root);
 		sheet.setOnShowListener(new DialogInterface.OnShowListener() {
@@ -1064,95 +1205,6 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		});
 		sheet.show();
-	}
-
-	private interface OnStickerPickedListener {
-		void onStickerPicked(String url);
-	}
-
-	private void openStickerPickerDialog(final OnStickerPickedListener listener) {
-		final float d = getResources().getDisplayMetrics().density;
-		final BottomSheetDialog picker = new BottomSheetDialog(this);
-
-		LinearLayout root = new LinearLayout(this);
-		root.setOrientation(LinearLayout.VERTICAL);
-		root.setPadding((int) (16 * d), (int) (14 * d), (int) (16 * d), (int) (20 * d));
-
-		GradientDrawable bg = new GradientDrawable();
-		bg.setColor(Color.parseColor("#090E17"));
-		bg.setCornerRadii(new float[]{20 * d, 20 * d, 20 * d, 20 * d, 0f, 0f, 0f, 0f});
-		bg.setStroke((int) (1 * d), Color.parseColor("#1E293B"));
-		root.setBackground(bg);
-
-		TextView title = new TextView(this);
-		title.setText("Pilih Stiker & GIF");
-		title.setTextColor(Color.WHITE);
-		title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
-		title.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		tLp.bottomMargin = (int) (12 * d);
-		title.setLayoutParams(tLp);
-		root.addView(title);
-
-		RecyclerView rvStickers = new RecyclerView(this);
-		rvStickers.setLayoutManager(new GridLayoutManager(this, 4));
-		rvStickers.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (220 * d)
-		));
-
-		rvStickers.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-			@NonNull
-			@Override
-			public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-				FrameLayout cell = new FrameLayout(parent.getContext());
-				RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
-					ViewGroup.LayoutParams.MATCH_PARENT, (int) (72 * d)
-				);
-				lp.setMargins((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
-				cell.setLayoutParams(lp);
-				GradientDrawable cBg = new GradientDrawable();
-				cBg.setColor(Color.parseColor("#121927"));
-				cBg.setCornerRadius(12 * d);
-				cell.setBackground(cBg);
-
-				ImageView iv = new ImageView(parent.getContext());
-				iv.setLayoutParams(new FrameLayout.LayoutParams(
-					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-				));
-				iv.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
-				iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-				iv.setTag("sticker_img");
-				cell.addView(iv);
-				return new RecyclerView.ViewHolder(cell) {};
-			}
-
-			@Override
-			public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int pos) {
-				final String url = stickerList.get(pos);
-				ImageView iv = holder.itemView.findViewWithTag("sticker_img");
-				if (iv != null && !isFinishing() && !isDestroyed()) {
-					Glide.with(WatchActivity.this).load(Uri.parse(url)).into(iv);
-				}
-				holder.itemView.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						picker.dismiss();
-						if (listener != null) listener.onStickerPicked(url);
-					}
-				});
-			}
-
-			@Override
-			public int getItemCount() {
-				return stickerList.size();
-			}
-		});
-
-		root.addView(rvStickers);
-		picker.setContentView(root);
-		picker.show();
 	}
 
 	private interface OnReplyClickListener {
@@ -1188,86 +1240,87 @@ public class WatchActivity extends AppCompatActivity {
 			);
 			cardLp.bottomMargin = (int) (14 * d);
 			card.setLayoutParams(cardLp);
-			card.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
-
-			GradientDrawable cardBg = new GradientDrawable();
-			cardBg.setColor(Color.parseColor("#090D16"));
-			cardBg.setCornerRadius(12 * d);
-			cardBg.setStroke((int) (1 * d), Color.parseColor("#0DFFFFFF"));
-			card.setBackground(cardBg);
+			card.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
 
 			ImageView avatar = new ImageView(parent.getContext());
-			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
-			avLp.rightMargin = (int) (12 * d);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
+			avLp.rightMargin = (int) (10 * d);
 			avatar.setLayoutParams(avLp);
 			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
 			avatar.setTag("avatar");
+
+			TextView tvInitial = new TextView(parent.getContext());
+			LinearLayout.LayoutParams iniLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
+			iniLp.rightMargin = (int) (10 * d);
+			tvInitial.setLayoutParams(iniLp);
+			tvInitial.setGravity(Gravity.CENTER);
+			tvInitial.setTextColor(Color.WHITE);
+			tvInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+			tvInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvInitial.setTag("initial");
 
 			LinearLayout col = new LinearLayout(parent.getContext());
 			col.setOrientation(LinearLayout.VERTICAL);
 			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-			LinearLayout headerRow = new LinearLayout(parent.getContext());
-			headerRow.setOrientation(LinearLayout.HORIZONTAL);
-			headerRow.setGravity(Gravity.CENTER_VERTICAL);
+			// Nama + • admin atau • lv1
+			LinearLayout nameLine = new LinearLayout(parent.getContext());
+			nameLine.setOrientation(LinearLayout.HORIZONTAL);
+			nameLine.setGravity(Gravity.CENTER_VERTICAL);
 
 			TextView tvName = new TextView(parent.getContext());
-			tvName.setTextColor(Color.parseColor("#94A3B8"));
-			tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+			tvName.setTextColor(Color.parseColor("#A1A1AA"));
+			tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 			tvName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvName.setTag("name");
 
-			TextView tvBadge = new TextView(parent.getContext());
-			tvBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
-			tvBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvBadge.setPadding((int) (6 * d), (int) (1 * d), (int) (6 * d), (int) (1 * d));
-			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			bLp.leftMargin = (int) (6 * d);
-			tvBadge.setLayoutParams(bLp);
-			tvBadge.setTag("badge");
+			TextView tvRoleOrLvl = new TextView(parent.getContext());
+			tvRoleOrLvl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			tvRoleOrLvl.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvRoleOrLvl.setTag("role_lvl");
 
-			headerRow.addView(tvName);
-			headerRow.addView(tvBadge);
+			nameLine.addView(tvName);
+			nameLine.addView(tvRoleOrLvl);
 
+			// Isi komentar
 			TextView tvBody = new TextView(parent.getContext());
-			tvBody.setTextColor(Color.parseColor("#F1F5F9"));
+			tvBody.setTextColor(Color.parseColor("#F4F4F5"));
 			tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 			tvBody.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvBody.setLineSpacing(2 * d, 1.08f);
 			LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			bodyLp.topMargin = (int) (4 * d);
+			bodyLp.topMargin = (int) (2 * d);
 			tvBody.setLayoutParams(bodyLp);
 			tvBody.setTag("body");
 
 			ImageView ivSticker = new ImageView(parent.getContext());
-			LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams((int) (120 * d), (int) (120 * d));
+			LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams((int) (110 * d), (int) (110 * d));
 			stLp.topMargin = (int) (6 * d);
 			ivSticker.setLayoutParams(stLp);
 			ivSticker.setScaleType(ImageView.ScaleType.FIT_CENTER);
 			ivSticker.setTag("sticker");
 
+			// Tanggal + Balas (+ Hapus jika milik sendiri/admin) — tanpa jumlah suka & tanpa unlike
 			LinearLayout footerRow = new LinearLayout(parent.getContext());
 			footerRow.setOrientation(LinearLayout.HORIZONTAL);
 			footerRow.setGravity(Gravity.CENTER_VERTICAL);
 			LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			fLp.topMargin = (int) (6 * d);
+			fLp.topMargin = (int) (4 * d);
 			footerRow.setLayoutParams(fLp);
 
 			TextView tvTime = new TextView(parent.getContext());
-			tvTime.setTextColor(Color.parseColor("#64748B"));
-			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+			tvTime.setTextColor(Color.parseColor("#71717A"));
+			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 			tvTime.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvTime.setTag("time");
 
 			TextView btnReply = new TextView(parent.getContext());
 			btnReply.setText("Balas");
-			btnReply.setTextColor(Color.parseColor("#94A3B8"));
+			btnReply.setTextColor(Color.parseColor("#A1A1AA"));
 			btnReply.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 			btnReply.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			LinearLayout.LayoutParams rBtnLp = new LinearLayout.LayoutParams(
@@ -1293,27 +1346,42 @@ public class WatchActivity extends AppCompatActivity {
 			footerRow.addView(btnReply);
 			footerRow.addView(btnDelete);
 
-			TextView btnToggleReplies = new TextView(parent.getContext());
-			btnToggleReplies.setTextColor(Color.parseColor("#38BDF8"));
-			btnToggleReplies.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-			btnToggleReplies.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			LinearLayout.LayoutParams tglLp = new LinearLayout.LayoutParams(
+			// — Lihat X balasan ∨
+			LinearLayout toggleRow = new LinearLayout(parent.getContext());
+			toggleRow.setOrientation(LinearLayout.HORIZONTAL);
+			toggleRow.setGravity(Gravity.CENTER_VERTICAL);
+			LinearLayout.LayoutParams tglBoxLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			tglLp.topMargin = (int) (8 * d);
-			btnToggleReplies.setLayoutParams(tglLp);
+			tglBoxLp.topMargin = (int) (8 * d);
+			toggleRow.setLayoutParams(tglBoxLp);
+			toggleRow.setTag("toggle_box");
+
+			View dash = new View(parent.getContext());
+			LinearLayout.LayoutParams dashLp = new LinearLayout.LayoutParams((int) (20 * d), (int) (1 * d));
+			dashLp.rightMargin = (int) (8 * d);
+			dash.setLayoutParams(dashLp);
+			dash.setBackgroundColor(Color.parseColor("#52525B"));
+
+			TextView btnToggleReplies = new TextView(parent.getContext());
+			btnToggleReplies.setTextColor(Color.parseColor("#A1A1AA"));
+			btnToggleReplies.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+			btnToggleReplies.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			btnToggleReplies.setTag("toggle_replies");
+
+			toggleRow.addView(dash);
+			toggleRow.addView(btnToggleReplies);
 
 			LinearLayout repliesContainer = new LinearLayout(parent.getContext());
 			repliesContainer.setOrientation(LinearLayout.VERTICAL);
-			repliesContainer.setPadding((int) (12 * d), (int) (8 * d), 0, 0);
+			repliesContainer.setPadding((int) (6 * d), (int) (8 * d), 0, 0);
 			repliesContainer.setTag("replies_container");
 
-			col.addView(headerRow);
+			col.addView(nameLine);
 			col.addView(tvBody);
 			col.addView(ivSticker);
 			col.addView(footerRow);
-			col.addView(btnToggleReplies);
+			col.addView(toggleRow);
 			col.addView(repliesContainer);
 
 			card.addView(avatar);
@@ -1331,7 +1399,7 @@ public class WatchActivity extends AppCompatActivity {
 			String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
 
-			// Nama & profil selalu diambil dari users
+			// Profil & nama selalu dari users
 			HashMap<String, String> prof = resolveUserProfile(email, uid);
 			final String displayName = prof.get("name");
 			final String mentionHandle = prof.get("username") != null && !prof.get("username").isEmpty()
@@ -1339,35 +1407,35 @@ public class WatchActivity extends AppCompatActivity {
 			String photoUrl = prof.get("photoURL");
 			long exp = parseLongSafe(prof.get("exp"), 0L);
 			boolean isAdmin = !email.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(email.trim());
+			int level = calculateLevel(exp);
 
+			float d = holder.itemView.getResources().getDisplayMetrics().density;
 			ImageView avatar = holder.itemView.findViewWithTag("avatar");
+			TextView tvInitial = holder.itemView.findViewWithTag("initial");
 			TextView tvName = holder.itemView.findViewWithTag("name");
-			TextView tvBadge = holder.itemView.findViewWithTag("badge");
+			TextView tvRoleOrLvl = holder.itemView.findViewWithTag("role_lvl");
 			TextView tvBody = holder.itemView.findViewWithTag("body");
 			ImageView ivSticker = holder.itemView.findViewWithTag("sticker");
 			TextView tvTime = holder.itemView.findViewWithTag("time");
 			TextView btnReply = holder.itemView.findViewWithTag("btn_reply");
 			TextView btnDelete = holder.itemView.findViewWithTag("btn_delete");
+			View toggleBox = holder.itemView.findViewWithTag("toggle_box");
 			TextView btnToggleReplies = holder.itemView.findViewWithTag("toggle_replies");
 			LinearLayout repliesContainer = holder.itemView.findViewWithTag("replies_container");
 
+			bindAvatarOrInitial(avatar, tvInitial, photoUrl, displayName, d);
+
 			if (tvName != null) {
 				tvName.setText(displayName);
-				tvName.setTextColor(isAdmin ? Color.parseColor("#F59E0B") : Color.parseColor("#94A3B8"));
 			}
-			if (tvBadge != null) {
-				GradientDrawable bBg = new GradientDrawable();
-				bBg.setCornerRadius(100f);
+			if (tvRoleOrLvl != null) {
 				if (isAdmin) {
-					bBg.setColor(Color.parseColor("#451A03"));
-					tvBadge.setTextColor(Color.parseColor("#FBBF24"));
-					tvBadge.setText("★ ADMIN • Lv999+");
+					tvRoleOrLvl.setText(" • admin");
+					tvRoleOrLvl.setTextColor(Color.parseColor("#38BDF8"));
 				} else {
-					bBg.setColor(Color.parseColor("#162338"));
-					tvBadge.setTextColor(Color.parseColor("#38BDF8"));
-					tvBadge.setText("Lv" + calculateLevel(exp));
+					tvRoleOrLvl.setText(" • lv" + level);
+					tvRoleOrLvl.setTextColor(Color.parseColor("#71717A"));
 				}
-				tvBadge.setBackground(bBg);
 			}
 			if (tvBody != null) {
 				tvBody.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
@@ -1382,17 +1450,7 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			}
 			if (tvTime != null) {
-				tvTime.setText(DateUtils.getRelativeTimeSpanString(ts, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
-			}
-
-			if (avatar != null) {
-				if (photoUrl != null && !photoUrl.isEmpty() && !isFinishing() && !isDestroyed()) {
-					Glide.with(WatchActivity.this).load(Uri.parse(photoUrl)).circleCrop()
-						.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(avatar);
-				} else {
-					avatar.setImageResource(R.drawable.ic_profile);
-					avatar.setColorFilter(Color.parseColor("#CBD5E1"));
-				}
+				tvTime.setText(formatShortDate(ts));
 			}
 
 			FirebaseUser curUser = FirebaseAuth.getInstance().getCurrentUser();
@@ -1438,23 +1496,22 @@ public class WatchActivity extends AppCompatActivity {
 
 			final List<HashMap<String, Object>> replies = repliesMap.get(commentId);
 			final boolean isExpanded = expandedParents.contains(commentId);
-			if (btnToggleReplies != null && repliesContainer != null) {
+			if (toggleBox != null && btnToggleReplies != null && repliesContainer != null) {
 				if (replies != null && !replies.isEmpty()) {
-					btnToggleReplies.setVisibility(View.VISIBLE);
+					toggleBox.setVisibility(View.VISIBLE);
 					btnToggleReplies.setText(isExpanded
 						? "Sembunyikan balasan ▴"
-						: "Lihat " + replies.size() + " balasan ▾");
+						: "Lihat " + replies.size() + " balasan ∨");
 					repliesContainer.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
 					repliesContainer.removeAllViews();
 
 					if (isExpanded) {
-						float d = holder.itemView.getResources().getDisplayMetrics().density;
 						for (HashMap<String, Object> rItem : replies) {
 							repliesContainer.addView(buildReplyRowView(repliesContainer.getContext(), rItem, d));
 						}
 					}
 
-					btnToggleReplies.setOnClickListener(new View.OnClickListener() {
+					toggleBox.setOnClickListener(new View.OnClickListener() {
 						@Override
 						public void onClick(View v) {
 							if (expandedParents.contains(commentId)) {
@@ -1466,7 +1523,7 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					});
 				} else {
-					btnToggleReplies.setVisibility(View.GONE);
+					toggleBox.setVisibility(View.GONE);
 					repliesContainer.setVisibility(View.GONE);
 					repliesContainer.removeAllViews();
 				}
@@ -1485,6 +1542,7 @@ public class WatchActivity extends AppCompatActivity {
 			String rPhoto = rProf.get("photoURL");
 			long rExp = parseLongSafe(rProf.get("exp"), 0L);
 			boolean rAdmin = !rEmail.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(rEmail.trim());
+			int rLevel = calculateLevel(rExp);
 
 			LinearLayout row = new LinearLayout(ctx);
 			row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1494,44 +1552,57 @@ public class WatchActivity extends AppCompatActivity {
 			);
 			lp.bottomMargin = (int) (10 * d);
 			row.setLayoutParams(lp);
-			row.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
-			GradientDrawable rBg = new GradientDrawable();
-			rBg.setColor(Color.parseColor("#111726"));
-			rBg.setCornerRadius(8 * d);
-			row.setBackground(rBg);
+			row.setPadding((int) (6 * d), (int) (4 * d), (int) (6 * d), (int) (4 * d));
 
 			ImageView av = new ImageView(ctx);
-			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (26 * d), (int) (26 * d));
-			avLp.rightMargin = (int) (10 * d);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (24 * d), (int) (24 * d));
+			avLp.rightMargin = (int) (8 * d);
 			av.setLayoutParams(avLp);
 			av.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			if (rPhoto != null && !rPhoto.isEmpty() && !isFinishing() && !isDestroyed()) {
-				Glide.with(WatchActivity.this).load(Uri.parse(rPhoto)).circleCrop()
-					.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(av);
-			} else {
-				av.setImageResource(R.drawable.ic_profile);
-				av.setColorFilter(Color.parseColor("#CBD5E1"));
-			}
+
+			TextView avIni = new TextView(ctx);
+			LinearLayout.LayoutParams iniLp = new LinearLayout.LayoutParams((int) (24 * d), (int) (24 * d));
+			iniLp.rightMargin = (int) (8 * d);
+			avIni.setLayoutParams(iniLp);
+			avIni.setGravity(Gravity.CENTER);
+			avIni.setTextColor(Color.WHITE);
+			avIni.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+			avIni.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+			bindAvatarOrInitial(av, avIni, rPhoto, rName, d);
 
 			LinearLayout col = new LinearLayout(ctx);
 			col.setOrientation(LinearLayout.VERTICAL);
 			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+			LinearLayout nRow = new LinearLayout(ctx);
+			nRow.setOrientation(LinearLayout.HORIZONTAL);
+			nRow.setGravity(Gravity.CENTER_VERTICAL);
+
 			TextView tvN = new TextView(ctx);
-			tvN.setText(rName + (rAdmin ? " • ★ ADMIN Lv999+" : " • Lv" + calculateLevel(rExp)));
-			tvN.setTextColor(rAdmin ? Color.parseColor("#F59E0B") : Color.parseColor("#94A3B8"));
-			tvN.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			tvN.setText(rName);
+			tvN.setTextColor(Color.parseColor("#A1A1AA"));
+			tvN.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
 			tvN.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+			TextView tvTag = new TextView(ctx);
+			tvTag.setText(rAdmin ? " • admin" : " • lv" + rLevel);
+			tvTag.setTextColor(rAdmin ? Color.parseColor("#38BDF8") : Color.parseColor("#71717A"));
+			tvTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+			tvTag.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+			nRow.addView(tvN);
+			nRow.addView(tvTag);
 
 			TextView tvB = new TextView(ctx);
 			tvB.setText(rText);
-			tvB.setTextColor(Color.WHITE);
-			tvB.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			tvB.setTextColor(Color.parseColor("#F4F4F5"));
+			tvB.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
 			tvB.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvB.setVisibility(rText.isEmpty() ? View.GONE : View.VISIBLE);
 
 			ImageView ivS = new ImageView(ctx);
-			LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams((int) (96 * d), (int) (96 * d));
+			LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams((int) (92 * d), (int) (92 * d));
 			sLp.topMargin = (int) (4 * d);
 			ivS.setLayoutParams(sLp);
 			ivS.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -1543,17 +1614,18 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			TextView tvT = new TextView(ctx);
-			tvT.setText(DateUtils.getRelativeTimeSpanString(rTs, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
-			tvT.setTextColor(Color.parseColor("#64748B"));
-			tvT.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+			tvT.setText(formatShortDate(rTs));
+			tvT.setTextColor(Color.parseColor("#71717A"));
+			tvT.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
 			tvT.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 
-			col.addView(tvN);
+			col.addView(nRow);
 			col.addView(tvB);
 			col.addView(ivS);
 			col.addView(tvT);
 
 			row.addView(av);
+			row.addView(avIni);
 			row.addView(col);
 			return row;
 		}
