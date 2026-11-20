@@ -318,7 +318,7 @@
 					android:clipChildren="false" />
 			</LinearLayout>
 
-			<!-- POPULER HARI INI (Tanpa Lihat semua) -->
+			<!-- POPULER HARI INI -->
 			<RelativeLayout
 				android:id="@+id/layout_section_popular"
 				android:layout_width="match_parent"
@@ -350,7 +350,7 @@
 				app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
 				tools:listitem="@layout/item_popular_donghua" />
 
-			<!-- BARU DIUPDATE (Ada Lihat semua) -->
+			<!-- BARU DIUPDATE -->
 			<RelativeLayout
 				android:id="@+id/relativelayout72"
 				android:layout_width="match_parent"
