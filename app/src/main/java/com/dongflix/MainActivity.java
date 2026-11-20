@@ -578,7 +578,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayoutManager.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
@@ -1578,12 +1578,12 @@ public class MainActivity extends AppCompatActivity {
 		if (mainScroll != null) {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
-				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldX, int oldY) {
 					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 						resetNavbarToExpanded();
 						return;
 					}
-					int dy = scrollY - oldScrollY;
+					int dy = scrollY - oldY;
 					if (scrollY <= 20 || dy < -12) setNavbarCompactState(false);
 					else if (dy > 14 && scrollY > 80) setNavbarCompactState(true);
 				}
