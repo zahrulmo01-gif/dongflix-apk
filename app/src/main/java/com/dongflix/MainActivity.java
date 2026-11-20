@@ -132,6 +132,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 
 		setContentView(R.layout.activity_main);
+		CrashLogDialog.showIfAvailable(this);
 
 		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
 		favPrefs = getSharedPreferences("dongflix_favorites", Context.MODE_PRIVATE);
@@ -150,6 +151,12 @@ public class MainActivity extends AppCompatActivity {
 		loadLoggedInUserProfile(currentUser);
 		loadUserHistoryAndFavoritesFromFirebase(currentUser);
 		loadLocalDownloads();
+	}
+
+	private String safeStr(Map<String, Object> map, String key, String fallback) {
+		if (map == null || key == null) return fallback;
+		Object val = map.get(key);
+		return val != null ? val.toString() : fallback;
 	}
 
 	@Override
@@ -260,8 +267,8 @@ public class MainActivity extends AppCompatActivity {
 						return;
 					}
 				} catch (Exception ignored) {}
-			} else {
-				Glide.with(getApplicationContext())
+			} else if (!isFinishing() && !isDestroyed()) {
+				Glide.with(MainActivity.this)
 					.load(Uri.parse(cleanUrl))
 					.circleCrop()
 					.placeholder(R.drawable.ic_profile)
@@ -322,6 +329,7 @@ public class MainActivity extends AppCompatActivity {
 			.addListenerForSingleValueEvent(new ValueEventListener() {
 				@Override
 				public void onDataChange(@NonNull DataSnapshot snapshot) {
+					if (isFinishing() || isDestroyed()) return;
 					if (!snapshot.exists()) {
 						applyCircularAvatar(imgUserAvatar, "");
 						return;
@@ -347,7 +355,9 @@ public class MainActivity extends AppCompatActivity {
 
 				@Override
 				public void onCancelled(@NonNull DatabaseError error) {
-					applyCircularAvatar(imgUserAvatar, "");
+					if (!isFinishing() && !isDestroyed()) {
+						applyCircularAvatar(imgUserAvatar, "");
+					}
 				}
 			});
 	}
@@ -475,15 +485,15 @@ public class MainActivity extends AppCompatActivity {
 		heroSliderRunnable = new Runnable() {
 			@Override
 			public void run() {
-				if (listMap == null || listMap.size() < 3) return;
+				if (isFinishing() || isDestroyed() || listMap == null || listMap.size() < 3) return;
 				int pos = heroCurrentIndex % 3;
 				HashMap<String, Object> heroItem = listMap.get(pos);
 				currentHeroItem = heroItem;
 
-				String heroTitle = heroItem.get("title") != null ? heroItem.get("title").toString().trim() : "";
-				String heroSynopsis = heroItem.get("synopsis") != null ? cleanText(heroItem.get("synopsis").toString()) : "";
-				String heroCover = heroItem.get("cover") != null ? heroItem.get("cover").toString().trim() : "";
-				final String heroSlug = heroItem.get("slug") != null ? heroItem.get("slug").toString() : "";
+				String heroTitle = safeStr(heroItem, "title", "").trim();
+				String heroSynopsis = cleanText(safeStr(heroItem, "synopsis", ""));
+				String heroCover = safeStr(heroItem, "cover", "").trim();
+				final String heroSlug = safeStr(heroItem, "slug", "");
 
 				if (heroCover.contains("i.ibb.co.com")) {
 					heroCover = heroCover.replace("i.ibb.co.com", "i.ibb.co");
@@ -497,7 +507,7 @@ public class MainActivity extends AppCompatActivity {
 				updateHeroFavoriteIcon(heroSlug);
 
 				if (imgHeroBanner != null && !heroCover.isEmpty()) {
-					Glide.with(getApplicationContext())
+					Glide.with(MainActivity.this)
 						.load(Uri.parse(heroCover))
 						.centerCrop()
 						.placeholder(R.drawable.default_image)
@@ -518,13 +528,16 @@ public class MainActivity extends AppCompatActivity {
 				for (int i = 0; i < dots.length; i++) {
 					if (dots[i] != null) {
 						boolean isActive = (i == pos);
-						RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) dots[i].getLayoutParams();
-						params.width = isActive ? activeWidth : inactiveWidth;
-						params.height = fixedHeight;
-						if (i > 0) {
-							params.leftMargin = marginSpacing;
+						ViewGroup.LayoutParams rawLp = dots[i].getLayoutParams();
+						if (rawLp instanceof LinearLayout.LayoutParams) {
+							LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) rawLp;
+							params.width = isActive ? activeWidth : inactiveWidth;
+							params.height = fixedHeight;
+							if (i > 0) {
+								params.leftMargin = marginSpacing;
+							}
+							dots[i].setLayoutParams(params);
 						}
-						dots[i].setLayoutParams(params);
 						dots[i].setBackground(isActive ? activeDotDrawable : inactiveDotDrawable);
 					}
 				}
@@ -556,14 +569,14 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	private void populateMovieSection() {
-		if (recyclerMovieDonghua == null || fullCatalogList == null) return;
+		if (recyclerMovieDonghua == null || fullCatalogList == null || fullCatalogList.isEmpty()) return;
 
 		ArrayList<HashMap<String, Object>> movieList = new ArrayList<>();
 		for (HashMap<String, Object> item : fullCatalogList) {
-			String genres = item.get("genres") != null ? item.get("genres").toString().toLowerCase(Locale.US) : "";
-			String title = item.get("title") != null ? item.get("title").toString().toLowerCase(Locale.US) : "";
-			String type = item.get("type") != null ? item.get("type").toString().toLowerCase(Locale.US) : "";
-			String episode = item.get("episode") != null ? item.get("episode").toString().toLowerCase(Locale.US) : "";
+			String genres = safeStr(item, "genres", "").toLowerCase(Locale.US);
+			String title = safeStr(item, "title", "").toLowerCase(Locale.US);
+			String type = safeStr(item, "type", "").toLowerCase(Locale.US);
+			String episode = safeStr(item, "episode", "").toLowerCase(Locale.US);
 			String combined = genres + " " + title + " " + type + " " + episode;
 			if (combined.contains("movie") || combined.contains("film")) {
 				movieList.add(item);
@@ -735,6 +748,7 @@ public class MainActivity extends AppCompatActivity {
 		userNodeRef.child("history").addValueEventListener(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				if (isFinishing() || isDestroyed()) return;
 				ArrayList<HashMap<String, Object>> parsed = new ArrayList<>();
 				if (snapshot.exists()) {
 					for (DataSnapshot child : snapshot.getChildren()) {
@@ -767,6 +781,7 @@ public class MainActivity extends AppCompatActivity {
 		userNodeRef.child("favorites").addValueEventListener(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				if (isFinishing() || isDestroyed()) return;
 				ArrayList<HashMap<String, Object>> parsedFavs = new ArrayList<>();
 				if (snapshot.exists()) {
 					for (DataSnapshot child : snapshot.getChildren()) {
@@ -892,7 +907,7 @@ public class MainActivity extends AppCompatActivity {
 	private ArrayList<HashMap<String, Object>> getMergedFavoritesList() {
 		LinkedHashMap<String, HashMap<String, Object>> dedup = new LinkedHashMap<>();
 		for (HashMap<String, Object> item : favoritesList) {
-			String s = item.get("slug") != null ? item.get("slug").toString() : "";
+			String s = safeStr(item, "slug", "");
 			if (!s.isEmpty()) dedup.put(s, item);
 		}
 		if (favPrefs != null) {
@@ -905,7 +920,7 @@ public class MainActivity extends AppCompatActivity {
 							new TypeToken<HashMap<String, Object>>(){}.getType()
 						);
 						if (localMap != null) {
-							String s = localMap.get("slug") != null ? localMap.get("slug").toString() : e.getKey().substring(4);
+							String s = safeStr(localMap, "slug", e.getKey().substring(4));
 							if (!dedup.containsKey(s)) {
 								dedup.put(s, localMap);
 							}
@@ -1004,25 +1019,27 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
 			final HashMap<String, Object> item = data.get(position);
+			if (item == null) return;
 			ImageView thumb = holder.itemView.findViewWithTag("thumb");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 
-			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
-			String epRaw = item.get("episode") != null ? item.get("episode").toString().trim() : "1";
+			String title = safeStr(item, "title", "Donghua");
+			String epRaw = safeStr(item, "episode", "1").trim();
 			String epLabel = epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw;
-			String cov = item.get("cover") != null ? item.get("cover").toString() : (item.get("poster") != null ? item.get("poster").toString() : "");
+			String cov = safeStr(item, "cover", "");
+			if (cov.isEmpty()) cov = safeStr(item, "poster", "");
 
 			if (tvTitle != null) tvTitle.setText(title);
 			if (tvEp != null) tvEp.setText(epLabel);
-			if (thumb != null && !cov.isEmpty()) {
-				Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(thumb);
+			if (thumb != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+				Glide.with(MainActivity.this).load(Uri.parse(cov)).into(thumb);
 			}
 
 			holder.itemView.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+					String slug = safeStr(item, "slug", "");
 					openWatchBySlug(slug);
 				}
 			});
@@ -1145,6 +1162,7 @@ public class MainActivity extends AppCompatActivity {
 			TextView textTitle = _view.findViewWithTag("text_title");
 
 			final HashMap<String, Object> item = _data.get(_position);
+			if (item == null) return;
 
 			if (item.containsKey("is_loading")) {
 				if (imgCover != null) {
@@ -1180,18 +1198,18 @@ public class MainActivity extends AppCompatActivity {
 					statusBg.setCornerRadius(100f);
 					statusBg.setColor(Color.parseColor("#3B82F6"));
 					textStatus.setBackground(statusBg);
-					textStatus.setText(item.get("status") != null ? item.get("status").toString() : "");
+					textStatus.setText(safeStr(item, "status", ""));
 				}
 				if (textEpisode != null) {
 					textEpisode.setVisibility(View.VISIBLE);
-					textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
+					textEpisode.setText(safeStr(item, "episode", ""));
 				}
 				if (textTitle != null) {
 					textTitle.setBackgroundColor(Color.TRANSPARENT);
-					textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
+					textTitle.setText(safeStr(item, "title", ""));
 				}
 
-				String cov = item.get("cover") != null ? item.get("cover").toString().trim() : "";
+				String cov = safeStr(item, "cover", "").trim();
 				if (cov.contains("i.ibb.co.com")) {
 					cov = cov.replace("i.ibb.co.com", "i.ibb.co");
 				}
@@ -1199,14 +1217,14 @@ public class MainActivity extends AppCompatActivity {
 					cov = cov.replace("http://", "https://");
 				}
 
-				if (imgCover != null && !cov.isEmpty()) {
-					Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(imgCover);
+				if (imgCover != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(MainActivity.this).load(Uri.parse(cov)).into(imgCover);
 				}
 
 				_view.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+						String slug = safeStr(item, "slug", "");
 						openWatchBySlug(slug);
 					}
 				});
@@ -1241,28 +1259,30 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
 			final HashMap<String, Object> item = data.get(position);
+			if (item == null) return;
 			ImageView img = holder.itemView.findViewWithTag("thumb");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
 
-			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
-			String epRaw = item.get("episode") != null ? item.get("episode").toString().trim() : "1";
+			String title = safeStr(item, "title", "Donghua");
+			String epRaw = safeStr(item, "episode", "1").trim();
 			String epText = epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw;
-			String remText = item.get("remainingText") != null ? item.get("remainingText").toString() : "Lanjutkan menonton";
-			String cov = item.get("cover") != null ? item.get("cover").toString() : (item.get("poster") != null ? item.get("poster").toString() : "");
+			String remText = safeStr(item, "remainingText", "Lanjutkan menonton");
+			String cov = safeStr(item, "cover", "");
+			if (cov.isEmpty()) cov = safeStr(item, "poster", "");
 
 			if (tvTitle != null) tvTitle.setText(title);
 			if (tvEp != null) tvEp.setText(epText);
 			if (tvSub != null) tvSub.setText(remText);
-			if (img != null && !cov.isEmpty()) {
-				Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(img);
+			if (img != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+				Glide.with(MainActivity.this).load(Uri.parse(cov)).into(img);
 			}
 
 			holder.itemView.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+					String slug = safeStr(item, "slug", "");
 					openWatchBySlug(slug);
 				}
 			});
@@ -1296,27 +1316,29 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
 			final HashMap<String, Object> item = data.get(position);
+			if (item == null) return;
 			ImageView img = holder.itemView.findViewWithTag("thumb");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
 
-			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
-			String status = item.get("status") != null ? item.get("status").toString() : "Favorit";
-			String ep = item.get("episode") != null ? item.get("episode").toString() : "";
-			String cov = item.get("cover") != null ? item.get("cover").toString() : (item.get("poster") != null ? item.get("poster").toString() : "");
+			String title = safeStr(item, "title", "Donghua");
+			String status = safeStr(item, "status", "Favorit");
+			String ep = safeStr(item, "episode", "");
+			String cov = safeStr(item, "cover", "");
+			if (cov.isEmpty()) cov = safeStr(item, "poster", "");
 
 			if (tvTitle != null) tvTitle.setText(title);
 			if (tvEp != null) tvEp.setText(ep.isEmpty() ? "Daftarku" : ep);
 			if (tvSub != null) tvSub.setText(status);
-			if (img != null && !cov.isEmpty()) {
-				Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(img);
+			if (img != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+				Glide.with(MainActivity.this).load(Uri.parse(cov)).into(img);
 			}
 
 			holder.itemView.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+					String slug = safeStr(item, "slug", "");
 					openWatchBySlug(slug);
 				}
 			});
@@ -1350,14 +1372,15 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
 			final HashMap<String, Object> item = data.get(position);
+			if (item == null) return;
 			ImageView img = holder.itemView.findViewWithTag("thumb");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
 
-			String title = item.get("title") != null ? item.get("title").toString() : "Video";
-			String sizeMb = item.get("size_mb") != null ? item.get("size_mb").toString() : "";
-			final String path = item.get("file_path") != null ? item.get("file_path").toString() : "";
+			String title = safeStr(item, "title", "Video");
+			String sizeMb = safeStr(item, "size_mb", "");
+			final String path = safeStr(item, "file_path", "");
 
 			if (tvTitle != null) tvTitle.setText(title);
 			if (tvEp != null) tvEp.setText("OFFLINE");
@@ -1468,8 +1491,8 @@ public class MainActivity extends AppCompatActivity {
 		Collections.sort(todaySorted, new Comparator<HashMap<String, Object>>() {
 			@Override
 			public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
-				String slugA = a.get("slug") != null ? a.get("slug").toString() : "";
-				String slugB = b.get("slug") != null ? b.get("slug").toString() : "";
+				String slugA = safeStr(a, "slug", "");
+				String slugB = safeStr(b, "slug", "");
 				long dailyA = viewsDailyMap.containsKey(slugA) ? viewsDailyMap.get(slugA) : 0L;
 				long dailyB = viewsDailyMap.containsKey(slugB) ? viewsDailyMap.get(slugB) : 0L;
 				if (dailyB != dailyA) {
@@ -1485,8 +1508,8 @@ public class MainActivity extends AppCompatActivity {
 		Collections.sort(totalSorted, new Comparator<HashMap<String, Object>>() {
 			@Override
 			public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
-				String slugA = a.get("slug") != null ? a.get("slug").toString() : "";
-				String slugB = b.get("slug") != null ? b.get("slug").toString() : "";
+				String slugA = safeStr(a, "slug", "");
+				String slugB = safeStr(b, "slug", "");
 				long totalA = viewsTotalMap.containsKey(slugA) ? viewsTotalMap.get(slugA) : 0L;
 				long totalB = viewsTotalMap.containsKey(slugB) ? viewsTotalMap.get(slugB) : 0L;
 				return Long.compare(totalB, totalA);
@@ -1523,6 +1546,7 @@ public class MainActivity extends AppCompatActivity {
 		rootDb.child("views_total").addListenerForSingleValueEvent(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				if (isFinishing() || isDestroyed()) return;
 				viewsTotalMap.clear();
 				if (snapshot.exists()) {
 					for (DataSnapshot child : snapshot.getChildren()) {
@@ -1541,6 +1565,7 @@ public class MainActivity extends AppCompatActivity {
 		rootDb.child("views_daily").child(todayStr).addListenerForSingleValueEvent(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				if (isFinishing() || isDestroyed()) return;
 				viewsDailyMap.clear();
 				if (snapshot.exists()) {
 					for (DataSnapshot child : snapshot.getChildren()) {
@@ -1559,8 +1584,11 @@ public class MainActivity extends AppCompatActivity {
 
 	private void applyOutfitFontsWithoutBold() {
 		Typeface tf = getOutfitTypeface();
+		View contentView = getWindow().getDecorView().findViewById(android.R.id.content);
+		if (contentView == null) return;
+
 		Queue<View> viewQueue = new LinkedList<>();
-		viewQueue.add(getWindow().getDecorView().findViewById(android.R.id.content));
+		viewQueue.add(contentView);
 
 		while (!viewQueue.isEmpty()) {
 			View currentView = viewQueue.poll();
@@ -1586,8 +1614,8 @@ public class MainActivity extends AppCompatActivity {
 
 	private void toggleFavoriteItem(HashMap<String, Object> item) {
 		if (favPrefs == null || item == null) return;
-		String slug = item.get("slug") != null ? item.get("slug").toString() : "";
-		String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
+		String slug = safeStr(item, "slug", "");
+		String title = safeStr(item, "title", "Donghua");
 		if (slug.isEmpty()) return;
 
 		DatabaseReference favNode = !currentUserKey.isEmpty()
@@ -1882,8 +1910,8 @@ public class MainActivity extends AppCompatActivity {
 				public void onItemClick(AdapterView<?> _param1, View _param2, int _param3, long _param4) {
 					if (listMap != null && _param3 < listMap.size()) {
 						HashMap<String, Object> selectedData = listMap.get(_param3);
-						if (selectedData.containsKey("is_loading")) return;
-						String slug = selectedData.get("slug") != null ? selectedData.get("slug").toString() : "";
+						if (selectedData == null || selectedData.containsKey("is_loading")) return;
+						String slug = safeStr(selectedData, "slug", "");
 						openWatchBySlug(slug);
 					}
 				}
@@ -1925,8 +1953,8 @@ public class MainActivity extends AppCompatActivity {
 						}
 						ArrayList<HashMap<String, Object>> filtered = new ArrayList<>();
 						for (HashMap<String, Object> item : fullCatalogList) {
-							String title = item.get("title") != null ? item.get("title").toString().toLowerCase() : "";
-							String genres = item.get("genres") != null ? item.get("genres").toString().toLowerCase() : "";
+							String title = safeStr(item, "title", "").toLowerCase();
+							String genres = safeStr(item, "genres", "").toLowerCase();
 							if (title.contains(q) || genres.contains(q)) {
 								filtered.add(item);
 							}
@@ -1943,13 +1971,18 @@ public class MainActivity extends AppCompatActivity {
 		_dongflix_req_request_listener = new RequestNetwork.RequestListener() {
 			@Override
 			public void onResponse(String _param1, String _param2, HashMap<String, Object> _param3) {
+				if (isFinishing() || isDestroyed()) return;
 				final String _response = _param2;
 				stopMainShimmer();
 				hideRefreshIndicator();
 
 				DongflixPlayerManager.getInstance().cachedAllCatalogJson = _response;
 
-				fullCatalogList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
+				try {
+					fullCatalogList = new Gson().fromJson(_response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType());
+				} catch (Exception e) {
+					fullCatalogList = new ArrayList<>();
+				}
 				if (fullCatalogList == null) fullCatalogList = new ArrayList<>();
 
 				listMap = new ArrayList<>(fullCatalogList);
@@ -2010,6 +2043,7 @@ public class MainActivity extends AppCompatActivity {
 
 			@Override
 			public void onErrorResponse(String _param1, String _param2) {
+				if (isFinishing() || isDestroyed()) return;
 				stopMainShimmer();
 				hideRefreshIndicator();
 			}
@@ -2274,9 +2308,12 @@ public class MainActivity extends AppCompatActivity {
 		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		if (searchBarContainer != null) {
-			LinearLayout.LayoutParams sbLp = (LinearLayout.LayoutParams) searchBarContainer.getLayoutParams();
-			sbLp.topMargin = statusBarHeight + (int)(12 * density);
-			searchBarContainer.setLayoutParams(sbLp);
+			ViewGroup.LayoutParams rawSbLp = searchBarContainer.getLayoutParams();
+			if (rawSbLp instanceof LinearLayout.LayoutParams) {
+				LinearLayout.LayoutParams sbLp = (LinearLayout.LayoutParams) rawSbLp;
+				sbLp.topMargin = statusBarHeight + (int)(12 * density);
+				searchBarContainer.setLayoutParams(sbLp);
+			}
 
 			GradientDrawable sbBg = new GradientDrawable();
 			sbBg.setColor(Color.parseColor("#12141A"));
@@ -2457,7 +2494,7 @@ public class MainActivity extends AppCompatActivity {
 
 			HashMap<String, Object> item = _data.get(_position);
 
-			if (item.containsKey("is_loading")) {
+			if (item != null && item.containsKey("is_loading")) {
 				if (textTitle != null) {
 					textTitle.setText("");
 					textTitle.setBackground(createMainShimmerDrawable(8 * d));
@@ -2493,20 +2530,20 @@ public class MainActivity extends AppCompatActivity {
 					view2.setBackground(gradient);
 				}
 
-				if (textTitle != null) textTitle.setText(_data.get(_position).get("title").toString());
-				if (textStatus != null) textStatus.setText(_data.get(_position).get("status").toString());
-				if (textEpisode != null) textEpisode.setText(_data.get(_position).get("episode").toString());
+				if (textTitle != null) textTitle.setText(safeStr(item, "title", ""));
+				if (textStatus != null) textStatus.setText(safeStr(item, "status", ""));
+				if (textEpisode != null) textEpisode.setText(safeStr(item, "episode", ""));
 
-				String cover = _data.get(_position).get("cover") != null ? _data.get(_position).get("cover").toString().trim() : "";
-				if (cover.contains("i.ibb.co.com")) {
-					cover = cover.replace("i.ibb.co.com", "i.ibb.co");
+				String cov = safeStr(item, "cover", "").trim();
+				if (cov.contains("i.ibb.co.com")) {
+					cov = cov.replace("i.ibb.co.com", "i.ibb.co");
 				}
-				if (cover.startsWith("http://")) {
-					cover = cover.replace("http://", "https://");
+				if (cov.startsWith("http://")) {
+					cov = cov.replace("http://", "https://");
 				}
 
-				if (imgCover != null) {
-					Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imgCover);
+				if (imgCover != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(MainActivity.this).load(Uri.parse(cov)).into(imgCover);
 				}
 			}
 			return _view;
@@ -2538,7 +2575,10 @@ public class MainActivity extends AppCompatActivity {
 			ImageView imgPopularCover = _view.findViewById(getResources().getIdentifier("img_popular_cover", "id", getPackageName()));
 			View linear35 = _view.findViewById(getResources().getIdentifier("linear35", "id", getPackageName()));
 
-			if (_data.get(_position).containsKey("is_loading")) {
+			HashMap<String, Object> item = _data.get(_position);
+			if (item == null) return;
+
+			if (item.containsKey("is_loading")) {
 				if (textPopularTitle != null) {
 					textPopularTitle.setText("");
 					textPopularTitle.setBackground(createMainShimmerDrawable(100f));
@@ -2566,22 +2606,23 @@ public class MainActivity extends AppCompatActivity {
 				if (imgPopularCover != null) imgPopularCover.setBackgroundColor(Color.TRANSPARENT);
 
 				if (textPopularStatus != null) textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
-				if (textPopularTitle != null) textPopularTitle.setText(_data.get(_position).get("title").toString());
-				if (textPopularDesc != null) textPopularDesc.setText(cleanText(_data.get(_position).get("synopsis").toString()));
-				if (textPopularGenre != null) textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
+				if (textPopularTitle != null) textPopularTitle.setText(safeStr(item, "title", ""));
+				if (textPopularDesc != null) textPopularDesc.setText(cleanText(safeStr(item, "synopsis", "")));
+				if (textPopularGenre != null) textPopularGenre.setText(safeStr(item, "genres", "").replace("[", "").replace("]", ""));
 
 				if (textPopularStatus != null) {
-					textPopularStatus.setText(_data.get(_position).get("episode").toString().concat(" / ".concat(_data.get(_position).get("status").toString())));
+					textPopularStatus.setText(safeStr(item, "episode", "") + " / " + safeStr(item, "status", ""));
 				}
-				if (imgPopularCover != null) {
-					Glide.with(getApplicationContext()).load(Uri.parse(_data.get(_position).get("cover").toString())).into(imgPopularCover);
+				String cov = safeStr(item, "cover", "").trim();
+				if (imgPopularCover != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(MainActivity.this).load(Uri.parse(cov)).into(imgPopularCover);
 				}
 
 				View clickTarget = (linear35 != null) ? linear35 : _view;
 				clickTarget.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						String slug = _data.get(_position).get("slug") != null ? _data.get(_position).get("slug").toString() : "";
+						String slug = safeStr(item, "slug", "");
 						openWatchBySlug(slug);
 					}
 				});
