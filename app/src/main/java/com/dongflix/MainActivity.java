@@ -58,6 +58,7 @@ public class MainActivity extends AppCompatActivity {
 	private RecyclerView recyclerPopular, recyclerPopularDongflix, recyclerRomanceDonghua, recyclerSearchList;
 	private RecyclerView recyclerCultivationDonghua, recyclerCompletedDonghua, recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua;
 	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
+	private TextView textPopularDongflixSeeAll, textRomanceSeeAll;
 	private TextView textCultivationSeeAll, textCompletedSeeAll, textComedySeeAll, textMysterySeeAll, textMovieSeeAll;
 	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
@@ -155,7 +156,14 @@ public class MainActivity extends AppCompatActivity {
 
 	private String cleanText(String input) {
 		if (input == null) return "";
-		return input.replaceAll("\\[[^\\x20-\\x7E]+\\]", "").replaceAll("[^\\x20-\\x7E\\n]", "").trim();
+		return input
+			.replace("â€™", "'")
+			.replace("â€œ", "\"")
+			.replace("â€", "\"")
+			.replace("â€“", "-")
+			.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
+			.replaceAll("[^\\x20-\\x7E\\n]", "")
+			.trim();
 	}
 
 	private Typeface getOutfitTypeface() {
@@ -445,7 +453,7 @@ public class MainActivity extends AppCompatActivity {
 				String heroCover = normalizeCoverUrl(safeStr(item, "cover", ""));
 				final String heroSlug = safeStr(item, "slug", "");
 
-				if (textHeroTitle != null) textHeroTitle.setText(safeStr(item, "title", "").trim());
+				if (textHeroTitle != null) textHeroTitle.setText(cleanText(safeStr(item, "title", "")));
 				if (textHeroDesc != null) textHeroDesc.setText(cleanText(safeStr(item, "synopsis", "")));
 				updateHeroFavoriteIcon(heroSlug);
 
@@ -498,18 +506,7 @@ public class MainActivity extends AppCompatActivity {
 		rv.setOnFlingListener(null);
 		rv.setClipToPadding(false);
 		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162, 16f, 10, 12.5f));
-	}
-
-	private void bindSlimRomanceSection(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
-		if (rv == null) return;
-		float d = getResources().getDisplayMetrics().density;
-		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-		rv.setNestedScrollingEnabled(false);
-		rv.setOnFlingListener(null);
-		rv.setClipToPadding(false);
-		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		rv.setAdapter(new HorizontalPosterAdapter(items, 102, 144, 14f, 8, 11.5f));
+		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162));
 	}
 
 	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
@@ -568,7 +565,7 @@ public class MainActivity extends AppCompatActivity {
 		bindSectionLikePopularToday(recyclerComedyDonghua, new ArrayList<>(comedy.subList(0, Math.min(10, comedy.size()))));
 		bindSectionLikePopularToday(recyclerMysteryDonghua, new ArrayList<>(mystery.subList(0, Math.min(10, mystery.size()))));
 		bindSectionLikePopularToday(recyclerMovieDonghua, new ArrayList<>(movie.subList(0, Math.min(10, movie.size()))));
-		bindSlimRomanceSection(recyclerRomanceDonghua, new ArrayList<>(romance.subList(0, Math.min(10, romance.size()))));
+		bindSectionLikePopularToday(recyclerRomanceDonghua, new ArrayList<>(romance.subList(0, Math.min(10, romance.size()))));
 	}
 
 	private void setupContinueWatchingSection() {
@@ -581,7 +578,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+			recyclerContinue.setLayoutParams(new LinearLayoutManager.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
@@ -1152,6 +1149,8 @@ public class MainActivity extends AppCompatActivity {
 		textHeroTitle = findViewById(R.id.text_hero_title);
 		textHeroDesc = findViewById(R.id.text_hero_desc);
 		textSeeAll = findViewById(R.id.text_see_all);
+		textPopularDongflixSeeAll = findViewById(R.id.text_popular_dongflix_see_all);
+		textRomanceSeeAll = findViewById(R.id.text_romance_see_all);
 		textCultivationSeeAll = findViewById(R.id.text_cultivation_see_all);
 		textCompletedSeeAll = findViewById(R.id.text_completed_see_all);
 		textComedySeeAll = findViewById(R.id.text_comedy_see_all);
@@ -1190,8 +1189,9 @@ public class MainActivity extends AppCompatActivity {
 		txtProfile = findViewById(R.id.txt_profile);
 
 		TextView[] seeAllList = {
-			textSeeAll, textCultivationSeeAll, textCompletedSeeAll,
-			textComedySeeAll, textMysterySeeAll, textMovieSeeAll, textContinueSeeAll
+			textSeeAll, textPopularDongflixSeeAll, textRomanceSeeAll,
+			textCultivationSeeAll, textCompletedSeeAll, textComedySeeAll,
+			textMysterySeeAll, textMovieSeeAll, textContinueSeeAll
 		};
 		View.OnClickListener openCatalog = new View.OnClickListener() {
 			@Override
@@ -1374,11 +1374,11 @@ public class MainActivity extends AppCompatActivity {
 		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
 
 		RecyclerView[] standardList = {
-			recyclerPopular, recyclerPopularDongflix, recyclerCultivationDonghua,
-			recyclerCompletedDonghua, recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
+			recyclerPopular, recyclerPopularDongflix, recyclerRomanceDonghua,
+			recyclerCultivationDonghua, recyclerCompletedDonghua,
+			recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
 		};
 		for (RecyclerView rv : standardList) bindSectionLikePopularToday(rv, dummy);
-		bindSlimRomanceSection(recyclerRomanceDonghua, dummy);
 
 		if (recyclerSearchList != null) {
 			recyclerSearchList.setLayoutManager(new LinearLayoutManager(this));
@@ -1578,12 +1578,12 @@ public class MainActivity extends AppCompatActivity {
 		if (mainScroll != null) {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
-				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldX, int oldY) {
+				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
 					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
 						resetNavbarToExpanded();
 						return;
 					}
-					int dy = scrollY - oldY;
+					int dy = scrollY - oldScrollY;
 					if (scrollY <= 20 || dy < -12) setNavbarCompactState(false);
 					else if (dy > 14 && scrollY > 80) setNavbarCompactState(true);
 				}
@@ -1734,7 +1734,7 @@ public class MainActivity extends AppCompatActivity {
 			String cov = normalizeCoverUrl(safeStr(item, "cover", ""));
 			if (cov.isEmpty()) cov = normalizeCoverUrl(safeStr(item, "poster", ""));
 
-			if (tvTitle != null) tvTitle.setText(safeStr(item, "title", "Donghua"));
+			if (tvTitle != null) tvTitle.setText(cleanText(safeStr(item, "title", "Donghua")));
 			if (tvEp != null) tvEp.setText(epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw);
 			if (thumb != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
 				Glide.with(MainActivity.this).load(Uri.parse(cov)).into(thumb);
@@ -1750,16 +1750,12 @@ public class MainActivity extends AppCompatActivity {
 
 	public class HorizontalPosterAdapter extends RecyclerView.Adapter<HorizontalPosterAdapter.ViewHolder> {
 		private final ArrayList<HashMap<String, Object>> data;
-		private final int cardWidthDp, cardHeightDp, rightMarginDp;
-		private final float radiusDp, titleSp;
+		private final int cardWidthDp, cardHeightDp;
 
-		public HorizontalPosterAdapter(ArrayList<HashMap<String, Object>> arr, int wDp, int hDp, float radDp, int gapDp, float tSp) {
+		public HorizontalPosterAdapter(ArrayList<HashMap<String, Object>> arr, int wDp, int hDp) {
 			this.data = arr;
 			this.cardWidthDp = wDp;
 			this.cardHeightDp = hDp;
-			this.radiusDp = radDp;
-			this.rightMarginDp = gapDp;
-			this.titleSp = tSp;
 		}
 
 		@Override
@@ -1770,12 +1766,12 @@ public class MainActivity extends AppCompatActivity {
 			LinearLayout root = new LinearLayout(parent.getContext());
 			root.setOrientation(LinearLayout.VERTICAL);
 			RecyclerView.LayoutParams rlp = new RecyclerView.LayoutParams(wPx, ViewGroup.LayoutParams.WRAP_CONTENT);
-			rlp.rightMargin = (int) (rightMarginDp * d);
+			rlp.rightMargin = (int) (10 * d);
 			root.setLayoutParams(rlp);
 
 			androidx.cardview.widget.CardView card = new androidx.cardview.widget.CardView(parent.getContext());
 			card.setLayoutParams(new LinearLayout.LayoutParams(wPx, hPx));
-			card.setRadius(radiusDp * d);
+			card.setRadius(16 * d);
 			card.setCardElevation(0f);
 			card.setCardBackgroundColor(Color.parseColor("#12141A"));
 
@@ -1789,17 +1785,17 @@ public class MainActivity extends AppCompatActivity {
 			overlay.addView(imgCover);
 
 			View scrim = new View(parent.getContext());
-			scrim.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (56 * d), Gravity.BOTTOM));
+			scrim.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (60 * d), Gravity.BOTTOM));
 			scrim.setTag("bottom_scrim");
 			overlay.addView(scrim);
 
 			TextView tvStatus = new TextView(parent.getContext());
 			FrameLayout.LayoutParams sLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
-			sLp.setMargins((int) (7 * d), (int) (7 * d), (int) (7 * d), 0);
+			sLp.setMargins((int) (8 * d), (int) (8 * d), (int) (8 * d), 0);
 			tvStatus.setLayoutParams(sLp);
-			tvStatus.setPadding((int) (7 * d), (int) (2 * d), (int) (7 * d), (int) (2 * d));
+			tvStatus.setPadding((int) (8 * d), (int) (3 * d), (int) (8 * d), (int) (3 * d));
 			tvStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+			tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
 			tvStatus.setTextColor(Color.WHITE);
 			tvStatus.setMaxLines(1);
 			tvStatus.setTag("text_status");
@@ -1807,10 +1803,10 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView tvEp = new TextView(parent.getContext());
 			FrameLayout.LayoutParams eLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
-			eLp.setMargins((int) (8 * d), 0, (int) (8 * d), (int) (7 * d));
+			eLp.setMargins((int) (9 * d), 0, (int) (9 * d), (int) (8 * d));
 			tvEp.setLayoutParams(eLp);
 			tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
 			tvEp.setTextColor(Color.WHITE);
 			tvEp.setMaxLines(1);
 			tvEp.setEllipsize(TextUtils.TruncateAt.END);
@@ -1821,13 +1817,18 @@ public class MainActivity extends AppCompatActivity {
 			root.addView(card);
 
 			TextView tvTitle = new TextView(parent.getContext());
-			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (34 * d));
-			tLp.topMargin = (int) (6 * d);
+			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			tLp.topMargin = (int) (7 * d);
 			tvTitle.setLayoutParams(tLp);
 			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleSp);
-			tvTitle.setTextColor(Color.parseColor("#E2E8F0"));
-			tvTitle.setLineSpacing(0f, 1.1f);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			tvTitle.setTextColor(Color.WHITE);
+			tvTitle.setIncludeFontPadding(false);
+			tvTitle.setLineSpacing(2 * d, 1.05f);
+			tvTitle.setMinLines(2);
 			tvTitle.setMaxLines(2);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 			tvTitle.setTag("text_title");
@@ -1842,7 +1843,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = v.getResources().getDisplayMetrics().density;
 			if (v.getLayoutParams() instanceof RecyclerView.LayoutParams) {
 				RecyclerView.LayoutParams rlp = (RecyclerView.LayoutParams) v.getLayoutParams();
-				rlp.rightMargin = (pos == data.size() - 1) ? 0 : (int) (rightMarginDp * d);
+				rlp.rightMargin = (pos == data.size() - 1) ? 0 : (int) (10 * d);
 				v.setLayoutParams(rlp);
 			}
 
@@ -1856,11 +1857,15 @@ public class MainActivity extends AppCompatActivity {
 			if (item == null) return;
 
 			if (item.containsKey("is_loading")) {
-				if (imgCover != null) { imgCover.setImageResource(android.R.color.transparent); imgCover.setBackground(createMainShimmerDrawable(radiusDp * d)); }
+				if (imgCover != null) { imgCover.setImageResource(android.R.color.transparent); imgCover.setBackground(createMainShimmerDrawable(16 * d)); }
 				if (scrim != null) scrim.setVisibility(View.GONE);
 				if (tvStatus != null) { tvStatus.setText(""); tvStatus.setVisibility(View.INVISIBLE); }
 				if (tvEp != null) { tvEp.setText(""); tvEp.setVisibility(View.INVISIBLE); }
-				if (tvTitle != null) { tvTitle.setText(""); tvTitle.setBackground(createMainShimmerDrawable(8 * d)); }
+				if (tvTitle != null) {
+					tvTitle.setText("");
+					tvTitle.setMinHeight((int) (36 * d));
+					tvTitle.setBackground(createMainShimmerDrawable(8 * d));
+				}
 				v.setOnClickListener(null);
 			} else {
 				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
@@ -1878,7 +1883,11 @@ public class MainActivity extends AppCompatActivity {
 					tvStatus.setText(safeStr(item, "status", ""));
 				}
 				if (tvEp != null) { tvEp.setVisibility(View.VISIBLE); tvEp.setText(safeStr(item, "episode", "")); }
-				if (tvTitle != null) { tvTitle.setBackgroundColor(Color.TRANSPARENT); tvTitle.setText(safeStr(item, "title", "")); }
+				if (tvTitle != null) {
+					tvTitle.setMinHeight(0);
+					tvTitle.setBackgroundColor(Color.TRANSPARENT);
+					tvTitle.setText(cleanText(safeStr(item, "title", "")));
+				}
 
 				String cov = normalizeCoverUrl(safeStr(item, "cover", ""));
 				if (imgCover != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
@@ -1963,7 +1972,7 @@ public class MainActivity extends AppCompatActivity {
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
 
-			final String title = safeStr(item, "title", mode == 2 ? "Video" : "Donghua");
+			final String title = cleanText(safeStr(item, "title", mode == 2 ? "Video" : "Donghua"));
 			if (tvTitle != null) tvTitle.setText(title);
 
 			if (mode == 0) {
@@ -2037,7 +2046,11 @@ public class MainActivity extends AppCompatActivity {
 				if (view2 != null) view2.setVisibility(View.GONE);
 			} else {
 				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
-				if (tvTitle != null) { tvTitle.setBackgroundColor(Color.TRANSPARENT); tvTitle.setText(safeStr(item, "title", "")); }
+				if (tvTitle != null) {
+					tvTitle.setBackgroundColor(Color.TRANSPARENT);
+					tvTitle.setIncludeFontPadding(false);
+					tvTitle.setText(cleanText(safeStr(item, "title", "")));
+				}
 				if (tvEp != null) { tvEp.setVisibility(View.VISIBLE); tvEp.setBackgroundColor(Color.TRANSPARENT); tvEp.setText(safeStr(item, "episode", "")); }
 				if (view2 != null) {
 					view2.setVisibility(View.VISIBLE);
@@ -2093,7 +2106,7 @@ public class MainActivity extends AppCompatActivity {
 				if (tvStatus != null) { tvStatus.setText("                    "); tvStatus.setBackground(createMainShimmerDrawable(100f)); }
 				if (imgCover != null) { imgCover.setImageResource(android.R.color.transparent); imgCover.setBackground(createMainShimmerDrawable(16 * d)); }
 			} else {
-				if (tvTitle != null) { tvTitle.setBackgroundColor(Color.TRANSPARENT); tvTitle.setText(safeStr(item, "title", "")); }
+				if (tvTitle != null) { tvTitle.setBackgroundColor(Color.TRANSPARENT); tvTitle.setText(cleanText(safeStr(item, "title", ""))); }
 				if (tvDesc != null) { tvDesc.setBackgroundColor(Color.TRANSPARENT); tvDesc.setText(cleanText(safeStr(item, "synopsis", ""))); }
 				if (tvGenre != null) { tvGenre.setBackgroundColor(Color.TRANSPARENT); tvGenre.setText(safeStr(item, "genres", "").replace("[", "").replace("]", "")); }
 				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
