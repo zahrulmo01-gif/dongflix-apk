@@ -1,6 +1,7 @@
 package com.dongflix;
 
 import android.Manifest;
+import android.animation.*;
 import android.app.*;
 import android.content.*;
 import android.content.Intent;
@@ -8,22 +9,28 @@ import android.content.pm.PackageManager;
 import android.content.res.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
+import android.media.*;
 import android.net.*;
+import android.net.Uri;
 import android.os.*;
+import android.os.Bundle;
 import android.text.*;
+import android.text.style.*;
 import android.util.*;
 import android.view.*;
+import android.view.View.*;
 import android.view.animation.*;
 import android.view.inputmethod.InputMethodManager;
+import android.webkit.*;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsCompat;
+import androidx.core.*;
+import androidx.core.ktx.*;
 import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.*;
 import com.bumptech.glide.Glide;
+import com.google.android.exoplayer2.ui.*;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DataSnapshot;
@@ -42,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 
+	private String cover = "";
 	private String currentUserKey = "";
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
@@ -54,12 +62,11 @@ public class MainActivity extends AppCompatActivity {
 
 	private RequestNetwork dongflix_req;
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
+	private Intent i = new Intent();
 
 	private GridView gridview1;
-	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
-	private RecyclerView recyclerMovieDonghua, recyclerCompletedDonghua, recyclerComedyDonghua, recyclerMysteryDonghua;
-	private TextView textHeroTitle, textHeroDesc, textSeeAll, btnClearSearch, textSearchSectionLabel;
-	private TextView textMovieSeeAll, textCompletedSeeAll, textComedySeeAll, textMysterySeeAll, textPopularSeeAll;
+	private RecyclerView recyclerPopular, listPopular, recyclerSearchList, recyclerMovieDonghua;
+	private TextView textHeroTitle, textHeroDesc, textSeeAll, textMovieSeeAll, btnClearSearch, textSearchSectionLabel;
 	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
 	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat;
@@ -71,7 +78,7 @@ public class MainActivity extends AppCompatActivity {
 	private Runnable heroSliderRunnable;
 	private int heroCurrentIndex = 0;
 
-	// Pull-to-refresh icon only (YouTube style, floating)
+	// Pull-to-refresh icon only (YouTube style)
 	private FrameLayout pullRefreshIndicator;
 	private ProgressBar pullRefreshSpinner;
 	private ImageView imgPullRefreshIcon;
@@ -79,7 +86,7 @@ public class MainActivity extends AppCompatActivity {
 	private float pullStartY = 0f;
 	private boolean isPullingFromTop = false;
 
-	// Lanjutkan Menonton
+	// Lanjutkan Menonton (di atas Populer Hari Ini)
 	private LinearLayout layoutSectionContinue;
 	private TextView textTitleContinue, textContinueSeeAll;
 	private RecyclerView recyclerContinue;
@@ -102,6 +109,10 @@ public class MainActivity extends AppCompatActivity {
 	private boolean isDraggingNavbarPill = false;
 	private float navDownRawX = 0f;
 	private float navInitialPillTx = 0f;
+
+	private ValueAnimator mainShimmerAnimator;
+	private float mainShimmerPhase = 0f;
+	private boolean isMainLoading = true;
 
 	private SharedPreferences favPrefs;
 	private HashMap<String, Object> currentHeroItem;
@@ -225,22 +236,120 @@ public class MainActivity extends AppCompatActivity {
 		return outfitFont;
 	}
 
-	private void stylePlainOutfitText(TextView tv, float spSize, int colorHex) {
-		if (tv == null) return;
-		tv.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, spSize);
-		tv.setTextColor(colorHex);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			tv.setLetterSpacing(-0.01f);
+	private void applyCircularAvatar(ImageView target, String photoUrl) {
+		if (target == null) return;
+		float d = getResources().getDisplayMetrics().density;
+		int sizePx = Math.max((int) (46 * d), target.getWidth() > 0 ? target.getWidth() : (int) (46 * d));
+
+		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
+			String cleanUrl = photoUrl.trim();
+			target.setPadding(0, 0, 0, 0);
+			target.clearColorFilter();
+			target.setBackground(null);
+			target.setScaleType(ImageView.ScaleType.CENTER_CROP);
+
+			if (cleanUrl.startsWith("data:image")) {
+				try {
+					String base64Part = cleanUrl.substring(cleanUrl.indexOf(",") + 1);
+					byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
+					Bitmap rawBmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
+					if (rawBmp != null) {
+						Bitmap square = cropCenterSquare(rawBmp);
+						Bitmap circular = getCircularBitmap(Bitmap.createScaledBitmap(square, sizePx, sizePx, true));
+						target.setImageBitmap(circular);
+						return;
+					}
+				} catch (Exception ignored) {}
+			} else {
+				Glide.with(getApplicationContext())
+					.load(Uri.parse(cleanUrl))
+					.circleCrop()
+					.placeholder(R.drawable.ic_profile)
+					.error(R.drawable.ic_profile)
+					.into(target);
+				return;
+			}
 		}
+
+		int pad = (int) (3 * d);
+		target.setBackground(null);
+		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		target.setPadding(pad, pad, pad, pad);
+		target.setImageResource(R.drawable.ic_profile);
+		target.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 	}
 
-	private Drawable createEmptyPlaceholderDrawable(int colorHex, float radiusPx) {
-		GradientDrawable gd = new GradientDrawable();
-		gd.setShape(GradientDrawable.RECTANGLE);
-		gd.setColor(colorHex);
-		gd.setCornerRadius(radiusPx);
-		return gd;
+	private Bitmap cropCenterSquare(Bitmap src) {
+		int w = src.getWidth();
+		int h = src.getHeight();
+		int edge = Math.min(w, h);
+		int x = (w - edge) / 2;
+		int y = (h - edge) / 2;
+		return Bitmap.createBitmap(src, x, y, edge, edge);
+	}
+
+	private Bitmap getCircularBitmap(Bitmap squareBmp) {
+		int size = Math.min(squareBmp.getWidth(), squareBmp.getHeight());
+		Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+		Canvas canvas = new Canvas(output);
+		Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		Rect rect = new Rect(0, 0, size, size);
+		canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
+		paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+		canvas.drawBitmap(squareBmp, rect, rect, paint);
+		return output;
+	}
+
+	private void loadLoggedInUserProfile(FirebaseUser currentUser) {
+		if (currentUser == null || currentUser.getEmail() == null) return;
+
+		String email = currentUser.getEmail().trim().toLowerCase();
+		final String fallbackName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
+
+		TextView tvUserHeader = findViewById(R.id.text_username);
+		if (tvUserHeader != null) tvUserHeader.setText(fallbackName);
+
+		TextView tvProfileName = findViewById(R.id.textview65);
+		if (tvProfileName != null) tvProfileName.setText(fallbackName);
+
+		String initialPhoto = currentUser.getPhotoUrl() != null ? currentUser.getPhotoUrl().toString() : "";
+		applyCircularAvatar(imgUserAvatar, initialPhoto);
+
+		currentUserKey = email.replace(".", ",");
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("users")
+			.child(currentUserKey)
+			.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snapshot) {
+					if (!snapshot.exists()) {
+						applyCircularAvatar(imgUserAvatar, "");
+						return;
+					}
+
+					String resolvedName = fallbackName;
+					Object nameObj = snapshot.child("name").getValue();
+					if (nameObj != null && !nameObj.toString().trim().isEmpty()) {
+						resolvedName = nameObj.toString().trim();
+					}
+
+					if (tvUserHeader != null) tvUserHeader.setText(resolvedName);
+					if (tvProfileName != null) tvProfileName.setText(resolvedName);
+
+					String photoUrl = "";
+					Object photoObj = snapshot.child("photoURL").getValue();
+					if (photoObj != null && !photoObj.toString().trim().isEmpty()) {
+						photoUrl = photoObj.toString().trim();
+					}
+
+					applyCircularAvatar(imgUserAvatar, photoUrl);
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError error) {
+					applyCircularAvatar(imgUserAvatar, "");
+				}
+			});
 	}
 
 	private void setupPullToRefresh() {
@@ -409,10 +518,12 @@ public class MainActivity extends AppCompatActivity {
 				for (int i = 0; i < dots.length; i++) {
 					if (dots[i] != null) {
 						boolean isActive = (i == pos);
-						LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
+						RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) dots[i].getLayoutParams();
 						params.width = isActive ? activeWidth : inactiveWidth;
 						params.height = fixedHeight;
-						params.leftMargin = (i == 0) ? 0 : marginSpacing;
+						if (i > 0) {
+							params.leftMargin = marginSpacing;
+						}
 						dots[i].setLayoutParams(params);
 						dots[i].setBackground(isActive ? activeDotDrawable : inactiveDotDrawable);
 					}
@@ -434,199 +545,41 @@ public class MainActivity extends AppCompatActivity {
 		heroSliderHandler.removeCallbacksAndMessages(null);
 	}
 
-	private void bindHorizontalPosterRecycler(RecyclerView rv, ArrayList<HashMap<String, Object>> items, int widthDp, int heightDp) {
-		if (rv == null) return;
-		float d = getResources().getDisplayMetrics().density;
-		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-		rv.setNestedScrollingEnabled(false);
-		rv.setOnFlingListener(null);
-		rv.setClipToPadding(false);
-		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		rv.setAdapter(new HorizontalPosterAdapter(items, widthDp, heightDp));
-	}
-
 	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
 		ArrayList<HashMap<String, Object>> list = new ArrayList<>();
 		for (int i = 0; i < count; i++) {
-			HashMap<String, Object> m = new HashMap<>();
-			m.put("is_loading", true);
-			list.add(m);
+			HashMap<String, Object> map = new HashMap<>();
+			map.put("is_loading", true);
+			list.add(map);
 		}
 		return list;
 	}
 
-	private void populateExtraCatalogSections() {
-		if (fullCatalogList == null) return;
+	private void populateMovieSection() {
+		if (recyclerMovieDonghua == null || fullCatalogList == null) return;
 
 		ArrayList<HashMap<String, Object>> movieList = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> completedList = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> comedyList = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> mysteryList = new ArrayList<>();
-
 		for (HashMap<String, Object> item : fullCatalogList) {
-			String status = item.get("status") != null ? item.get("status").toString().toLowerCase(Locale.US) : "";
 			String genres = item.get("genres") != null ? item.get("genres").toString().toLowerCase(Locale.US) : "";
 			String title = item.get("title") != null ? item.get("title").toString().toLowerCase(Locale.US) : "";
 			String type = item.get("type") != null ? item.get("type").toString().toLowerCase(Locale.US) : "";
 			String episode = item.get("episode") != null ? item.get("episode").toString().toLowerCase(Locale.US) : "";
-			String combinedMeta = genres + " " + title + " " + type + " " + episode;
-
-			if (combinedMeta.contains("movie") || combinedMeta.contains("film")) {
+			String combined = genres + " " + title + " " + type + " " + episode;
+			if (combined.contains("movie") || combined.contains("film")) {
 				movieList.add(item);
 			}
-			if (status.contains("completed") || status.contains("tamat")) {
-				completedList.add(item);
-			}
-			if (combinedMeta.contains("comedy") || combinedMeta.contains("komedi") || combinedMeta.contains("slice of life")) {
-				comedyList.add(item);
-			}
-			if (combinedMeta.contains("mystery") || combinedMeta.contains("misteri")
-				|| combinedMeta.contains("thriller") || combinedMeta.contains("suspense") || combinedMeta.contains("detective")) {
-				mysteryList.add(item);
-			}
+		}
+		if (movieList.isEmpty()) {
+			movieList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
 		}
 
-		if (movieList.isEmpty()) movieList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
-		if (completedList.isEmpty()) completedList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
-		if (comedyList.isEmpty()) comedyList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
-		if (mysteryList.isEmpty()) mysteryList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
-
-		bindHorizontalPosterRecycler(
-			recyclerMovieDonghua,
-			new ArrayList<>(movieList.subList(0, Math.min(10, movieList.size()))),
-			114, 162
-		);
-		bindHorizontalPosterRecycler(
-			recyclerCompletedDonghua,
-			new ArrayList<>(completedList.subList(0, Math.min(10, completedList.size()))),
-			114, 162
-		);
-		bindHorizontalPosterRecycler(
-			recyclerComedyDonghua,
-			new ArrayList<>(comedyList.subList(0, Math.min(10, comedyList.size()))),
-			114, 162
-		);
-		bindHorizontalPosterRecycler(
-			recyclerMysteryDonghua,
-			new ArrayList<>(mysteryList.subList(0, Math.min(10, mysteryList.size()))),
-			114, 162
-		);
-	}
-
-	private void applyCircularAvatar(ImageView target, String photoUrl) {
-		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		int sizePx = Math.max((int) (38 * d), target.getWidth() > 0 ? target.getWidth() : (int) (38 * d));
-
-		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
-			String cleanUrl = photoUrl.trim();
-			target.setPadding(0, 0, 0, 0);
-			target.clearColorFilter();
-			target.setBackground(null);
-			target.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-			if (cleanUrl.startsWith("data:image")) {
-				try {
-					String base64Part = cleanUrl.substring(cleanUrl.indexOf(",") + 1);
-					byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
-					Bitmap rawBmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
-					if (rawBmp != null) {
-						Bitmap square = cropCenterSquare(rawBmp);
-						Bitmap circular = getCircularBitmap(Bitmap.createScaledBitmap(square, sizePx, sizePx, true));
-						target.setImageBitmap(circular);
-						return;
-					}
-				} catch (Exception ignored) {}
-			} else {
-				Glide.with(getApplicationContext())
-					.load(Uri.parse(cleanUrl))
-					.circleCrop()
-					.placeholder(R.drawable.ic_profile)
-					.error(R.drawable.ic_profile)
-					.into(target);
-				return;
-			}
-		}
-
-		int pad = (int) (3 * d);
-		target.setBackground(null);
-		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
-		target.setPadding(pad, pad, pad, pad);
-		target.setImageResource(R.drawable.ic_profile);
-		target.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-	}
-
-	private Bitmap cropCenterSquare(Bitmap src) {
-		int w = src.getWidth();
-		int h = src.getHeight();
-		int edge = Math.min(w, h);
-		int x = (w - edge) / 2;
-		int y = (h - edge) / 2;
-		return Bitmap.createBitmap(src, x, y, edge, edge);
-	}
-
-	private Bitmap getCircularBitmap(Bitmap squareBmp) {
-		int size = Math.min(squareBmp.getWidth(), squareBmp.getHeight());
-		Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-		Canvas canvas = new Canvas(output);
-		Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		Rect rect = new Rect(0, 0, size, size);
-		canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
-		paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-		canvas.drawBitmap(squareBmp, rect, rect, paint);
-		return output;
-	}
-
-	private void loadLoggedInUserProfile(FirebaseUser currentUser) {
-		if (currentUser == null || currentUser.getEmail() == null) return;
-
-		String email = currentUser.getEmail().trim().toLowerCase();
-		final String fallbackName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
-
-		TextView tvUserHeader = findViewById(R.id.text_username);
-		if (tvUserHeader != null) tvUserHeader.setText(fallbackName);
-
-		TextView tvProfileName = findViewById(R.id.textview65);
-		if (tvProfileName != null) tvProfileName.setText(fallbackName);
-
-		String initialPhoto = currentUser.getPhotoUrl() != null ? currentUser.getPhotoUrl().toString() : "";
-		applyCircularAvatar(imgUserAvatar, initialPhoto);
-
-		currentUserKey = email.replace(".", ",");
-		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-			.getReference("users")
-			.child(currentUserKey)
-			.addListenerForSingleValueEvent(new ValueEventListener() {
-				@Override
-				public void onDataChange(@NonNull DataSnapshot snapshot) {
-					if (!snapshot.exists()) {
-						applyCircularAvatar(imgUserAvatar, "");
-						return;
-					}
-
-					String resolvedName = fallbackName;
-					Object nameObj = snapshot.child("name").getValue();
-					if (nameObj != null && !nameObj.toString().trim().isEmpty()) {
-						resolvedName = nameObj.toString().trim();
-					}
-
-					if (tvUserHeader != null) tvUserHeader.setText(resolvedName);
-					if (tvProfileName != null) tvProfileName.setText(resolvedName);
-
-					String photoUrl = "";
-					Object photoObj = snapshot.child("photoURL").getValue();
-					if (photoObj != null && !photoObj.toString().trim().isEmpty()) {
-						photoUrl = photoObj.toString().trim();
-					}
-
-					applyCircularAvatar(imgUserAvatar, photoUrl);
-				}
-
-				@Override
-				public void onCancelled(@NonNull DatabaseError error) {
-					applyCircularAvatar(imgUserAvatar, "");
-				}
-			});
+		recyclerMovieDonghua.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		recyclerMovieDonghua.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		recyclerMovieDonghua.setAdapter(new HorizontalPosterAdapter(
+			new ArrayList<>(movieList.subList(0, Math.min(10, movieList.size()))),
+			116, 164
+		));
 	}
 
 	private void setupContinueWatchingSection() {
@@ -645,7 +598,6 @@ public class MainActivity extends AppCompatActivity {
 				ViewGroup.LayoutParams.MATCH_PARENT,
 				(int) (132 * d)
 			));
-			recyclerContinue.setAdapter(new ContinueWatchingAdapter(buildEmptyDummyList(3)));
 		}
 
 		if (textContinueSeeAll != null) {
@@ -679,11 +631,12 @@ public class MainActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT,
 			ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		root.setPadding((int) (16 * d), statusBarHeight + (int) (16 * d), (int) (16 * d), (int) (118 * d));
+		root.setPadding((int) (16 * d), statusBarHeight + (int) (16 * d), (int) (16 * d), (int) (110 * d));
 
 		TextView tvHeaderTitle = new TextView(this);
 		tvHeaderTitle.setText("Pustaka");
-		stylePlainOutfitText(tvHeaderTitle, 22f, Color.WHITE);
+		tvHeaderTitle.setTextColor(Color.WHITE);
+		tvHeaderTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
 		root.addView(tvHeaderTitle);
 
 		LinearLayout tabsBar = new LinearLayout(this);
@@ -709,7 +662,8 @@ public class MainActivity extends AppCompatActivity {
 
 		textPustakaSectionLabel = new TextView(this);
 		textPustakaSectionLabel.setText("Kemarin");
-		stylePlainOutfitText(textPustakaSectionLabel, 17f, Color.WHITE);
+		textPustakaSectionLabel.setTextColor(Color.WHITE);
+		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
 		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
@@ -745,7 +699,6 @@ public class MainActivity extends AppCompatActivity {
 		});
 
 		tv.setText(label);
-		tv.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
 		tv.setPadding(0, 0, 0, (int) (8 * d));
 
@@ -978,7 +931,7 @@ public class MainActivity extends AppCompatActivity {
 
 			FrameLayout card = new FrameLayout(parent.getContext());
 			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
-				(int) (248 * d),
+				(int) (245 * d),
 				(int) (124 * d)
 			);
 			lp.rightMargin = (int) (12 * d);
@@ -991,7 +944,6 @@ public class MainActivity extends AppCompatActivity {
 			cardBg.setCornerRadius(16 * d);
 			card.setBackground(cardBg);
 			card.setClipToOutline(true);
-			card.setTag("card_bg");
 
 			ImageView thumb = new ImageView(parent.getContext());
 			thumb.setLayoutParams(new FrameLayout.LayoutParams(
@@ -1010,7 +962,6 @@ public class MainActivity extends AppCompatActivity {
 				GradientDrawable.Orientation.BOTTOM_TOP,
 				new int[]{Color.parseColor("#E6030A14"), Color.parseColor("#66030A14"), Color.TRANSPARENT}
 			));
-			scrim.setTag("scrim");
 			card.addView(scrim);
 
 			LinearLayout textCol = new LinearLayout(parent.getContext());
@@ -1022,13 +973,17 @@ public class MainActivity extends AppCompatActivity {
 			textCol.setLayoutParams(textLp);
 
 			TextView tvTitle = new TextView(parent.getContext());
-			stylePlainOutfitText(tvTitle, 14.5f, Color.WHITE);
+			tvTitle.setTextColor(Color.WHITE);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvTitle.setMaxLines(2);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 			tvTitle.setTag("title");
 
 			TextView tvEp = new TextView(parent.getContext());
-			stylePlainOutfitText(tvEp, 12f, Color.parseColor("#CBD5E1"));
+			tvEp.setTextColor(Color.parseColor("#CBD5E1"));
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+			tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvEp.setTag("ep");
 
 			textCol.addView(tvTitle);
@@ -1041,7 +996,6 @@ public class MainActivity extends AppCompatActivity {
 			);
 			progressBar.setLayoutParams(progLp);
 			progressBar.setBackgroundColor(Color.parseColor("#38BDF8"));
-			progressBar.setTag("progress_bar");
 			card.addView(progressBar);
 
 			return new ViewHolder(card);
@@ -1050,46 +1004,9 @@ public class MainActivity extends AppCompatActivity {
 		@Override
 		public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
 			final HashMap<String, Object> item = data.get(position);
-			float d = holder.itemView.getResources().getDisplayMetrics().density;
-
 			ImageView thumb = holder.itemView.findViewWithTag("thumb");
-			View scrim = holder.itemView.findViewWithTag("scrim");
-			View progressBar = holder.itemView.findViewWithTag("progress_bar");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
-
-			if (item.containsKey("is_loading")) {
-				holder.itemView.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 16 * d));
-				if (thumb != null) {
-					thumb.setImageResource(0);
-					thumb.setVisibility(View.GONE);
-				}
-				if (scrim != null) scrim.setVisibility(View.GONE);
-				if (progressBar != null) progressBar.setVisibility(View.GONE);
-				if (tvTitle != null) {
-					tvTitle.setText("");
-					tvTitle.setVisibility(View.GONE);
-				}
-				if (tvEp != null) {
-					tvEp.setText("");
-					tvEp.setVisibility(View.GONE);
-				}
-				holder.itemView.setOnClickListener(null);
-				return;
-			}
-
-			GradientDrawable cardBg = new GradientDrawable(
-				GradientDrawable.Orientation.LEFT_RIGHT,
-				new int[]{Color.parseColor("#071830"), Color.parseColor("#0C2847")}
-			);
-			cardBg.setCornerRadius(16 * d);
-			holder.itemView.setBackground(cardBg);
-
-			if (thumb != null) thumb.setVisibility(View.VISIBLE);
-			if (scrim != null) scrim.setVisibility(View.VISIBLE);
-			if (progressBar != null) progressBar.setVisibility(View.VISIBLE);
-			if (tvTitle != null) tvTitle.setVisibility(View.VISIBLE);
-			if (tvEp != null) tvEp.setVisibility(View.VISIBLE);
 
 			String title = item.get("title") != null ? item.get("title").toString() : "Donghua";
 			String epRaw = item.get("episode") != null ? item.get("episode").toString().trim() : "1";
@@ -1119,6 +1036,191 @@ public class MainActivity extends AppCompatActivity {
 		class ViewHolder extends RecyclerView.ViewHolder {
 			ViewHolder(@NonNull View itemView) {
 				super(itemView);
+			}
+		}
+	}
+
+	public class HorizontalPosterAdapter extends RecyclerView.Adapter<HorizontalPosterAdapter.ViewHolder> {
+		private final ArrayList<HashMap<String, Object>> _data;
+		private final int cardWidthDp;
+		private final int cardHeightDp;
+
+		public HorizontalPosterAdapter(ArrayList<HashMap<String, Object>> _arr, int widthDp, int heightDp) {
+			_data = _arr;
+			this.cardWidthDp = widthDp;
+			this.cardHeightDp = heightDp;
+		}
+
+		@Override
+		public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+			float d = parent.getResources().getDisplayMetrics().density;
+			int wPx = (int) (cardWidthDp * d);
+			int hPx = (int) (cardHeightDp * d);
+
+			LinearLayout root = new LinearLayout(parent.getContext());
+			root.setOrientation(LinearLayout.VERTICAL);
+			RecyclerView.LayoutParams rootLp = new RecyclerView.LayoutParams(wPx, ViewGroup.LayoutParams.WRAP_CONTENT);
+			rootLp.rightMargin = (int) (10 * d);
+			root.setLayoutParams(rootLp);
+
+			androidx.cardview.widget.CardView coverCard = new androidx.cardview.widget.CardView(parent.getContext());
+			coverCard.setLayoutParams(new LinearLayout.LayoutParams(wPx, hPx));
+			coverCard.setRadius(16 * d);
+			coverCard.setCardElevation(0f);
+			coverCard.setCardBackgroundColor(Color.parseColor("#12141A"));
+
+			FrameLayout overlay = new FrameLayout(parent.getContext());
+			overlay.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+			ImageView imgCover = new ImageView(parent.getContext());
+			imgCover.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+			imgCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+			imgCover.setTag("img_cover");
+			overlay.addView(imgCover);
+
+			View bottomScrim = new View(parent.getContext());
+			FrameLayout.LayoutParams scrimLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (60 * d), Gravity.BOTTOM);
+			bottomScrim.setLayoutParams(scrimLp);
+			bottomScrim.setTag("bottom_scrim");
+			overlay.addView(bottomScrim);
+
+			TextView tvStatus = new TextView(parent.getContext());
+			FrameLayout.LayoutParams statusLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
+			statusLp.setMargins((int) (8 * d), (int) (8 * d), (int) (8 * d), 0);
+			tvStatus.setLayoutParams(statusLp);
+			tvStatus.setPadding((int) (8 * d), (int) (3 * d), (int) (8 * d), (int) (3 * d));
+			tvStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+			tvStatus.setTextColor(Color.WHITE);
+			tvStatus.setMaxLines(1);
+			tvStatus.setTag("text_status");
+			overlay.addView(tvStatus);
+
+			TextView tvEpisode = new TextView(parent.getContext());
+			FrameLayout.LayoutParams epLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+			epLp.setMargins((int) (9 * d), 0, (int) (9 * d), (int) (8 * d));
+			tvEpisode.setLayoutParams(epLp);
+			tvEpisode.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvEpisode.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+			tvEpisode.setTextColor(Color.WHITE);
+			tvEpisode.setMaxLines(1);
+			tvEpisode.setEllipsize(TextUtils.TruncateAt.END);
+			tvEpisode.setTag("text_episode");
+			overlay.addView(tvEpisode);
+
+			coverCard.addView(overlay);
+			root.addView(coverCard);
+
+			TextView tvTitle = new TextView(parent.getContext());
+			LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (36 * d));
+			titleLp.topMargin = (int) (7 * d);
+			tvTitle.setLayoutParams(titleLp);
+			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			tvTitle.setTextColor(Color.WHITE);
+			tvTitle.setLineSpacing(0f, 1.12f);
+			tvTitle.setMaxLines(2);
+			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
+			tvTitle.setTag("text_title");
+			root.addView(tvTitle);
+
+			return new ViewHolder(root);
+		}
+
+		@Override
+		public void onBindViewHolder(ViewHolder _holder, final int _position) {
+			View _view = _holder.itemView;
+			float d = _view.getResources().getDisplayMetrics().density;
+
+			if (_view.getLayoutParams() instanceof RecyclerView.LayoutParams) {
+				RecyclerView.LayoutParams rlp = (RecyclerView.LayoutParams) _view.getLayoutParams();
+				rlp.rightMargin = (_position == _data.size() - 1) ? 0 : (int) (10 * d);
+				_view.setLayoutParams(rlp);
+			}
+
+			ImageView imgCover = _view.findViewWithTag("img_cover");
+			View bottomScrim = _view.findViewWithTag("bottom_scrim");
+			TextView textStatus = _view.findViewWithTag("text_status");
+			TextView textEpisode = _view.findViewWithTag("text_episode");
+			TextView textTitle = _view.findViewWithTag("text_title");
+
+			final HashMap<String, Object> item = _data.get(_position);
+
+			if (item.containsKey("is_loading")) {
+				if (imgCover != null) {
+					imgCover.setImageResource(android.R.color.transparent);
+					imgCover.setBackground(createMainShimmerDrawable(16 * d));
+				}
+				if (bottomScrim != null) bottomScrim.setVisibility(View.GONE);
+				if (textStatus != null) {
+					textStatus.setText("");
+					textStatus.setVisibility(View.INVISIBLE);
+				}
+				if (textEpisode != null) {
+					textEpisode.setText("");
+					textEpisode.setVisibility(View.INVISIBLE);
+				}
+				if (textTitle != null) {
+					textTitle.setText("");
+					textTitle.setBackground(createMainShimmerDrawable(8 * d));
+				}
+				_view.setOnClickListener(null);
+			} else {
+				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
+				if (bottomScrim != null) {
+					bottomScrim.setVisibility(View.VISIBLE);
+					bottomScrim.setBackground(new GradientDrawable(
+						GradientDrawable.Orientation.BOTTOM_TOP,
+						new int[]{Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT}
+					));
+				}
+				if (textStatus != null) {
+					textStatus.setVisibility(View.VISIBLE);
+					GradientDrawable statusBg = new GradientDrawable();
+					statusBg.setCornerRadius(100f);
+					statusBg.setColor(Color.parseColor("#3B82F6"));
+					textStatus.setBackground(statusBg);
+					textStatus.setText(item.get("status") != null ? item.get("status").toString() : "");
+				}
+				if (textEpisode != null) {
+					textEpisode.setVisibility(View.VISIBLE);
+					textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
+				}
+				if (textTitle != null) {
+					textTitle.setBackgroundColor(Color.TRANSPARENT);
+					textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
+				}
+
+				String cov = item.get("cover") != null ? item.get("cover").toString().trim() : "";
+				if (cov.contains("i.ibb.co.com")) {
+					cov = cov.replace("i.ibb.co.com", "i.ibb.co");
+				}
+				if (cov.startsWith("http://")) {
+					cov = cov.replace("http://", "https://");
+				}
+
+				if (imgCover != null && !cov.isEmpty()) {
+					Glide.with(getApplicationContext()).load(Uri.parse(cov)).into(imgCover);
+				}
+
+				_view.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+						openWatchBySlug(slug);
+					}
+				});
+			}
+		}
+
+		@Override
+		public int getItemCount() {
+			return _data.size();
+		}
+
+		public class ViewHolder extends RecyclerView.ViewHolder {
+			public ViewHolder(View v) {
+				super(v);
 			}
 		}
 	}
@@ -1299,47 +1401,44 @@ public class MainActivity extends AppCompatActivity {
 		rowLp.bottomMargin = (int) (14 * d);
 		row.setLayoutParams(rowLp);
 
-		androidx.cardview.widget.CardView thumbCard = new androidx.cardview.widget.CardView(ctx);
+		ImageView thumb = new ImageView(ctx);
 		LinearLayout.LayoutParams thumbLp = new LinearLayout.LayoutParams(
-			(int) (72 * d), (int) (98 * d)
+			(int) (68 * d), (int) (92 * d)
 		);
 		thumbLp.rightMargin = (int) (14 * d);
-		thumbCard.setLayoutParams(thumbLp);
-		thumbCard.setRadius(16 * d);
-		thumbCard.setCardElevation(0f);
-		thumbCard.setCardBackgroundColor(Color.parseColor("#12141A"));
-
-		ImageView thumb = new ImageView(ctx);
-		thumb.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
+		thumb.setLayoutParams(thumbLp);
 		thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
 		thumb.setTag("thumb");
-		thumbCard.addView(thumb);
 
 		LinearLayout info = new LinearLayout(ctx);
 		info.setOrientation(LinearLayout.VERTICAL);
 		info.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
 		TextView tvTitle = new TextView(ctx);
-		stylePlainOutfitText(tvTitle, 15.5f, Color.WHITE);
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvTitle.setMaxLines(1);
 		tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 		tvTitle.setTag("title");
 
 		TextView tvEp = new TextView(ctx);
-		stylePlainOutfitText(tvEp, 12.5f, Color.parseColor("#CBD5E1"));
+		tvEp.setTextColor(Color.parseColor("#CBD5E1"));
+		tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvEp.setTag("ep");
 
 		TextView tvSub = new TextView(ctx);
-		stylePlainOutfitText(tvSub, 12.5f, Color.parseColor("#94A3B8"));
+		tvSub.setTextColor(Color.parseColor("#94A3B8"));
+		tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvSub.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvSub.setTag("sub");
 
 		info.addView(tvTitle);
 		info.addView(tvEp);
 		info.addView(tvSub);
 
-		row.addView(thumbCard);
+		row.addView(thumb);
 		row.addView(info);
 		return row;
 	}
@@ -1401,14 +1500,20 @@ public class MainActivity extends AppCompatActivity {
 			totalSorted.subList(0, Math.min(10, totalSorted.size()))
 		);
 
-		bindHorizontalPosterRecycler(recyclerPopular, todaySlice, 114, 162);
-		bindHorizontalPosterRecycler(listPopular, allPopularSlice, 114, 162);
-
+		float d = getResources().getDisplayMetrics().density;
+		if (recyclerPopular != null) {
+			recyclerPopular.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+			recyclerPopular.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+			recyclerPopular.setAdapter(new HorizontalPosterAdapter(todaySlice, 114, 162));
+		}
+		if (listPopular != null) {
+			listPopular.setAdapter(new ListPopularAdapter(allPopularSlice));
+		}
 		if (recyclerSearchList != null && (inputSearch == null || inputSearch.getText().toString().trim().isEmpty())) {
 			recyclerSearchList.setAdapter(new ListPopularAdapter(allPopularSlice));
 		}
 
-		populateExtraCatalogSections();
+		populateMovieSection();
 	}
 
 	private void syncFirebaseViewsAndSort() {
@@ -1555,6 +1660,126 @@ public class MainActivity extends AppCompatActivity {
 		}
 	}
 
+	private Drawable createMainShimmerDrawable(final float cornerRadiusPx) {
+		return new Drawable() {
+			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint shimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Matrix shaderMatrix = new Matrix();
+			private LinearGradient gradient;
+			private int lastWidth = -1;
+
+			{
+				basePaint.setColor(Color.parseColor("#12141A"));
+			}
+
+			@Override
+			public void draw(Canvas canvas) {
+				Rect b = getBounds();
+				int w = b.width();
+				int h = b.height();
+				if (w <= 0 || h <= 0) return;
+
+				RectF rect = new RectF(b);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, basePaint);
+
+				if (gradient == null || lastWidth != w) {
+					lastWidth = w;
+					gradient = new LinearGradient(
+						0, 0, w, 0,
+						new int[]{
+							Color.TRANSPARENT,
+							Color.parseColor("#1AFFFFFF"),
+							Color.parseColor("#33FFFFFF"),
+							Color.parseColor("#1AFFFFFF"),
+							Color.TRANSPARENT
+						},
+						new float[]{0f, 0.35f, 0.5f, 0.65f, 1f},
+						Shader.TileMode.CLAMP
+					);
+					shimmerPaint.setShader(gradient);
+				}
+
+				float translateX = -w + (2f * w * mainShimmerPhase);
+				shaderMatrix.setTranslate(translateX, 0);
+				gradient.setLocalMatrix(shaderMatrix);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, shimmerPaint);
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+	}
+
+	private void startMainShimmer() {
+		isMainLoading = true;
+		mainShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
+		mainShimmerAnimator.setDuration(1250);
+		mainShimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
+		mainShimmerAnimator.setInterpolator(new LinearInterpolator());
+		mainShimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+			@Override
+			public void onAnimationUpdate(ValueAnimator animation) {
+				if (!isMainLoading) return;
+				mainShimmerPhase = (float) animation.getAnimatedValue();
+
+				if (imgHeroBanner != null) imgHeroBanner.invalidate();
+				if (textHeroTitle != null) textHeroTitle.invalidate();
+				if (textHeroDesc != null) textHeroDesc.invalidate();
+				if (btnHeroPlay != null) btnHeroPlay.invalidate();
+				if (btnHeroFavorite != null) btnHeroFavorite.invalidate();
+
+				if (recyclerPopular != null) {
+					for (int idx = 0; idx < recyclerPopular.getChildCount(); idx++) {
+						invalidateRecursive(recyclerPopular.getChildAt(idx));
+					}
+				}
+				if (recyclerMovieDonghua != null) {
+					for (int idx = 0; idx < recyclerMovieDonghua.getChildCount(); idx++) {
+						invalidateRecursive(recyclerMovieDonghua.getChildAt(idx));
+					}
+				}
+				if (listPopular != null) {
+					for (int idx = 0; idx < listPopular.getChildCount(); idx++) {
+						invalidateRecursive(listPopular.getChildAt(idx));
+					}
+				}
+				if (gridview1 != null) {
+					for (int idx = 0; idx < gridview1.getChildCount(); idx++) {
+						invalidateRecursive(gridview1.getChildAt(idx));
+					}
+				}
+			}
+		});
+		mainShimmerAnimator.start();
+	}
+
+	private void invalidateRecursive(View v) {
+		if (v == null) return;
+		v.invalidate();
+		if (v instanceof ViewGroup) {
+			ViewGroup vg = (ViewGroup) v;
+			for (int k = 0; k < vg.getChildCount(); k++) {
+				invalidateRecursive(vg.getChildAt(k));
+			}
+		}
+	}
+
+	private void stopMainShimmer() {
+		isMainLoading = false;
+		if (mainShimmerAnimator != null) {
+			mainShimmerAnimator.cancel();
+			mainShimmerAnimator = null;
+		}
+	}
+
+	@Override
+	public void onDestroy() {
+		stopMainShimmer();
+		stopHeroAutoSlider();
+		super.onDestroy();
+	}
+
 	private void initialize(Bundle _savedInstanceState) {
 		dongflix_req = new RequestNetwork(this);
 
@@ -1564,19 +1789,8 @@ public class MainActivity extends AppCompatActivity {
 
 		gridview1 = findViewById(R.id.gridview1);
 		recyclerPopular = findViewById(R.id.recyclerPopular);
-		listPopular = findViewById(R.id.listPopular);
 		recyclerMovieDonghua = findViewById(R.id.recyclerMovieDonghua);
-		recyclerCompletedDonghua = findViewById(R.id.recyclerCompletedDonghua);
-		recyclerComedyDonghua = findViewById(R.id.recyclerComedyDonghua);
-		recyclerMysteryDonghua = findViewById(R.id.recyclerMysteryDonghua);
-
-		textSeeAll = findViewById(R.id.text_see_all);
-		textMovieSeeAll = findViewById(R.id.text_movie_see_all);
-		textCompletedSeeAll = findViewById(R.id.text_completed_see_all);
-		textComedySeeAll = findViewById(R.id.text_comedy_see_all);
-		textMysterySeeAll = findViewById(R.id.text_mystery_see_all);
-		textPopularSeeAll = findViewById(R.id.text_popular_see_all);
-
+		listPopular = findViewById(R.id.listPopular);
 		recyclerSearchList = findViewById(R.id.recycler_search_list);
 		searchBarContainer = findViewById(R.id.search_bar_container);
 		inputSearch = findViewById(R.id.input_search);
@@ -1585,6 +1799,8 @@ public class MainActivity extends AppCompatActivity {
 
 		textHeroTitle = findViewById(R.id.text_hero_title);
 		textHeroDesc = findViewById(R.id.text_hero_desc);
+		textSeeAll = findViewById(R.id.text_see_all);
+		textMovieSeeAll = findViewById(R.id.text_movie_see_all);
 		imgHeroBanner = findViewById(R.id.img_hero_banner);
 		imgUserAvatar = findViewById(R.id.img_user_avatar);
 		btnHeroPlay = findViewById(R.id.btn_hero_play);
@@ -1630,18 +1846,15 @@ public class MainActivity extends AppCompatActivity {
 			});
 		}
 
-		View.OnClickListener openCatalogListener = new View.OnClickListener() {
+		View.OnClickListener openCatalog = new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				startActivity(new Intent(MainActivity.this, CatalogActivity.class));
+				Intent intent = new Intent(MainActivity.this, CatalogActivity.class);
+				startActivity(intent);
 			}
 		};
-		if (textSeeAll != null) textSeeAll.setOnClickListener(openCatalogListener);
-		if (textMovieSeeAll != null) textMovieSeeAll.setOnClickListener(openCatalogListener);
-		if (textCompletedSeeAll != null) textCompletedSeeAll.setOnClickListener(openCatalogListener);
-		if (textComedySeeAll != null) textComedySeeAll.setOnClickListener(openCatalogListener);
-		if (textMysterySeeAll != null) textMysterySeeAll.setOnClickListener(openCatalogListener);
-		if (textPopularSeeAll != null) textPopularSeeAll.setOnClickListener(openCatalogListener);
+		if (textSeeAll != null) textSeeAll.setOnClickListener(openCatalog);
+		if (textMovieSeeAll != null) textMovieSeeAll.setOnClickListener(openCatalog);
 
 		if (btnHeroFavorite != null) {
 			btnHeroFavorite.setOnClickListener(new View.OnClickListener() {
@@ -1731,6 +1944,7 @@ public class MainActivity extends AppCompatActivity {
 			@Override
 			public void onResponse(String _param1, String _param2, HashMap<String, Object> _param3) {
 				final String _response = _param2;
+				stopMainShimmer();
 				hideRefreshIndicator();
 
 				DongflixPlayerManager.getInstance().cachedAllCatalogJson = _response;
@@ -1778,9 +1992,17 @@ public class MainActivity extends AppCompatActivity {
 					startHeroAutoSlider();
 				}
 
-				bindHorizontalPosterRecycler(recyclerPopular, listMap, 114, 162);
-				bindHorizontalPosterRecycler(listPopular, listMap, 114, 162);
+				float d = getResources().getDisplayMetrics().density;
+				if (recyclerPopular != null) {
+					recyclerPopular.setLayoutManager(new LinearLayoutManager(MainActivity.this, LinearLayoutManager.HORIZONTAL, false));
+					recyclerPopular.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+					recyclerPopular.setAdapter(new HorizontalPosterAdapter(listMap, 114, 162));
+				}
+				if (listPopular != null) {
+					listPopular.setAdapter(new ListPopularAdapter(listMap));
+				}
 
+				populateMovieSection();
 				sortAndRenderPopularSections();
 				syncFirebaseViewsAndSort();
 				applyOutfitFontsWithoutBold();
@@ -1788,6 +2010,7 @@ public class MainActivity extends AppCompatActivity {
 
 			@Override
 			public void onErrorResponse(String _param1, String _param2) {
+				stopMainShimmer();
 				hideRefreshIndicator();
 			}
 		};
@@ -1821,16 +2044,16 @@ public class MainActivity extends AppCompatActivity {
 
 		if (textHeroTitle != null) {
 			textHeroTitle.setText("");
-			textHeroTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 10 * d));
+			textHeroTitle.setBackground(createMainShimmerDrawable(8 * d));
 		}
 		if (textHeroDesc != null) {
 			textHeroDesc.setText("");
-			textHeroDesc.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 8 * d));
+			textHeroDesc.setBackground(createMainShimmerDrawable(6 * d));
 		}
 
 		if (imgHeroBanner != null) {
-			imgHeroBanner.setImageResource(0);
-			imgHeroBanner.setBackgroundColor(Color.parseColor("#12141A"));
+			imgHeroBanner.setImageResource(android.R.color.transparent);
+			imgHeroBanner.setBackground(createMainShimmerDrawable(0f));
 		}
 
 		if (btnHeroPlay != null) {
@@ -1845,18 +2068,32 @@ public class MainActivity extends AppCompatActivity {
 		if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.INVISIBLE);
 		if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.GONE);
 
-		bindHorizontalPosterRecycler(recyclerPopular, dummyList, 114, 162);
-		bindHorizontalPosterRecycler(listPopular, dummyList, 114, 162);
-		bindHorizontalPosterRecycler(recyclerMovieDonghua, dummyList, 114, 162);
-		bindHorizontalPosterRecycler(recyclerCompletedDonghua, dummyList, 114, 162);
-		bindHorizontalPosterRecycler(recyclerComedyDonghua, dummyList, 114, 162);
-		bindHorizontalPosterRecycler(recyclerMysteryDonghua, dummyList, 114, 162);
+		if (recyclerPopular != null) {
+			recyclerPopular.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+			recyclerPopular.setNestedScrollingEnabled(false);
+			recyclerPopular.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+			recyclerPopular.setAdapter(new HorizontalPosterAdapter(dummyList, 114, 162));
+		}
+
+		if (recyclerMovieDonghua != null) {
+			recyclerMovieDonghua.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+			recyclerMovieDonghua.setNestedScrollingEnabled(false);
+			recyclerMovieDonghua.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+			recyclerMovieDonghua.setAdapter(new HorizontalPosterAdapter(dummyList, 114, 162));
+		}
+
+		if (listPopular != null) {
+			listPopular.setLayoutManager(new LinearLayoutManager(this));
+			listPopular.setNestedScrollingEnabled(false);
+			listPopular.setAdapter(new ListPopularAdapter(dummyList));
+		}
 
 		if (recyclerSearchList != null) {
 			recyclerSearchList.setLayoutManager(new LinearLayoutManager(this));
 			recyclerSearchList.setAdapter(new ListPopularAdapter(dummyList));
 		}
 
+		startMainShimmer();
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
@@ -2005,88 +2242,46 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	public void _UI() {
-		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			Window window = getWindow();
 			window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
 			window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+			window.getDecorView().setSystemUiVisibility(
+				View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+			);
 			window.setStatusBarColor(Color.TRANSPARENT);
 		}
-
-		final float density = getResources().getDisplayMetrics().density;
-		final View topHeaderBar = findViewById(R.id.relativelayout69);
-		final View navWrapper = findViewById(R.id.navbar_wrapper);
-		final View rootContainer = findViewById(R.id.root_main_container);
-
-		if (rootContainer != null) {
-			ViewCompat.setOnApplyWindowInsetsListener(rootContainer, new androidx.core.view.OnApplyWindowInsetsListener() {
-				@Override
-				public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat insets) {
-					int topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
-					int bottomInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
-
-					if (topHeaderBar != null) {
-						topHeaderBar.setBackgroundColor(Color.TRANSPARENT);
-						topHeaderBar.setPadding(
-							(int) (16 * density),
-							topInset + (int) (8 * density),
-							(int) (16 * density),
-							(int) (10 * density)
-						);
-					}
-					if (pullRefreshIndicator != null && pullRefreshIndicator.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-						FrameLayout.LayoutParams rlp = (FrameLayout.LayoutParams) pullRefreshIndicator.getLayoutParams();
-						rlp.topMargin = topInset + (int) (12 * density);
-						pullRefreshIndicator.setLayoutParams(rlp);
-					}
-					if (navWrapper != null) {
-						navWrapper.setPadding(
-							(int) (14 * density),
-							0,
-							(int) (14 * density),
-							bottomInset + (int) (16 * density)
-						);
-					}
-					return insets;
-				}
-			});
-			ViewCompat.requestApplyInsets(rootContainer);
-		}
-
-		// Hapus background & stroke pada tombol notifikasi dan pesan
-		if (btnTopNotif != null) {
-			btnTopNotif.setBackgroundColor(Color.TRANSPARENT);
-			btnTopNotif.setForeground(null);
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-				btnTopNotif.setElevation(0f);
-			}
-		}
-		if (btnTopChat != null) {
-			btnTopChat.setBackgroundColor(Color.TRANSPARENT);
-			btnTopChat.setForeground(null);
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-				btnTopChat.setElevation(0f);
-			}
-		}
-		if (imgTopNotif != null) imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		int statusBarHeight = 0;
 		int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
 		if (resourceId > 0) {
 			statusBarHeight = getResources().getDimensionPixelSize(resourceId);
 		}
+		float density = getResources().getDisplayMetrics().density;
+
+		View topHeaderBar = findViewById(R.id.relativelayout69);
+		if (topHeaderBar != null) {
+			int horizontalPadding = (int)(16 * density);
+			int topPadding = statusBarHeight + (int)(8 * density);
+			int bottomPadding = (int)(10 * density);
+			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
+		}
+
+		applyUniversalGlassStyle(btnTopNotif, btnTopNotif);
+		applyUniversalGlassStyle(btnTopChat, btnTopChat);
+		if (imgTopNotif != null) imgTopNotif.setColorFilter(Color.WHITE);
+		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE);
+		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		if (searchBarContainer != null) {
 			LinearLayout.LayoutParams sbLp = (LinearLayout.LayoutParams) searchBarContainer.getLayoutParams();
-			sbLp.topMargin = statusBarHeight + (int) (12 * density);
+			sbLp.topMargin = statusBarHeight + (int)(12 * density);
 			searchBarContainer.setLayoutParams(sbLp);
 
 			GradientDrawable sbBg = new GradientDrawable();
 			sbBg.setColor(Color.parseColor("#12141A"));
 			sbBg.setCornerRadius(100f);
-			sbBg.setStroke((int) (1 * density), Color.parseColor("#26FFFFFF"));
+			sbBg.setStroke((int)(1 * density), Color.parseColor("#26FFFFFF"));
 			searchBarContainer.setBackground(sbBg);
 		}
 
@@ -2101,7 +2296,7 @@ public class MainActivity extends AppCompatActivity {
 		if (headerShadow != null) {
 			GradientDrawable topGradient = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[] { Color.parseColor("#B3000000"), Color.TRANSPARENT }
+				new int[] { Color.parseColor("#E6000000"), Color.TRANSPARENT }
 			);
 			headerShadow.setBackground(topGradient);
 		}
@@ -2127,12 +2322,6 @@ public class MainActivity extends AppCompatActivity {
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
 		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
-	}
-
-	@Override
-	public void onDestroy() {
-		stopHeroAutoSlider();
-		super.onDestroy();
 	}
 
 	private void setupScrollResponsiveNavbar() {
@@ -2167,25 +2356,14 @@ public class MainActivity extends AppCompatActivity {
 		}
 		if (isNavbarCompact == compact) return;
 		isNavbarCompact = compact;
-		float d = getResources().getDisplayMetrics().density;
 
 		if (compact) {
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.GONE);
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.VISIBLE);
-			if (btnCircleSearch != null && btnCircleSearch.getLayoutParams() instanceof LinearLayout.LayoutParams) {
-				LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) btnCircleSearch.getLayoutParams();
-				slp.leftMargin = 0;
-				btnCircleSearch.setLayoutParams(slp);
-			}
 		} else {
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.GONE);
 			if (miniPlayerInlineSlot != null) miniPlayerInlineSlot.setVisibility(View.GONE);
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.VISIBLE);
-			if (btnCircleSearch != null && btnCircleSearch.getLayoutParams() instanceof LinearLayout.LayoutParams) {
-				LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) btnCircleSearch.getLayoutParams();
-				slp.leftMargin = (int) (10 * d);
-				btnCircleSearch.setLayoutParams(slp);
-			}
 			snapPillToTab(activeNavTabIndex, false);
 		}
 
@@ -2257,210 +2435,6 @@ public class MainActivity extends AppCompatActivity {
 		});
 	}
 
-	public class HorizontalPosterAdapter extends RecyclerView.Adapter<HorizontalPosterAdapter.ViewHolder> {
-		private final ArrayList<HashMap<String, Object>> _data;
-		private final int cardWidthDp;
-		private final int cardHeightDp;
-
-		public HorizontalPosterAdapter(ArrayList<HashMap<String, Object>> _arr, int widthDp, int heightDp) {
-			_data = _arr;
-			this.cardWidthDp = widthDp;
-			this.cardHeightDp = heightDp;
-		}
-
-		@Override
-		public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-			float d = parent.getResources().getDisplayMetrics().density;
-			int wPx = (int) (cardWidthDp * d);
-			int hPx = (int) (cardHeightDp * d);
-
-			LinearLayout root = new LinearLayout(parent.getContext());
-			root.setOrientation(LinearLayout.VERTICAL);
-			RecyclerView.LayoutParams rootLp = new RecyclerView.LayoutParams(
-				wPx,
-				ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			rootLp.rightMargin = (int) (10 * d);
-			root.setLayoutParams(rootLp);
-
-			androidx.cardview.widget.CardView coverCard = new androidx.cardview.widget.CardView(parent.getContext());
-			coverCard.setLayoutParams(new LinearLayout.LayoutParams(wPx, hPx));
-			coverCard.setRadius(16 * d);
-			coverCard.setCardElevation(0f);
-			coverCard.setCardBackgroundColor(Color.parseColor("#12141A"));
-			coverCard.setTag("cover_card");
-
-			FrameLayout coverOverlayContainer = new FrameLayout(parent.getContext());
-			coverOverlayContainer.setLayoutParams(new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				ViewGroup.LayoutParams.MATCH_PARENT
-			));
-
-			ImageView imgCover = new ImageView(parent.getContext());
-			imgCover.setLayoutParams(new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				ViewGroup.LayoutParams.MATCH_PARENT
-			));
-			imgCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			imgCover.setTag("img_cover");
-			coverOverlayContainer.addView(imgCover);
-
-			View bottomScrim = new View(parent.getContext());
-			FrameLayout.LayoutParams scrimLp = new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				(int) (60 * d),
-				Gravity.BOTTOM
-			);
-			bottomScrim.setLayoutParams(scrimLp);
-			bottomScrim.setTag("bottom_scrim");
-			coverOverlayContainer.addView(bottomScrim);
-
-			TextView tvStatus = new TextView(parent.getContext());
-			FrameLayout.LayoutParams statusLp = new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.WRAP_CONTENT,
-				ViewGroup.LayoutParams.WRAP_CONTENT,
-				Gravity.TOP | Gravity.START
-			);
-			statusLp.setMargins((int) (8 * d), (int) (8 * d), (int) (8 * d), 0);
-			tvStatus.setLayoutParams(statusLp);
-			tvStatus.setPadding((int) (8 * d), (int) (3 * d), (int) (8 * d), (int) (3 * d));
-			stylePlainOutfitText(tvStatus, 9.5f, Color.WHITE);
-			tvStatus.setMaxLines(1);
-			tvStatus.setTag("text_status");
-			coverOverlayContainer.addView(tvStatus);
-
-			TextView tvEpisode = new TextView(parent.getContext());
-			FrameLayout.LayoutParams epLp = new FrameLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				ViewGroup.LayoutParams.WRAP_CONTENT,
-				Gravity.BOTTOM | Gravity.START
-			);
-			epLp.setMargins((int) (9 * d), 0, (int) (9 * d), (int) (8 * d));
-			tvEpisode.setLayoutParams(epLp);
-			stylePlainOutfitText(tvEpisode, 10.5f, Color.WHITE);
-			tvEpisode.setMaxLines(1);
-			tvEpisode.setEllipsize(TextUtils.TruncateAt.END);
-			tvEpisode.setTag("text_episode");
-			coverOverlayContainer.addView(tvEpisode);
-
-			coverCard.addView(coverOverlayContainer);
-			root.addView(coverCard);
-
-			TextView tvTitle = new TextView(parent.getContext());
-			LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT,
-				(int) (36 * d)
-			);
-			titleLp.topMargin = (int) (7 * d);
-			tvTitle.setLayoutParams(titleLp);
-			stylePlainOutfitText(tvTitle, 12.5f, Color.WHITE);
-			tvTitle.setLineSpacing(0f, 1.12f);
-			tvTitle.setMaxLines(2);
-			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
-			tvTitle.setTag("text_title");
-			root.addView(tvTitle);
-
-			return new ViewHolder(root);
-		}
-
-		@Override
-		public void onBindViewHolder(ViewHolder _holder, final int _position) {
-			View _view = _holder.itemView;
-			float d = _view.getResources().getDisplayMetrics().density;
-
-			if (_view.getLayoutParams() instanceof RecyclerView.LayoutParams) {
-				RecyclerView.LayoutParams rlp = (RecyclerView.LayoutParams) _view.getLayoutParams();
-				rlp.rightMargin = (_position == _data.size() - 1) ? 0 : (int) (10 * d);
-				_view.setLayoutParams(rlp);
-			}
-
-			ImageView imgCover = _view.findViewWithTag("img_cover");
-			View bottomScrim = _view.findViewWithTag("bottom_scrim");
-			TextView textStatus = _view.findViewWithTag("text_status");
-			TextView textEpisode = _view.findViewWithTag("text_episode");
-			TextView textTitle = _view.findViewWithTag("text_title");
-
-			final HashMap<String, Object> item = _data.get(_position);
-
-			if (item.containsKey("is_loading")) {
-				if (imgCover != null) {
-					imgCover.setImageResource(0);
-					imgCover.setBackgroundColor(Color.parseColor("#12141A"));
-				}
-				if (bottomScrim != null) bottomScrim.setVisibility(View.GONE);
-				if (textStatus != null) {
-					textStatus.setText("");
-					textStatus.setVisibility(View.INVISIBLE);
-				}
-				if (textEpisode != null) {
-					textEpisode.setText("");
-					textEpisode.setVisibility(View.INVISIBLE);
-				}
-				if (textTitle != null) {
-					textTitle.setText("");
-					textTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 8 * d));
-				}
-				_view.setOnClickListener(null);
-			} else {
-				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
-				if (bottomScrim != null) {
-					bottomScrim.setVisibility(View.VISIBLE);
-					bottomScrim.setBackground(new GradientDrawable(
-						GradientDrawable.Orientation.BOTTOM_TOP,
-						new int[]{Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT}
-					));
-				}
-				if (textStatus != null) {
-					textStatus.setVisibility(View.VISIBLE);
-					GradientDrawable statusBg = new GradientDrawable();
-					statusBg.setCornerRadius(100f);
-					statusBg.setColor(Color.parseColor("#3B82F6"));
-					textStatus.setBackground(statusBg);
-					textStatus.setText(item.get("status") != null ? item.get("status").toString() : "");
-				}
-				if (textEpisode != null) {
-					textEpisode.setVisibility(View.VISIBLE);
-					textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
-				}
-				if (textTitle != null) {
-					textTitle.setBackgroundColor(Color.TRANSPARENT);
-					textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
-				}
-
-				String cover = item.get("cover") != null ? item.get("cover").toString().trim() : "";
-				if (cover.contains("i.ibb.co.com")) {
-					cover = cover.replace("i.ibb.co.com", "i.ibb.co");
-				}
-				if (cover.startsWith("http://")) {
-					cover = cover.replace("http://", "https://");
-				}
-
-				if (imgCover != null && !cover.isEmpty()) {
-					Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imgCover);
-				}
-
-				_view.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						String slug = item.get("slug") != null ? item.get("slug").toString() : "";
-						openWatchBySlug(slug);
-					}
-				});
-			}
-		}
-
-		@Override
-		public int getItemCount() {
-			return _data.size();
-		}
-
-		public class ViewHolder extends RecyclerView.ViewHolder {
-			public ViewHolder(View v) {
-				super(v);
-			}
-		}
-	}
-
 	public class Gridview1Adapter extends BaseAdapter {
 		ArrayList<HashMap<String, Object>> _data;
 		public Gridview1Adapter(ArrayList<HashMap<String, Object>> _arr) { _data = _arr; }
@@ -2486,32 +2460,28 @@ public class MainActivity extends AppCompatActivity {
 			if (item.containsKey("is_loading")) {
 				if (textTitle != null) {
 					textTitle.setText("");
-					textTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 8 * d));
+					textTitle.setBackground(createMainShimmerDrawable(8 * d));
 				}
 				if (textStatus != null) {
 					textStatus.setText("");
-					textStatus.setVisibility(View.INVISIBLE);
+					textStatus.setBackground(createMainShimmerDrawable(50f));
 				}
 				if (textEpisode != null) {
 					textEpisode.setText("");
-					textEpisode.setVisibility(View.INVISIBLE);
+					textEpisode.setBackground(createMainShimmerDrawable(6 * d));
 				}
 				if (imgCover != null) {
-					imgCover.setImageResource(0);
-					imgCover.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 16 * d));
+					imgCover.setImageResource(android.R.color.transparent);
+					imgCover.setBackground(createMainShimmerDrawable(16 * d));
 				}
 				if (view2 != null) view2.setVisibility(View.GONE);
 			} else {
 				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
 				if (textTitle != null) textTitle.setBackgroundColor(Color.TRANSPARENT);
-				if (textEpisode != null) {
-					textEpisode.setVisibility(View.VISIBLE);
-					textEpisode.setBackgroundColor(Color.TRANSPARENT);
-				}
+				if (textEpisode != null) textEpisode.setBackgroundColor(Color.TRANSPARENT);
 				if (view2 != null) view2.setVisibility(View.VISIBLE);
 
 				if (textStatus != null) {
-					textStatus.setVisibility(View.VISIBLE);
 					textStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF3B82F6));
 				}
 
@@ -2568,31 +2538,27 @@ public class MainActivity extends AppCompatActivity {
 			ImageView imgPopularCover = _view.findViewById(getResources().getIdentifier("img_popular_cover", "id", getPackageName()));
 			View linear35 = _view.findViewById(getResources().getIdentifier("linear35", "id", getPackageName()));
 
-			HashMap<String, Object> item = _data.get(_position);
-
-			if (item.containsKey("is_loading")) {
+			if (_data.get(_position).containsKey("is_loading")) {
 				if (textPopularTitle != null) {
 					textPopularTitle.setText("");
-					textPopularTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 8 * d));
+					textPopularTitle.setBackground(createMainShimmerDrawable(100f));
 				}
 				if (textPopularDesc != null) {
 					textPopularDesc.setText("");
-					textPopularDesc.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
+					textPopularDesc.setBackground(createMainShimmerDrawable(6 * d));
 				}
 				if (textPopularGenre != null) {
 					textPopularGenre.setText("");
-					textPopularGenre.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
+					textPopularGenre.setBackground(createMainShimmerDrawable(6 * d));
 				}
 				if (textPopularStatus != null) {
-					textPopularStatus.setText("");
-					textPopularStatus.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 100f));
+					textPopularStatus.setText("                    ");
+					textPopularStatus.setBackground(createMainShimmerDrawable(100f));
 				}
 				if (imgPopularCover != null) {
-					imgPopularCover.setImageResource(0);
-					imgPopularCover.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 16 * d));
+					imgPopularCover.setImageResource(android.R.color.transparent);
+					imgPopularCover.setBackground(createMainShimmerDrawable(16 * d));
 				}
-				View clickTarget = (linear35 != null) ? linear35 : _view;
-				clickTarget.setOnClickListener(null);
 			} else {
 				if (textPopularTitle != null) textPopularTitle.setBackgroundColor(Color.TRANSPARENT);
 				if (textPopularDesc != null) textPopularDesc.setBackgroundColor(Color.TRANSPARENT);
@@ -2600,22 +2566,22 @@ public class MainActivity extends AppCompatActivity {
 				if (imgPopularCover != null) imgPopularCover.setBackgroundColor(Color.TRANSPARENT);
 
 				if (textPopularStatus != null) textPopularStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF111111));
-				if (textPopularTitle != null) textPopularTitle.setText(item.get("title").toString());
-				if (textPopularDesc != null) textPopularDesc.setText(cleanText(item.get("synopsis").toString()));
-				if (textPopularGenre != null) textPopularGenre.setText(item.get("genres").toString().replace("[", "").replace("]", ""));
+				if (textPopularTitle != null) textPopularTitle.setText(_data.get(_position).get("title").toString());
+				if (textPopularDesc != null) textPopularDesc.setText(cleanText(_data.get(_position).get("synopsis").toString()));
+				if (textPopularGenre != null) textPopularGenre.setText(_data.get(_position).get("genres").toString().replace("[", "").replace("]", ""));
 
 				if (textPopularStatus != null) {
-					textPopularStatus.setText(item.get("episode").toString().concat(" / ".concat(item.get("status").toString())));
+					textPopularStatus.setText(_data.get(_position).get("episode").toString().concat(" / ".concat(_data.get(_position).get("status").toString())));
 				}
 				if (imgPopularCover != null) {
-					Glide.with(getApplicationContext()).load(Uri.parse(item.get("cover").toString())).into(imgPopularCover);
+					Glide.with(getApplicationContext()).load(Uri.parse(_data.get(_position).get("cover").toString())).into(imgPopularCover);
 				}
 
 				View clickTarget = (linear35 != null) ? linear35 : _view;
 				clickTarget.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						String slug = item.get("slug") != null ? item.get("slug").toString() : "";
+						String slug = _data.get(_position).get("slug") != null ? _data.get(_position).get("slug").toString() : "";
 						openWatchBySlug(slug);
 					}
 				});
