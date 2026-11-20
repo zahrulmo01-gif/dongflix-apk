@@ -516,7 +516,7 @@ public class MainActivity extends AppCompatActivity {
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
 		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		int sizePx = Math.max((int) (46 * d), target.getWidth() > 0 ? target.getWidth() : (int) (46 * d));
+		int sizePx = Math.max((int) (40 * d), target.getWidth() > 0 ? target.getWidth() : (int) (40 * d));
 
 		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
 			String cleanUrl = photoUrl.trim();
@@ -2015,23 +2015,36 @@ public class MainActivity extends AppCompatActivity {
 
 		final float density = getResources().getDisplayMetrics().density;
 		final View topHeaderBar = findViewById(R.id.relativelayout69);
+		final View navWrapper = findViewById(R.id.navbar_wrapper);
 		final View rootContainer = findViewById(R.id.root_main_container);
 
-		if (rootContainer != null && topHeaderBar != null) {
+		if (rootContainer != null) {
 			ViewCompat.setOnApplyWindowInsetsListener(rootContainer, new androidx.core.view.OnApplyWindowInsetsListener() {
 				@Override
 				public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat insets) {
 					int topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
-					topHeaderBar.setPadding(
-						(int) (16 * density),
-						topInset + (int) (10 * density),
-						(int) (16 * density),
-						(int) (10 * density)
-					);
+					int bottomInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+
+					if (topHeaderBar != null) {
+						topHeaderBar.setPadding(
+							(int) (16 * density),
+							topInset + (int) (10 * density),
+							(int) (16 * density),
+							(int) (10 * density)
+						);
+					}
 					if (pullRefreshIndicator != null && pullRefreshIndicator.getLayoutParams() instanceof FrameLayout.LayoutParams) {
 						FrameLayout.LayoutParams rlp = (FrameLayout.LayoutParams) pullRefreshIndicator.getLayoutParams();
 						rlp.topMargin = topInset + (int) (12 * density);
 						pullRefreshIndicator.setLayoutParams(rlp);
+					}
+					if (navWrapper != null) {
+						navWrapper.setPadding(
+							(int) (14 * density),
+							0,
+							(int) (14 * density),
+							bottomInset + (int) (16 * density)
+						);
 					}
 					return insets;
 				}
