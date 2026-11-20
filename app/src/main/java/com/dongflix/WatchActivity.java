@@ -14,6 +14,7 @@ import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -34,6 +35,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
+import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -45,12 +48,14 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.LinearInterpolator;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -60,6 +65,7 @@ import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -68,6 +74,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.BufferedReader;
@@ -83,6 +96,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -93,6 +107,9 @@ import org.json.JSONObject;
 
 public class WatchActivity extends AppCompatActivity {
 
+	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
+	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
+
 	private ArrayList<HashMap<String, Object>> eps = new ArrayList<>();
 	private RequestNetwork req_watch;
 	private RequestNetwork.RequestListener _req_watch_request_listener;
@@ -101,13 +118,14 @@ public class WatchActivity extends AppCompatActivity {
 	private WebView fallbackWebView;
 	private FrameLayout layoutPlayer;
 	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls, dividerLineView;
-	private ImageView btnBack, btnCast, btnLock, btnSettings, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail;
-	private TextView textPlayerTitle, textTime, btnFullscreenEpisodes, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes;
-	private LinearLayout animSeekLeft, animSeekRight, btnUnlockScreen, pillSpeedHold, btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport;
+	private ImageView btnBack, btnCast, btnLock, btnSettings, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail, iconCommentChevron;
+	private TextView textPlayerTitle, textTime, btnFullscreenEpisodes, btnQuality, textJudul, textRating, textYear, textGenre, textActionServer, textSortEpisodes, textCommentPreviewLabel, textCommentCount;
+	private LinearLayout animSeekLeft, animSeekRight, btnUnlockScreen, pillSpeedHold, btnFill, btnOpenDetail, btnSortEpisodes, btnActionServer, btnActionDownload, btnActionShare, btnActionReport, btnCommentSection;
 	private ProgressBar playerLoading, miniVideoProgressBar;
 	private SeekBar playerSeekBar;
 	private RecyclerView recyclerEpisode, recyclerRekomendasi;
 
+	private String currentSlug = "";
 	private String detailTitle = "";
 	private String detailSynopsis = "";
 	private String detailStatus = "Ongoing";
@@ -163,6 +181,25 @@ public class WatchActivity extends AppCompatActivity {
 	private boolean isWebViewFallbackActive = false;
 	private boolean isResumingFromMiniPlayer = false;
 
+	// Riwayat nonton Firebase
+	private String pendingHistoryEpisode = "";
+	private int pendingHistoryEpisodeIndex = -1;
+	private long pendingHistoryPositionMs = 0L;
+	private boolean historyLoaded = false;
+	private boolean initialEpisodeStarted = false;
+	private long lastHistorySyncMs = 0L;
+
+	// Komentar Firebase & BottomSheet gaya TikTok
+	private DatabaseReference commentsRef;
+	private ValueEventListener commentsListener;
+	private final ArrayList<HashMap<String, Object>> commentList = new ArrayList<>();
+	private TikTokCommentAdapter activeCommentSheetAdapter;
+	private TextView activeCommentSheetHeader;
+	private String cachedUserName = "Pengguna Dongflix";
+	private String cachedUserPhoto = "";
+
+	private Typeface outfitFont;
+
 	private static class ScoredAnimeItem {
 		final HashMap<String, Object> item;
 		final int score;
@@ -180,6 +217,598 @@ public class WatchActivity extends AppCompatActivity {
 		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
 		initialize(_savedInstanceState);
 		initializeLogic();
+	}
+
+	private Typeface getOutfitTypeface() {
+		if (outfitFont != null) return outfitFont;
+		String[] candidates = {
+			"fonts/outfit_regular.ttf",
+			"fonts/outfit_medium.ttf",
+			"fonts/outfit.ttf",
+			"fonts/Outfit-Regular.ttf",
+			"fonts/productsans_reg.ttf"
+		};
+		for (String path : candidates) {
+			try {
+				outfitFont = Typeface.createFromAsset(getAssets(), path);
+				if (outfitFont != null) return outfitFont;
+			} catch (Exception ignored) {}
+		}
+		outfitFont = Typeface.DEFAULT;
+		return outfitFont;
+	}
+
+	private void applyOutfitToAllViews() {
+		Typeface tf = getOutfitTypeface();
+		View content = getWindow().getDecorView().findViewById(android.R.id.content);
+		if (content == null) return;
+
+		Queue<View> queue = new LinkedList<>();
+		queue.add(content);
+		while (!queue.isEmpty()) {
+			View v = queue.poll();
+			if (v instanceof TextView) {
+				TextView tv = (TextView) v;
+				tv.setTypeface(tf, Typeface.NORMAL);
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+					tv.setLetterSpacing(-0.01f);
+				}
+			} else if (v instanceof ViewGroup) {
+				ViewGroup vg = (ViewGroup) v;
+				for (int i = 0; i < vg.getChildCount(); i++) {
+					queue.add(vg.getChildAt(i));
+				}
+			}
+		}
+	}
+
+	private String getUserKey() {
+		FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+		if (user == null || user.getEmail() == null) return "";
+		return user.getEmail().trim().toLowerCase(Locale.US).replace(".", ",");
+	}
+
+	private void loadCurrentUserCommentMeta() {
+		FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+		if (user == null || user.getEmail() == null) return;
+		String email = user.getEmail().trim().toLowerCase(Locale.US);
+		cachedUserName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
+		if (user.getPhotoUrl() != null) cachedUserPhoto = user.getPhotoUrl().toString();
+
+		String key = getUserKey();
+		if (key.isEmpty()) return;
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("users").child(key)
+			.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snap) {
+					if (!snap.exists()) return;
+					Object n = snap.child("name").getValue();
+					if (n != null && !n.toString().trim().isEmpty()) {
+						cachedUserName = n.toString().trim();
+					}
+					Object p = snap.child("photoURL").getValue();
+					if (p != null && !p.toString().trim().isEmpty()) {
+						cachedUserPhoto = p.toString().trim();
+					}
+				}
+
+				@Override public void onCancelled(@NonNull DatabaseError error) {}
+			});
+	}
+
+	private void loadWatchHistoryFromFirebase() {
+		String userKey = getUserKey();
+		if (userKey.isEmpty() || currentSlug.isEmpty()) {
+			historyLoaded = true;
+			tryStartEpisodeFromHistoryIfReady();
+			return;
+		}
+
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("users")
+			.child(userKey)
+			.child("history")
+			.child(currentSlug)
+			.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snap) {
+					if (isFinishing() || isDestroyed()) return;
+					if (snap.exists()) {
+						Object epObj = snap.child("episode").getValue();
+						pendingHistoryEpisode = epObj != null ? epObj.toString().trim() : "";
+						pendingHistoryEpisodeIndex = (int) parseLongSafe(snap.child("episodeIndex").getValue(), -1L);
+						pendingHistoryPositionMs = parseLongSafe(snap.child("positionMs").getValue(), 0L);
+						if (pendingHistoryPositionMs <= 0L) {
+							pendingHistoryPositionMs = parseLongSafe(snap.child("currentTime").getValue(), 0L) * 1000L;
+						}
+					}
+					historyLoaded = true;
+					tryStartEpisodeFromHistoryIfReady();
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError error) {
+					historyLoaded = true;
+					tryStartEpisodeFromHistoryIfReady();
+				}
+			});
+	}
+
+	private void tryStartEpisodeFromHistoryIfReady() {
+		if (!historyLoaded || initialEpisodeStarted || isResumingFromMiniPlayer) return;
+		if (episodeList == null || episodeList.isEmpty()) return;
+
+		initialEpisodeStarted = true;
+		int targetIdx = 0;
+
+		if (pendingHistoryEpisodeIndex >= 0 && pendingHistoryEpisodeIndex < episodeList.size()) {
+			targetIdx = pendingHistoryEpisodeIndex;
+		} else if (!pendingHistoryEpisode.isEmpty()) {
+			String cleanTarget = pendingHistoryEpisode.replaceAll("(?i)^ep(isode)?\\s*", "").trim();
+			for (int i = 0; i < episodeList.size(); i++) {
+				HashMap<String, Object> item = episodeList.get(i);
+				String epVal = item.get("episode") != null
+					? item.get("episode").toString().replaceAll("(?i)^ep(isode)?\\s*", "").trim()
+					: "";
+				if (!cleanTarget.isEmpty() && cleanTarget.equalsIgnoreCase(epVal)) {
+					targetIdx = i;
+					break;
+				}
+			}
+		}
+
+		int resumeMs = (pendingHistoryPositionMs > 0L && pendingHistoryPositionMs < Integer.MAX_VALUE)
+			? (int) pendingHistoryPositionMs : 0;
+
+		if (playerTextureView != null && playerTextureView.isAvailable()) {
+			playEpisodeByIndex(targetIdx, resumeMs);
+		} else if (playerTextureView != null) {
+			final int finalTargetIdx = targetIdx;
+			final int finalResumeMs = resumeMs;
+			playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+				@Override
+				public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+					playerSurface = new Surface(st);
+					if (!initialEpisodeStarted) {
+						initialEpisodeStarted = true;
+						playEpisodeByIndex(finalTargetIdx, finalResumeMs);
+					} else if (mediaPlayer == null && !currentPlayingUrl.isEmpty()) {
+						playEpisodeByIndex(finalTargetIdx, finalResumeMs);
+					}
+				}
+				@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
+				@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
+				@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+			});
+			// Jalankan juga langsung agar ekstraksi stream tidak menunggu tekstur jika lambat
+			playEpisodeByIndex(targetIdx, resumeMs);
+		} else {
+			playEpisodeByIndex(targetIdx, resumeMs);
+		}
+	}
+
+	private void saveWatchHistoryToFirebase(int posMs, int durMs, boolean force) {
+		long now = System.currentTimeMillis();
+		if (!force && (now - lastHistorySyncMs) < 5000L) return;
+
+		String userKey = getUserKey();
+		if (userKey.isEmpty() || currentSlug.isEmpty()) return;
+
+		lastHistorySyncMs = now;
+		String epLabel = String.valueOf(currentEpisodeIndex + 1);
+		if (episodeList != null && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.size()) {
+			Object epObj = episodeList.get(currentEpisodeIndex).get("episode");
+			if (epObj != null && !epObj.toString().trim().isEmpty()) {
+				epLabel = epObj.toString().replace("Ep ", "").replace("Eps ", "").trim();
+			}
+		}
+
+		long safePos = Math.max(0L, posMs);
+		long safeDur = Math.max(0L, durMs);
+		long posMin = safePos / 60000L;
+		long posSec = (safePos / 1000L) % 60L;
+		String remainingText = safeDur > safePos
+			? String.format(Locale.US, "Menit %02d:%02d • Sisa %d mnt", posMin, posSec, Math.max(1L, (safeDur - safePos) / 60000L))
+			: String.format(Locale.US, "Terakhir di %02d:%02d", posMin, posSec);
+
+		String titleToSave = !detailTitle.isEmpty() ? detailTitle : (textJudul != null ? textJudul.getText().toString() : currentSlug);
+
+		Map<String, Object> data = new HashMap<>();
+		data.put("slug", currentSlug);
+		data.put("title", titleToSave);
+		data.put("cover", detailCover);
+		data.put("episode", epLabel);
+		data.put("episodeIndex", currentEpisodeIndex);
+		data.put("positionMs", safePos);
+		data.put("durationMs", safeDur);
+		data.put("remainingText", remainingText);
+		data.put("updatedAt", now);
+
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("users")
+			.child(userKey)
+			.child("history")
+			.child(currentSlug)
+			.updateChildren(data);
+	}
+
+	private long parseLongSafe(Object val, long fallback) {
+		if (val == null) return fallback;
+		if (val instanceof Number) return ((Number) val).longValue();
+		try {
+			return Long.parseLong(val.toString().trim());
+		} catch (Exception e) {
+			return fallback;
+		}
+	}
+
+	private void setupCommentSection() {
+		if (btnCommentSection == null) return;
+		float d = getResources().getDisplayMetrics().density;
+
+		GradientDrawable pillBg = new GradientDrawable();
+		pillBg.setShape(GradientDrawable.RECTANGLE);
+		pillBg.setColor(Color.parseColor("#161A24"));
+		pillBg.setCornerRadius(1000f);
+		pillBg.setStroke((int) (1 * d), Color.parseColor("#1FFFFFFF"));
+		btnCommentSection.setBackground(pillBg);
+
+		if (iconCommentChevron != null) {
+			iconCommentChevron.setColorFilter(Color.parseColor("#94A3B8"), PorterDuff.Mode.SRC_IN);
+		}
+
+		btnCommentSection.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				openTikTokCommentSheet();
+			}
+		});
+
+		attachCommentsListener();
+	}
+
+	private void attachCommentsListener() {
+		if (currentSlug.isEmpty()) return;
+		detachCommentsListener();
+
+		commentsRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("comments")
+			.child(currentSlug);
+
+		commentsListener = new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snap) {
+				if (isFinishing() || isDestroyed()) return;
+				ArrayList<HashMap<String, Object>> parsed = new ArrayList<>();
+				if (snap.exists()) {
+					for (DataSnapshot child : snap.getChildren()) {
+						Object val = child.getValue();
+						if (val instanceof Map) {
+							HashMap<String, Object> item = new HashMap<>();
+							for (Map.Entry<?, ?> e : ((Map<?, ?>) val).entrySet()) {
+								if (e.getKey() != null) item.put(e.getKey().toString(), e.getValue());
+							}
+							item.put("id", child.getKey());
+							parsed.add(item);
+						}
+					}
+					Collections.sort(parsed, new Comparator<HashMap<String, Object>>() {
+						@Override
+						public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+							long tA = parseLongSafe(a.get("timestamp"), 0L);
+							long tB = parseLongSafe(b.get("timestamp"), 0L);
+							return Long.compare(tB, tA);
+						}
+					});
+				}
+
+				commentList.clear();
+				commentList.addAll(parsed);
+
+				int total = commentList.size();
+				if (textCommentCount != null) {
+					textCommentCount.setText(String.valueOf(total));
+				}
+				if (activeCommentSheetHeader != null) {
+					activeCommentSheetHeader.setText(total + " komentar");
+				}
+				if (activeCommentSheetAdapter != null) {
+					activeCommentSheetAdapter.notifyDataSetChanged();
+				}
+			}
+
+			@Override public void onCancelled(@NonNull DatabaseError error) {}
+		};
+
+		commentsRef.addValueEventListener(commentsListener);
+	}
+
+	private void detachCommentsListener() {
+		if (commentsRef != null && commentsListener != null) {
+			commentsRef.removeEventListener(commentsListener);
+		}
+	}
+
+	private void openTikTokCommentSheet() {
+		final float d = getResources().getDisplayMetrics().density;
+		int screenH = getResources().getDisplayMetrics().heightPixels;
+		int videoBottom = (int) (220 * d);
+		if (layoutPlayer != null && layoutPlayer.getHeight() > 0) {
+			int[] loc = new int[2];
+			layoutPlayer.getLocationOnScreen(loc);
+			videoBottom = loc[1] + layoutPlayer.getHeight();
+		}
+		final int sheetHeight = Math.max((int) (280 * d), screenH - videoBottom);
+
+		final BottomSheetDialog sheet = new BottomSheetDialog(this);
+		if (sheet.getWindow() != null) {
+			sheet.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+			sheet.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+		}
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, sheetHeight));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#12151E"));
+		sheetBg.setCornerRadii(new float[]{20 * d, 20 * d, 20 * d, 20 * d, 0f, 0f, 0f, 0f});
+		sheetBg.setStroke((int) (1 * d), Color.parseColor("#1FFFFFFF"));
+		root.setBackground(sheetBg);
+
+		FrameLayout header = new FrameLayout(this);
+		header.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (46 * d)));
+		header.setPadding((int) (16 * d), 0, (int) (12 * d), 0);
+
+		TextView tvHeader = new TextView(this);
+		tvHeader.setText(commentList.size() + " komentar");
+		tvHeader.setTextColor(Color.WHITE);
+		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		tvHeader.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvHeader.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER
+		));
+		activeCommentSheetHeader = tvHeader;
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("✕");
+		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setLayoutParams(new FrameLayout.LayoutParams((int) (34 * d), (int) (34 * d), Gravity.END | Gravity.CENTER_VERTICAL));
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { sheet.dismiss(); }
+		});
+
+		header.addView(tvHeader);
+		header.addView(btnClose);
+		root.addView(header);
+
+		View topDiv = new View(this);
+		topDiv.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * d)));
+		topDiv.setBackgroundColor(Color.parseColor("#14FFFFFF"));
+		root.addView(topDiv);
+
+		RecyclerView rvComments = new RecyclerView(this);
+		rvComments.setLayoutManager(new LinearLayoutManager(this));
+		rvComments.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+		rvComments.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+		rvComments.setClipToPadding(false);
+		activeCommentSheetAdapter = new TikTokCommentAdapter(commentList);
+		rvComments.setAdapter(activeCommentSheetAdapter);
+		root.addView(rvComments);
+
+		View botDiv = new View(this);
+		botDiv.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * d)));
+		botDiv.setBackgroundColor(Color.parseColor("#14FFFFFF"));
+		root.addView(botDiv);
+
+		LinearLayout inputBar = new LinearLayout(this);
+		inputBar.setOrientation(LinearLayout.HORIZONTAL);
+		inputBar.setGravity(Gravity.CENTER_VERTICAL);
+		inputBar.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (10 * d));
+		inputBar.setBackgroundColor(Color.parseColor("#12151E"));
+
+		final EditText etComment = new EditText(this);
+		etComment.setHint("Tambah komentar...");
+		etComment.setHintTextColor(Color.parseColor("#64748B"));
+		etComment.setTextColor(Color.WHITE);
+		etComment.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		etComment.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etComment.setMaxLines(3);
+		etComment.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+
+		GradientDrawable inputBg = new GradientDrawable();
+		inputBg.setColor(Color.parseColor("#1C212E"));
+		inputBg.setCornerRadius(1000f);
+		etComment.setBackground(inputBg);
+
+		LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+		etLp.rightMargin = (int) (10 * d);
+		etComment.setLayoutParams(etLp);
+
+		TextView btnSend = new TextView(this);
+		btnSend.setText("Kirim");
+		btnSend.setTextColor(Color.WHITE);
+		btnSend.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		btnSend.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnSend.setGravity(Gravity.CENTER);
+		btnSend.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+
+		GradientDrawable sendBg = new GradientDrawable();
+		sendBg.setColor(Color.parseColor("#2563EB"));
+		sendBg.setCornerRadius(1000f);
+		btnSend.setBackground(sendBg);
+
+		btnSend.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String text = etComment.getText().toString().trim();
+				if (text.isEmpty() || currentSlug.isEmpty()) return;
+				FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+				if (user == null) {
+					Toast.makeText(WatchActivity.this, "Silakan login untuk berkomentar", Toast.LENGTH_SHORT).show();
+					return;
+				}
+				Map<String, Object> payload = new HashMap<>();
+				payload.put("name", cachedUserName);
+				payload.put("email", user.getEmail() != null ? user.getEmail() : "");
+				payload.put("photoURL", cachedUserPhoto);
+				payload.put("text", text);
+				payload.put("timestamp", System.currentTimeMillis());
+
+				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+					.getReference("comments")
+					.child(currentSlug)
+					.push()
+					.setValue(payload);
+
+				etComment.setText("");
+				InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+				if (imm != null) imm.hideSoftInputFromWindow(etComment.getWindowToken(), 0);
+			}
+		});
+
+		inputBar.addView(etComment);
+		inputBar.addView(btnSend);
+		root.addView(inputBar);
+
+		sheet.setContentView(root);
+		sheet.setOnShowListener(new DialogInterface.OnShowListener() {
+			@Override
+			public void onShow(DialogInterface dialog) {
+				FrameLayout bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					ViewGroup.LayoutParams lp = bottomSheet.getLayoutParams();
+					lp.height = sheetHeight;
+					bottomSheet.setLayoutParams(lp);
+					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behavior.setPeekHeight(sheetHeight);
+					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+					behavior.setSkipCollapsed(true);
+				}
+			}
+		});
+		sheet.setOnDismissListener(new DialogInterface.OnDismissListener() {
+			@Override
+			public void onDismiss(DialogInterface dialog) {
+				activeCommentSheetAdapter = null;
+				activeCommentSheetHeader = null;
+			}
+		});
+		sheet.show();
+	}
+
+	private class TikTokCommentAdapter extends RecyclerView.Adapter<TikTokCommentAdapter.ViewHolder> {
+		private final List<HashMap<String, Object>> items;
+
+		TikTokCommentAdapter(List<HashMap<String, Object>> items) {
+			this.items = items;
+		}
+
+		@NonNull
+		@Override
+		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+			float d = parent.getResources().getDisplayMetrics().density;
+
+			LinearLayout row = new LinearLayout(parent.getContext());
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.TOP);
+			RecyclerView.LayoutParams rowLp = new RecyclerView.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int) (16 * d);
+			row.setLayoutParams(rowLp);
+
+			ImageView avatar = new ImageView(parent.getContext());
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
+			avLp.rightMargin = (int) (12 * d);
+			avatar.setLayoutParams(avLp);
+			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+			avatar.setTag("avatar");
+
+			LinearLayout col = new LinearLayout(parent.getContext());
+			col.setOrientation(LinearLayout.VERTICAL);
+			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+			TextView tvName = new TextView(parent.getContext());
+			tvName.setTextColor(Color.parseColor("#94A3B8"));
+			tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+			tvName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvName.setTag("name");
+
+			TextView tvBody = new TextView(parent.getContext());
+			tvBody.setTextColor(Color.WHITE);
+			tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+			tvBody.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvBody.setLineSpacing(2 * d, 1.08f);
+			LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			bodyLp.topMargin = (int) (2 * d);
+			tvBody.setLayoutParams(bodyLp);
+			tvBody.setTag("body");
+
+			TextView tvTime = new TextView(parent.getContext());
+			tvTime.setTextColor(Color.parseColor("#64748B"));
+			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+			tvTime.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			timeLp.topMargin = (int) (4 * d);
+			tvTime.setLayoutParams(timeLp);
+			tvTime.setTag("time");
+
+			col.addView(tvName);
+			col.addView(tvBody);
+			col.addView(tvTime);
+
+			row.addView(avatar);
+			row.addView(col);
+			return new ViewHolder(row);
+		}
+
+		@Override
+		public void onBindViewHolder(@NonNull ViewHolder holder, int pos) {
+			HashMap<String, Object> item = items.get(pos);
+			ImageView avatar = holder.itemView.findViewWithTag("avatar");
+			TextView tvName = holder.itemView.findViewWithTag("name");
+			TextView tvBody = holder.itemView.findViewWithTag("body");
+			TextView tvTime = holder.itemView.findViewWithTag("time");
+
+			String name = item.get("name") != null ? item.get("name").toString() : "User";
+			String body = item.get("text") != null ? item.get("text").toString() : "";
+			String photo = item.get("photoURL") != null ? item.get("photoURL").toString().trim() : "";
+			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
+
+			if (tvName != null) tvName.setText(name);
+			if (tvBody != null) tvBody.setText(body);
+			if (tvTime != null) {
+				tvTime.setText(DateUtils.getRelativeTimeSpanString(ts, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+			}
+
+			if (avatar != null) {
+				if (!photo.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(WatchActivity.this).load(Uri.parse(photo)).circleCrop()
+						.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(avatar);
+				} else {
+					avatar.setImageResource(R.drawable.ic_profile);
+					avatar.setColorFilter(Color.parseColor("#CBD5E1"));
+				}
+			}
+		}
+
+		@Override
+		public int getItemCount() {
+			return items.size();
+		}
+
+		class ViewHolder extends RecyclerView.ViewHolder {
+			ViewHolder(@NonNull View itemView) { super(itemView); }
+		}
 	}
 
 	private void initialize(Bundle _savedInstanceState) {
@@ -223,6 +852,11 @@ public class WatchActivity extends AppCompatActivity {
 		textGenre = findViewById(R.id.textGenre);
 		textActionServer = findViewById(R.id.textActionServer);
 		textSortEpisodes = findViewById(R.id.textSortEpisodes);
+
+		btnCommentSection = findViewById(R.id.btnCommentSection);
+		textCommentPreviewLabel = findViewById(R.id.textCommentPreviewLabel);
+		textCommentCount = findViewById(R.id.textCommentCount);
+		iconCommentChevron = findViewById(R.id.iconCommentChevron);
 
 		btnFill = findViewById(R.id.btnFill);
 		btnOpenDetail = findViewById(R.id.btnOpenDetail);
@@ -288,21 +922,7 @@ public class WatchActivity extends AppCompatActivity {
 				}
 				updateEpisodeNavButtons();
 			} else {
-				currentEpisodeIndex = 0;
-				if (playerTextureView != null && playerTextureView.isAvailable()) {
-					playEpisodeByIndex(0);
-				} else if (playerTextureView != null) {
-					playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-						@Override
-						public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-							playerSurface = new Surface(st);
-							playEpisodeByIndex(0);
-						}
-						@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
-						@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-						@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
-					});
-				}
+				tryStartEpisodeFromHistoryIfReady();
 			}
 		}
 		checkStopShimmerIfDone();
@@ -313,7 +933,7 @@ public class WatchActivity extends AppCompatActivity {
 		isRekomLoading = false;
 		clearDetailShimmer();
 
-		String targetSlug = getIntent().getStringExtra("slug");
+		String targetSlug = currentSlug;
 		if (targetSlug != null && !targetSlug.isEmpty()) {
 			try {
 				JSONArray jsonArray = new JSONArray(_response);
@@ -383,6 +1003,7 @@ public class WatchActivity extends AppCompatActivity {
 				e.printStackTrace();
 			}
 		}
+		applyOutfitToAllViews();
 		checkStopShimmerIfDone();
 	}
 
@@ -629,8 +1250,13 @@ public class WatchActivity extends AppCompatActivity {
 			btnLock.setVisibility(View.GONE);
 		}
 
+		String slug = getIntent().getStringExtra("slug");
+		currentSlug = slug != null ? slug.trim() : "";
+
 		_WatchUI();
+		setupCommentSection();
 		updateBottomDividerState();
+		loadCurrentUserCommentMeta();
 
 		if (recyclerEpisode != null) {
 			recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
@@ -641,15 +1267,12 @@ public class WatchActivity extends AppCompatActivity {
 			recyclerRekomendasi.setNestedScrollingEnabled(false);
 		}
 
-		String slug = getIntent().getStringExtra("slug");
-		if (slug == null) slug = "";
-
 		DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
 		boolean resumeFlag = getIntent().getBooleanExtra("resume_mini_player", false);
 
-		if ((resumeFlag || (mgr.isMiniPlayerActive && slug.equals(mgr.activeSlug))) && mgr.sharedMediaPlayer != null) {
-			// LANJUTKAN DARI MINI PLAYER TANPA REFRESH API MAUPUN RE-BUFFERING VIDEO
+		if ((resumeFlag || (mgr.isMiniPlayerActive && currentSlug.equals(mgr.activeSlug))) && mgr.sharedMediaPlayer != null) {
 			isResumingFromMiniPlayer = true;
+			initialEpisodeStarted = true;
 			mediaPlayer = mgr.sharedMediaPlayer;
 			mgr.isMiniPlayerActive = false;
 
@@ -675,27 +1298,27 @@ public class WatchActivity extends AppCompatActivity {
 				textActionServer.setText(mgr.activeServerName);
 			}
 
-			// Gunakan JSON yang sudah di-cache supaya langsung tampil instan tanpa shimmer
 			if (!mgr.cachedAllCatalogJson.isEmpty()) {
 				handleCatalogJson(mgr.cachedAllCatalogJson);
 			} else {
-				req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
+				req_watch.startRequestNetwork("GET", CATALOG_URL, "", _req_watch_request_listener);
 			}
 
 			if (!mgr.cachedEpisodesJson.isEmpty()) {
 				handleEpisodesJson(mgr.cachedEpisodesJson, true);
 			} else {
-				req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
+				req_watch.startRequestNetwork("GET", CATALOG_URL + "?slug=" + currentSlug, "slug", _req_watch_request_listener);
 			}
 		} else {
 			mgr.stopAndCloseEverything(this);
 			startLoadingShimmer();
-			req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _req_watch_request_listener);
-			req_watch.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/?slug=" + slug, "slug", _req_watch_request_listener);
+			loadWatchHistoryFromFirebase();
+			req_watch.startRequestNetwork("GET", CATALOG_URL, "", _req_watch_request_listener);
+			req_watch.startRequestNetwork("GET", CATALOG_URL + "?slug=" + currentSlug, "slug", _req_watch_request_listener);
 		}
 
 		_initPlayerViews();
-		applyCustomFonts();
+		applyOutfitToAllViews();
 
 		if (isResumingFromMiniPlayer && mediaPlayer != null) {
 			try {
@@ -719,41 +1342,6 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			} catch (Exception ignored) {}
 		}
-	}
-
-	private void applyCustomFonts() {
-		try {
-			final Typeface fontReg = Typeface.createFromAsset(getAssets(), "fonts/productsans_reg.ttf");
-			final Typeface fontMed = Typeface.createFromAsset(getAssets(), "fonts/productsans_med.ttf");
-			final Typeface fontBold = Typeface.createFromAsset(getAssets(), "fonts/productsans_bold.ttf");
-
-			Queue<View> viewQueue = new LinkedList<>();
-			viewQueue.add(getWindow().getDecorView().findViewById(android.R.id.content));
-
-			while (!viewQueue.isEmpty()) {
-				View currentView = viewQueue.poll();
-				if (currentView instanceof TextView) {
-					TextView tv = (TextView) currentView;
-					Typeface tf = tv.getTypeface();
-					int style = (tf != null) ? tf.getStyle() : Typeface.NORMAL;
-
-					if (style == Typeface.BOLD) {
-						tv.setTypeface(fontBold, Typeface.NORMAL);
-					} else if (style == Typeface.BOLD_ITALIC) {
-						tv.setTypeface(fontBold, Typeface.ITALIC);
-					} else if (style == Typeface.ITALIC) {
-						tv.setTypeface(fontReg, Typeface.ITALIC);
-					} else {
-						tv.setTypeface(fontMed, Typeface.NORMAL);
-					}
-				} else if (currentView instanceof ViewGroup) {
-					ViewGroup group = (ViewGroup) currentView;
-					for (int i = 0; i < group.getChildCount(); i++) {
-						viewQueue.add(group.getChildAt(i));
-					}
-				}
-			}
-		} catch (Exception ignored) {}
 	}
 
 	public void _WatchUI() {
@@ -1103,7 +1691,7 @@ public class WatchActivity extends AppCompatActivity {
 		tvTitle.setText(titleText);
 		tvTitle.setTextColor(Color.WHITE);
 		tvTitle.setTextSize(19f);
-		tvTitle.setTypeface(null, Typeface.BOLD);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 		header.addView(tvTitle);
 
@@ -1114,7 +1702,7 @@ public class WatchActivity extends AppCompatActivity {
 		btnClose.setText("✕");
 		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
 		btnClose.setTextSize(14f);
-		btnClose.setTypeface(null, Typeface.BOLD);
+		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 
 		GradientDrawable closeBg = new GradientDrawable();
 		closeBg.setShape(GradientDrawable.OVAL);
@@ -1176,7 +1764,7 @@ public class WatchActivity extends AppCompatActivity {
 			tvLeft.setText(menuTitles[i]);
 			tvLeft.setTextColor(Color.WHITE);
 			tvLeft.setTextSize(15f);
-			tvLeft.setTypeface(null, Typeface.BOLD);
+			tvLeft.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvLeft.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 			row.addView(tvLeft);
 
@@ -1184,6 +1772,7 @@ public class WatchActivity extends AppCompatActivity {
 			tvRight.setText(menuValues[i] + "  >");
 			tvRight.setTextColor(Color.parseColor("#D1D5DB"));
 			tvRight.setTextSize(14f);
+			tvRight.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			row.addView(tvRight);
 
 			row.setOnClickListener(new View.OnClickListener() {
@@ -1267,7 +1856,7 @@ public class WatchActivity extends AppCompatActivity {
 		tvSheetTitle.setText(detailTitle.isEmpty() ? textJudul.getText().toString() : detailTitle);
 		tvSheetTitle.setTextColor(Color.WHITE);
 		tvSheetTitle.setTextSize(18f);
-		tvSheetTitle.setTypeface(null, Typeface.BOLD);
+		tvSheetTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvSheetTitle.setMaxLines(2);
 		tvSheetTitle.setEllipsize(TextUtils.TruncateAt.END);
 		rightCol.addView(tvSheetTitle);
@@ -1276,6 +1865,7 @@ public class WatchActivity extends AppCompatActivity {
 		tvSubGenres.setText(detailAllGenres);
 		tvSubGenres.setTextColor(Color.parseColor("#9CA3AF"));
 		tvSubGenres.setTextSize(13f);
+		tvSubGenres.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvSubGenres.setMaxLines(1);
 		tvSubGenres.setEllipsize(TextUtils.TruncateAt.END);
 		tvSubGenres.setPadding(0, (int)(6 * d), 0, (int)(10 * d));
@@ -1293,7 +1883,7 @@ public class WatchActivity extends AppCompatActivity {
 			TextView bView = new TextView(this);
 			bView.setText(badgeItems[b]);
 			bView.setTextSize(12f);
-			bView.setTypeface(null, Typeface.BOLD);
+			bView.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			bView.setTextColor(Color.parseColor("#CBD5E1"));
 			bView.setPadding((int)(8 * d), (int)(4 * d), (int)(8 * d), (int)(4 * d));
 
@@ -1335,6 +1925,7 @@ public class WatchActivity extends AppCompatActivity {
 		tvEpSummary.setText("Dongflix • " + epTotal + " Episode");
 		tvEpSummary.setTextColor(Color.parseColor("#E5E7EB"));
 		tvEpSummary.setTextSize(13f);
+		tvEpSummary.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		studioRow.addView(tvEpSummary);
 
 		rightCol.addView(studioRow);
@@ -1345,6 +1936,7 @@ public class WatchActivity extends AppCompatActivity {
 		tvSinopsisBody.setText(detailSynopsis.isEmpty() ? "Sinopsis belum tersedia untuk donghua ini." : detailSynopsis);
 		tvSinopsisBody.setTextColor(Color.parseColor("#9CA3AF"));
 		tvSinopsisBody.setTextSize(13.5f);
+		tvSinopsisBody.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvSinopsisBody.setLineSpacing(5 * d, 1f);
 		content.addView(tvSinopsisBody);
 
@@ -1413,7 +2005,7 @@ public class WatchActivity extends AppCompatActivity {
 			tvName.setText(optionTitles.get(i));
 			tvName.setTextColor(isSelected ? Color.WHITE : Color.parseColor("#E5E7EB"));
 			tvName.setTextSize(15f);
-			tvName.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
+			tvName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
 			tvName.setLayoutParams(nameLp);
 			itemRow.addView(tvName);
@@ -1426,7 +2018,7 @@ public class WatchActivity extends AppCompatActivity {
 				checkCircle.setText("✓");
 				checkCircle.setTextColor(Color.parseColor("#0B0D11"));
 				checkCircle.setTextSize(11f);
-				checkCircle.setTypeface(null, Typeface.BOLD);
+				checkCircle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 
 				GradientDrawable circleBg = new GradientDrawable();
 				circleBg.setShape(GradientDrawable.OVAL);
@@ -1529,7 +2121,7 @@ public class WatchActivity extends AppCompatActivity {
 					cellBtn.setGravity(Gravity.CENTER);
 					cellBtn.setText(epLabel);
 					cellBtn.setTextSize(14f);
-					cellBtn.setTypeface(null, isActive ? Typeface.BOLD : Typeface.NORMAL);
+					cellBtn.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 					cellBtn.setTextColor(isActive ? Color.WHITE : Color.parseColor("#CBD5E1"));
 
 					GradientDrawable cellBg = new GradientDrawable();
@@ -1542,7 +2134,7 @@ public class WatchActivity extends AppCompatActivity {
 						public void onClick(View v) {
 							if (dialogHolder[0] != null) dialogHolder[0].dismiss();
 							if (currentEpisodeIndex != epIdx || mediaPlayer == null || !mediaPlayer.isPlaying()) {
-								playEpisodeByIndex(epIdx);
+								playEpisodeByIndex(epIdx, 0);
 							}
 						}
 					});
@@ -1581,7 +2173,11 @@ public class WatchActivity extends AppCompatActivity {
 					if (textActionServer != null) {
 						textActionServer.setText(chosenName);
 					}
-					extractStream(chosenName, chosenUrl);
+					int curPos = 0;
+					if (mediaPlayer != null) {
+						try { curPos = mediaPlayer.getCurrentPosition(); } catch (Exception ignored) {}
+					}
+					extractStream(chosenName, chosenUrl, curPos);
 				}
 			}
 		);
@@ -1699,11 +2295,17 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	private void minimizeToMiniPlayer() {
+		if (mediaPlayer != null) {
+			try {
+				saveWatchHistoryToFirebase(mediaPlayer.getCurrentPosition(), mediaPlayer.getDuration(), true);
+			} catch (Exception ignored) {}
+		}
+
 		if (mediaPlayer != null && !currentPlayingUrl.isEmpty()) {
 			DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
 			mgr.sharedMediaPlayer = mediaPlayer;
 			mgr.isMiniPlayerActive = true;
-			mgr.activeSlug = getIntent().getStringExtra("slug") != null ? getIntent().getStringExtra("slug") : "";
+			mgr.activeSlug = currentSlug;
 			mgr.activeTitle = detailTitle.isEmpty() ? (textJudul != null ? textJudul.getText().toString() : "Dongflix") : detailTitle;
 			mgr.activeCoverUrl = detailCover;
 			mgr.activeStreamUrl = currentPlayingUrl;
@@ -1733,6 +2335,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	@Override
 	public void onDestroy() {
+		detachCommentsListener();
 		if (shimmerAnimator != null) {
 			shimmerAnimator.cancel();
 			shimmerAnimator = null;
@@ -1777,10 +2380,15 @@ public class WatchActivity extends AppCompatActivity {
 	public void onPause() {
 		super.onPause();
 		stopHold2xSpeed();
-		if (mediaPlayer != null && mediaPlayer.isPlaying() && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
-			mediaPlayer.pause();
-			if (btnPlay != null) {
-				btnPlay.setImageResource(R.drawable.ic_play1);
+		if (mediaPlayer != null) {
+			try {
+				saveWatchHistoryToFirebase(mediaPlayer.getCurrentPosition(), mediaPlayer.getDuration(), true);
+			} catch (Exception ignored) {}
+			if (mediaPlayer.isPlaying() && !DongflixPlayerManager.getInstance().isMiniPlayerActive) {
+				mediaPlayer.pause();
+				if (btnPlay != null) {
+					btnPlay.setImageResource(R.drawable.ic_play1);
+				}
 			}
 		}
 		if (fallbackWebView != null && isWebViewFallbackActive) {
@@ -1977,10 +2585,15 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	public void playEpisodeByIndex(final int targetIndex) {
+		playEpisodeByIndex(targetIndex, 0);
+	}
+
+	public void playEpisodeByIndex(final int targetIndex, final int initialSeekMs) {
 		if (episodeList == null || episodeList.isEmpty()) return;
 		if (targetIndex < 0 || targetIndex >= episodeList.size()) return;
 
 		currentEpisodeIndex = targetIndex;
+		savedSeekPosition = Math.max(0, initialSeekMs);
 		updateEpisodeNavButtons();
 
 		runOnUiThread(new Runnable() {
@@ -2074,7 +2687,8 @@ public class WatchActivity extends AppCompatActivity {
 					textActionServer.setText(chosenServerName);
 				}
 
-				extractStream(chosenServerName, chosenServerUrl);
+				saveWatchHistoryToFirebase(savedSeekPosition, 0, true);
+				extractStream(chosenServerName, chosenServerUrl, savedSeekPosition);
 			}
 		});
 	}
@@ -2142,7 +2756,7 @@ public class WatchActivity extends AppCompatActivity {
 													isAutoQualityMode = true;
 													selectedQualityIndex = 0;
 													updateQualityBadgeText();
-													playVideoUrl(reqUrl, 0);
+													playVideoUrl(reqUrl, savedSeekPosition);
 												}
 											}
 										});
@@ -2342,6 +2956,7 @@ public class WatchActivity extends AppCompatActivity {
 
 							if (savedSeekPosition > 0 && savedSeekPosition < duration) {
 								mp.seekTo(savedSeekPosition);
+								savedSeekPosition = 0;
 							}
 							mp.start();
 
@@ -2811,6 +3426,7 @@ public class WatchActivity extends AppCompatActivity {
 				public void onStopTrackingTouch(SeekBar seekBar) {
 					if (mediaPlayer != null) {
 						mediaPlayer.seekTo(seekBar.getProgress());
+						saveWatchHistoryToFirebase(seekBar.getProgress(), mediaPlayer.getDuration(), true);
 					}
 					customThumb.setSize(normalThumbSize, normalThumbSize);
 					seekBar.setThumb(customThumb);
@@ -2955,6 +3571,8 @@ public class WatchActivity extends AppCompatActivity {
 							int totMin = (tot / (1000 * 60)) % 60;
 							textTime.setText(String.format("%02d:%02d / %02d:%02d", curMin, curSec, totMin, totSec));
 						}
+
+						saveWatchHistoryToFirebase(cur, tot, false);
 					}
 				} catch (Exception ignored) {}
 
@@ -2974,6 +3592,7 @@ public class WatchActivity extends AppCompatActivity {
 							mediaPlayer.pause();
 							btnPlay.setImageResource(R.drawable.ic_play1);
 							getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+							saveWatchHistoryToFirebase(mediaPlayer.getCurrentPosition(), mediaPlayer.getDuration(), true);
 							if (playerHandler != null && hideControlsRunnable != null) {
 								playerHandler.removeCallbacks(hideControlsRunnable);
 							}
@@ -3030,7 +3649,7 @@ public class WatchActivity extends AppCompatActivity {
 				public void onClick(View v) {
 					resetControlsTimer();
 					if (currentEpisodeIndex > 0) {
-						playEpisodeByIndex(currentEpisodeIndex - 1);
+						playEpisodeByIndex(currentEpisodeIndex - 1, 0);
 					}
 				}
 			});
@@ -3043,7 +3662,7 @@ public class WatchActivity extends AppCompatActivity {
 					resetControlsTimer();
 					int totalItems = (recyclerEpisode != null && recyclerEpisode.getAdapter() != null) ? recyclerEpisode.getAdapter().getItemCount() : 0;
 					if (currentEpisodeIndex < (totalItems - 1)) {
-						playEpisodeByIndex(currentEpisodeIndex + 1);
+						playEpisodeByIndex(currentEpisodeIndex + 1, 0);
 					}
 				}
 			});
@@ -3296,6 +3915,10 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	public void extractStream(final String server, final String targetUrl) {
+		extractStream(server, targetUrl, 0);
+	}
+
+	public void extractStream(final String server, final String targetUrl, final int seekOnReadyMs) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
 
 		String cleanUrl = targetUrl.trim();
@@ -3385,7 +4008,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = getRecommendedQualityIndex();
 									updateQualityBadgeText();
 
-									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
+									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
 								} else {
 									playViaWebViewInterceptor(finalTargetUrl);
 								}
@@ -3477,7 +4100,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = getRecommendedQualityIndex();
 									updateQualityBadgeText();
 
-									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
+									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
 								} else {
 									playViaWebViewInterceptor("https://geo.dailymotion.com/player.html?video=" + cleanDmId);
 								}
@@ -3558,7 +4181,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = 0;
 									updateQualityBadgeText();
 
-									playVideoUrl(finalDtubeUrl, 0);
+									playVideoUrl(finalDtubeUrl, seekOnReadyMs);
 								} else {
 									playViaWebViewInterceptor(finalTargetUrl);
 								}
@@ -3618,7 +4241,7 @@ public class WatchActivity extends AppCompatActivity {
 								if (rUrls.isEmpty()) {
 									for (String rk : resKeys) {
 										if (uaObj.has(rk)) {
-											JSONObject resObj = uaObj.optJSONObject(rk);
+											JSONObject resObj = uaObj.getJSONObject(rk);
 											if (resObj != null) {
 												String u = resObj.optString("url");
 												if (!u.isEmpty()) {
@@ -3666,7 +4289,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = getRecommendedQualityIndex();
 									updateQualityBadgeText();
 
-									playVideoUrl(qualityUrls.get(selectedQualityIndex), 0);
+									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
 								} else {
 									playViaWebViewInterceptor(finalTargetUrl);
 								}
@@ -3736,7 +4359,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = 0;
 									updateQualityBadgeText();
 
-									playVideoUrl(finalOdyUrl, 0);
+									playVideoUrl(finalOdyUrl, seekOnReadyMs);
 								} else {
 									playViaWebViewInterceptor(finalTargetUrl);
 								}
@@ -3765,7 +4388,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = 0;
 									updateQualityBadgeText();
 
-									playVideoUrl(finalTargetUrl, 0);
+									playVideoUrl(finalTargetUrl, seekOnReadyMs);
 								}
 							});
 							return;
@@ -3820,7 +4443,7 @@ public class WatchActivity extends AppCompatActivity {
 									selectedQualityIndex = 0;
 									updateQualityBadgeText();
 
-									playVideoUrl(finalGenericUrl, 0);
+									playVideoUrl(finalGenericUrl, seekOnReadyMs);
 								} else {
 									playViaWebViewInterceptor(finalTargetUrl);
 								}
@@ -3932,13 +4555,13 @@ public class WatchActivity extends AppCompatActivity {
 				itemBg.setColor(0xFF3B82F6);
 				if (tvEpisode != null) {
 					tvEpisode.setTextColor(0xFFFFFFFF);
-					tvEpisode.setTypeface(null, Typeface.BOLD);
+					tvEpisode.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 				}
 			} else {
 				itemBg.setColor(Color.parseColor("#12141A"));
 				if (tvEpisode != null) {
 					tvEpisode.setTextColor(0xFFCBD5E1);
-					tvEpisode.setTypeface(null, Typeface.NORMAL);
+					tvEpisode.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 				}
 			}
 			itemView.setBackground(itemBg);
@@ -3972,7 +4595,7 @@ public class WatchActivity extends AppCompatActivity {
 						episodeList.addAll(_data);
 					}
 
-					playEpisodeByIndex(pos);
+					playEpisodeByIndex(pos, 0);
 				}
 			});
 		}
@@ -4027,6 +4650,7 @@ public class WatchActivity extends AppCompatActivity {
 				statusBg.setCornerRadius(50f);
 				statusBg.setColor(0xFF3B82F6);
 				textStatus.setBackground(statusBg);
+				textStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 				textStatus.setText(item.get("status") != null ? item.get("status").toString() : "");
 			}
 			if (view2 != null) {
@@ -4035,8 +4659,15 @@ public class WatchActivity extends AppCompatActivity {
 					new int[]{Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT}
 				));
 			}
-			if (textTitle != null) textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
-			if (textEpisode != null) textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
+			if (textTitle != null) {
+				textTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				textTitle.setIncludeFontPadding(false);
+				textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
+			}
+			if (textEpisode != null) {
+				textEpisode.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
+			}
 
 			String coverUrl = item.get("cover") != null ? item.get("cover").toString().trim() : "";
 			if (coverUrl.contains("i.ibb.co.com")) coverUrl = coverUrl.replace("i.ibb.co.com", "i.ibb.co");
