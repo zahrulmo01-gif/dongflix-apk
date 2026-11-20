@@ -14,6 +14,7 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -23,7 +24,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -40,11 +40,17 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 import androidx.core.widget.NestedScrollView;
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import eightbitlab.com.blurview.BlurView;
@@ -54,11 +60,17 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 
 public class CatalogActivity extends AppCompatActivity {
+
+	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
+	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
 
 	private static final int FILTER_SEMUA = 0;
 	private static final int FILTER_DONGHUA = 1;
@@ -70,6 +82,7 @@ public class CatalogActivity extends AppCompatActivity {
 	private static final int SORT_DEFAULT = 0;
 	private static final int SORT_TITLE_ASC = 1;
 	private static final int SORT_TITLE_DESC = 2;
+	private static final int SORT_POPULAR = 3;
 
 	private static final String[] BASE_CATEGORIES = {
 		"Action", "Adventure", "Comedy", "Cultivation", "Demons",
@@ -90,6 +103,7 @@ public class CatalogActivity extends AppCompatActivity {
 	private TextView filterMenu;
 	private TextView filterSemua;
 	private TextView filterDonghua;
+	private TextView textCatalogTitle;
 	private TextView textCatalogSubtitle;
 
 	private RequestNetwork req;
@@ -99,12 +113,18 @@ public class CatalogActivity extends AppCompatActivity {
 	private ArrayList<HashMap<String, Object>> filteredDataList = new ArrayList<>();
 	private final ArrayList<HashMap<String, Object>> displayedList = new ArrayList<>();
 	private final List<String> availableCategories = new ArrayList<>();
+	private final Map<String, Long> viewsTotalMap = new HashMap<>();
 	private CatalogAdapter adapter;
+
+	private DatabaseReference viewsTotalRef;
+	private ValueEventListener viewsTotalListener;
 
 	private int activeFilter = FILTER_SEMUA;
 	private int activeStatusFilter = STATUS_ALL;
 	private int activeSortMode = SORT_DEFAULT;
 	private String selectedCategory = "Semua Kategori";
+	private String incomingFilterType = "all";
+	private String baseHeaderTitle = "Katalog Donghua";
 
 	private int currentLimit = 18;
 	private final int PAGE_SIZE = 18;
@@ -117,6 +137,7 @@ public class CatalogActivity extends AppCompatActivity {
 	private ValueAnimator catalogShimmerAnimator;
 	private float catalogShimmerPhase = 0f;
 	private boolean isCatalogLoading = true;
+	private Typeface outfitFont;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -145,9 +166,11 @@ public class CatalogActivity extends AppCompatActivity {
 		filterMenu = findViewById(R.id.filter_menu);
 		filterSemua = findViewById(R.id.filter_semua);
 		filterDonghua = findViewById(R.id.filter_donghua);
+		textCatalogTitle = findViewById(R.id.text_catalog_title);
 		textCatalogSubtitle = findViewById(R.id.text_catalog_subtitle);
 
 		initDefaultCategories();
+		applyIncomingMainSectionPreset();
 
 		adapter = new CatalogAdapter(displayedList);
 		gridCatalog.setAdapter(adapter);
@@ -157,6 +180,7 @@ public class CatalogActivity extends AppCompatActivity {
 		setupFilterTabs();
 		setupInfiniteScroll();
 		updateBottomSpacingForMiniPlayer();
+		applyOutfitFontsWithoutBold();
 
 		btnBack.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -179,26 +203,49 @@ public class CatalogActivity extends AppCompatActivity {
 					HashMap<String, Object> item = displayedList.get(position);
 					if (item.containsKey("is_loading")) return;
 
-					Intent intent = new Intent(CatalogActivity.this, DetailActivity.class);
-					intent.putExtra("url", item.containsKey("url") ? item.get("url").toString() : "");
-					intent.putExtra("title", item.containsKey("title") ? item.get("title").toString() : "");
-					intent.putExtra("image", item.containsKey("cover") ? item.get("cover").toString() : "");
-					startActivity(intent);
+					String slug = safeStr(item, "slug", "");
+					if (!slug.isEmpty()) {
+						Intent watchIntent = new Intent(CatalogActivity.this, WatchActivity.class);
+						watchIntent.putExtra("slug", slug);
+						startActivity(watchIntent);
+						overridePendingTransition(R.anim.slide_up_enter, R.anim.no_anim);
+					} else {
+						Intent intent = new Intent(CatalogActivity.this, DetailActivity.class);
+						intent.putExtra("url", safeStr(item, "url", ""));
+						intent.putExtra("title", safeStr(item, "title", ""));
+						intent.putExtra("image", safeStr(item, "cover", ""));
+						startActivity(intent);
+					}
 				}
 			}
 		});
 
-		showCatalogLoadingPlaceholders();
+		attachFirebaseViewsListener();
+
+		String cachedJson = DongflixPlayerManager.getInstance().cachedAllCatalogJson;
+		if (cachedJson != null && !cachedJson.trim().isEmpty()) {
+			ArrayList<HashMap<String, Object>> cachedList = parseCatalogJson(cachedJson);
+			if (!cachedList.isEmpty()) {
+				isCatalogLoading = false;
+				allDataList = cachedList;
+				rebuildCategoriesFromCatalog(allDataList);
+				applyFilterAndResetPagination();
+			} else {
+				showCatalogLoadingPlaceholders();
+			}
+		} else {
+			showCatalogLoadingPlaceholders();
+		}
 
 		req = new RequestNetwork(this);
 		reqListener = new RequestNetwork.RequestListener() {
 			@Override
 			public void onResponse(String tag, String response, HashMap<String, Object> headers) {
+				if (isFinishing() || isDestroyed()) return;
 				stopCatalogShimmer();
-				ArrayList<HashMap<String, Object>> parsed = new Gson().fromJson(
-					response, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType()
-				);
-				if (parsed != null) {
+				DongflixPlayerManager.getInstance().cachedAllCatalogJson = response;
+				ArrayList<HashMap<String, Object>> parsed = parseCatalogJson(response);
+				if (!parsed.isEmpty()) {
 					allDataList = parsed;
 					rebuildCategoriesFromCatalog(allDataList);
 					applyFilterAndResetPagination();
@@ -207,11 +254,169 @@ public class CatalogActivity extends AppCompatActivity {
 
 			@Override
 			public void onErrorResponse(String tag, String message) {
+				if (isFinishing() || isDestroyed()) return;
 				stopCatalogShimmer();
 			}
 		};
 
-		req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", reqListener);
+		req.startRequestNetwork("GET", CATALOG_URL, "", reqListener);
+	}
+
+	private void applyIncomingMainSectionPreset() {
+		String extraTitle = getIntent().getStringExtra("section_title");
+		String extraFilter = getIntent().getStringExtra("filter_type");
+
+		if (extraTitle != null && !extraTitle.trim().isEmpty()) {
+			baseHeaderTitle = extraTitle.trim();
+		}
+		if (textCatalogTitle != null) {
+			textCatalogTitle.setText(baseHeaderTitle);
+		}
+
+		if (extraFilter == null || extraFilter.trim().isEmpty()) {
+			incomingFilterType = "all";
+			return;
+		}
+
+		incomingFilterType = extraFilter.trim().toLowerCase(Locale.US);
+		switch (incomingFilterType) {
+			case "popular_dongflix":
+				activeSortMode = SORT_POPULAR;
+				break;
+			case "romance":
+				selectedCategory = "Romance";
+				break;
+			case "cultivation":
+				selectedCategory = "Cultivation";
+				break;
+			case "completed":
+				activeStatusFilter = STATUS_COMPLETED;
+				break;
+			case "comedy":
+				selectedCategory = "Comedy";
+				break;
+			case "mystery":
+				selectedCategory = "Mystery";
+				break;
+			case "movie":
+				// Ditangani di matchesActiveFilter via incomingFilterType = "movie"
+				break;
+			default:
+				incomingFilterType = "all";
+				break;
+		}
+	}
+
+	private ArrayList<HashMap<String, Object>> parseCatalogJson(String json) {
+		try {
+			ArrayList<HashMap<String, Object>> parsed = new Gson().fromJson(
+				json, new TypeToken<ArrayList<HashMap<String, Object>>>(){}.getType()
+			);
+			return parsed != null ? parsed : new ArrayList<HashMap<String, Object>>();
+		} catch (Exception e) {
+			return new ArrayList<>();
+		}
+	}
+
+	private void attachFirebaseViewsListener() {
+		detachFirebaseViewsListener();
+		viewsTotalRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("views_total");
+		viewsTotalListener = new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snap) {
+				if (isFinishing() || isDestroyed()) return;
+				viewsTotalMap.clear();
+				if (snap.exists()) {
+					for (DataSnapshot child : snap.getChildren()) {
+						if (child.getKey() != null) {
+							viewsTotalMap.put(child.getKey(), parseLongSafe(child.getValue()));
+						}
+					}
+				}
+				if (!isCatalogLoading && !allDataList.isEmpty() && activeSortMode == SORT_POPULAR) {
+					applyFilterAndResetPagination();
+				}
+			}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError error) {}
+		};
+		viewsTotalRef.addValueEventListener(viewsTotalListener);
+	}
+
+	private void detachFirebaseViewsListener() {
+		if (viewsTotalRef != null && viewsTotalListener != null) {
+			viewsTotalRef.removeEventListener(viewsTotalListener);
+		}
+	}
+
+	private String safeStr(Map<String, Object> map, String key, String fallback) {
+		if (map == null || key == null) return fallback;
+		Object val = map.get(key);
+		return val != null ? val.toString() : fallback;
+	}
+
+	private long parseLongSafe(Object o) {
+		if (o == null) return 0L;
+		if (o instanceof Number) return ((Number) o).longValue();
+		try {
+			return Long.parseLong(o.toString().trim());
+		} catch (Exception e) {
+			return 0L;
+		}
+	}
+
+	private String cleanText(String input) {
+		if (input == null) return "";
+		return input
+			.replace("â€™", "'")
+			.replace("â€œ", "\"")
+			.replace("â€", "\"")
+			.replace("â€“", "-")
+			.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
+			.replaceAll("[^\\x20-\\x7E\\n]", "")
+			.trim();
+	}
+
+	private Typeface getOutfitTypeface() {
+		if (outfitFont != null) return outfitFont;
+		String[] candidates = {
+			"fonts/outfit_regular.ttf",
+			"fonts/outfit_medium.ttf",
+			"fonts/outfit.ttf",
+			"fonts/Outfit-Regular.ttf",
+			"fonts/productsans_reg.ttf"
+		};
+		for (String path : candidates) {
+			try {
+				outfitFont = Typeface.createFromAsset(getAssets(), path);
+				if (outfitFont != null) return outfitFont;
+			} catch (Exception ignored) {}
+		}
+		outfitFont = Typeface.DEFAULT;
+		return outfitFont;
+	}
+
+	private void applyOutfitFontsWithoutBold() {
+		Typeface tf = getOutfitTypeface();
+		View contentView = getWindow().getDecorView().findViewById(android.R.id.content);
+		if (contentView == null) return;
+
+		Queue<View> queue = new LinkedList<>();
+		queue.add(contentView);
+		while (!queue.isEmpty()) {
+			View v = queue.poll();
+			if (v instanceof TextView) {
+				TextView tv = (TextView) v;
+				tv.setTypeface(tf, Typeface.NORMAL);
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+					tv.setLetterSpacing(-0.01f);
+				}
+			} else if (v instanceof ViewGroup) {
+				ViewGroup vg = (ViewGroup) v;
+				for (int i = 0; i < vg.getChildCount(); i++) queue.add(vg.getChildAt(i));
+			}
+		}
 	}
 
 	private void initDefaultCategories() {
@@ -382,7 +587,7 @@ public class CatalogActivity extends AppCompatActivity {
 		tvSheetTitle.setText("Filter & Kategori");
 		tvSheetTitle.setTextColor(Color.WHITE);
 		tvSheetTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-		tvSheetTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+		tvSheetTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
@@ -420,7 +625,7 @@ public class CatalogActivity extends AppCompatActivity {
 		container.addView(statusScroll);
 
 		container.addView(buildSheetSectionLabel("Urutkan", d));
-		final String[] sortLabels = {"Terbaru", "Judul A - Z", "Judul Z - A"};
+		final String[] sortLabels = {"Terbaru", "Judul A - Z", "Judul Z - A", "Populer"};
 		final List<TextView> sortChips = new ArrayList<>();
 		HorizontalScrollView sortScroll = new HorizontalScrollView(this);
 		sortScroll.setHorizontalScrollBarEnabled(false);
@@ -468,7 +673,7 @@ public class CatalogActivity extends AppCompatActivity {
 			final TextView catChip = new TextView(this);
 			catChip.setText(catName);
 			catChip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-			catChip.setTypeface(null, android.graphics.Typeface.BOLD);
+			catChip.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			catChip.setGravity(Gravity.CENTER);
 			catChip.setSingleLine(true);
 			catChip.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
@@ -518,7 +723,7 @@ public class CatalogActivity extends AppCompatActivity {
 		btnReset.setText("Reset");
 		btnReset.setTextColor(Color.parseColor("#CBD5E1"));
 		btnReset.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnReset.setTypeface(null, android.graphics.Typeface.BOLD);
+		btnReset.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnReset.setGravity(Gravity.CENTER);
 		LinearLayout.LayoutParams resetLp = new LinearLayout.LayoutParams(0, (int) (44 * d), 1f);
 		resetLp.rightMargin = (int) (10 * d);
@@ -531,9 +736,11 @@ public class CatalogActivity extends AppCompatActivity {
 		btnReset.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
+				incomingFilterType = "all";
 				activeStatusFilter = STATUS_ALL;
 				activeSortMode = SORT_DEFAULT;
 				selectedCategory = "Semua Kategori";
+				if (textCatalogTitle != null) textCatalogTitle.setText("Katalog Donghua");
 				updateFilterVisualState();
 				applyFilterAndResetPagination();
 				sheet.dismiss();
@@ -544,7 +751,7 @@ public class CatalogActivity extends AppCompatActivity {
 		btnApply.setText("Terapkan");
 		btnApply.setTextColor(Color.WHITE);
 		btnApply.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnApply.setTypeface(null, android.graphics.Typeface.BOLD);
+		btnApply.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnApply.setGravity(Gravity.CENTER);
 		btnApply.setLayoutParams(new LinearLayout.LayoutParams(0, (int) (44 * d), 1f));
 		GradientDrawable applyBg = new GradientDrawable();
@@ -554,6 +761,9 @@ public class CatalogActivity extends AppCompatActivity {
 		btnApply.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
+				if (!"movie".equals(incomingFilterType)) {
+					incomingFilterType = "all";
+				}
 				activeStatusFilter = tempStatus[0];
 				activeSortMode = tempSort[0];
 				selectedCategory = tempCategory[0];
@@ -577,7 +787,7 @@ public class CatalogActivity extends AppCompatActivity {
 		tv.setText(label);
 		tv.setTextColor(Color.parseColor("#94A3B8"));
 		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-		tv.setTypeface(null, android.graphics.Typeface.BOLD);
+		tv.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
@@ -590,7 +800,7 @@ public class CatalogActivity extends AppCompatActivity {
 		TextView chip = new TextView(this);
 		chip.setText(text);
 		chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		chip.setTypeface(null, android.graphics.Typeface.BOLD);
+		chip.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		chip.setGravity(Gravity.CENTER);
 		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, (int) (34 * d)
@@ -627,7 +837,8 @@ public class CatalogActivity extends AppCompatActivity {
 		float d = getResources().getDisplayMetrics().density;
 		boolean hasExtraFilter = (activeStatusFilter != STATUS_ALL)
 			|| (activeSortMode != SORT_DEFAULT)
-			|| !"Semua Kategori".equalsIgnoreCase(selectedCategory);
+			|| !"Semua Kategori".equalsIgnoreCase(selectedCategory)
+			|| "movie".equals(incomingFilterType);
 
 		if (filterMenu != null) {
 			GradientDrawable menuBg = new GradientDrawable();
@@ -666,10 +877,13 @@ public class CatalogActivity extends AppCompatActivity {
 		}
 
 		if (textCatalogSubtitle != null) {
-			String sub = (activeSortMode == SORT_TITLE_ASC) ? "Judul A - Z"
+			String sub = (activeSortMode == SORT_POPULAR) ? "Populer"
+				: (activeSortMode == SORT_TITLE_ASC) ? "Judul A - Z"
 				: (activeSortMode == SORT_TITLE_DESC) ? "Judul Z - A"
 				: "Terbaru";
-			if (!"Semua Kategori".equalsIgnoreCase(selectedCategory)) {
+			if ("movie".equals(incomingFilterType)) {
+				sub = sub + " • Movie";
+			} else if (!"Semua Kategori".equalsIgnoreCase(selectedCategory)) {
 				sub = sub + " • " + selectedCategory;
 			}
 			if (activeStatusFilter == STATUS_ONGOING) sub = sub + " • Ongoing";
@@ -679,30 +893,53 @@ public class CatalogActivity extends AppCompatActivity {
 	}
 
 	private boolean matchesActiveFilter(HashMap<String, Object> item) {
-		if (activeFilter == FILTER_DONGHUA) {
-			String typeStr = item.get("type") != null ? item.get("type").toString().toLowerCase(Locale.US) : "";
-			String categoryStr = item.get("category") != null ? item.get("category").toString().toLowerCase(Locale.US) : "";
-			String genresStr = item.get("genres") != null ? item.get("genres").toString().toLowerCase(Locale.US) : "";
-			String urlStr = item.get("url") != null ? item.get("url").toString().toLowerCase(Locale.US) : "";
-			String slugStr = item.get("slug") != null ? item.get("slug").toString().toLowerCase(Locale.US) : "";
-			String combined = typeStr + " " + categoryStr + " " + genresStr + " " + urlStr + " " + slugStr;
+		String statusStr = safeStr(item, "status", "").toLowerCase(Locale.US);
+		String typeStr = safeStr(item, "type", "").toLowerCase(Locale.US);
+		String categoryStr = safeStr(item, "category", "").toLowerCase(Locale.US);
+		String genresStr = safeStr(item, "genres", "").toLowerCase(Locale.US);
+		String titleStr = safeStr(item, "title", "").toLowerCase(Locale.US);
+		String synopsisStr = safeStr(item, "synopsis", "").toLowerCase(Locale.US);
+		String episodeStr = safeStr(item, "episode", "").toLowerCase(Locale.US);
+		String urlStr = safeStr(item, "url", "").toLowerCase(Locale.US);
+		String slugStr = safeStr(item, "slug", "").toLowerCase(Locale.US);
+		String combined = typeStr + " " + categoryStr + " " + genresStr + " "
+			+ titleStr + " " + synopsisStr + " " + episodeStr + " " + urlStr + " " + slugStr;
 
+		if (activeFilter == FILTER_DONGHUA) {
 			boolean isAnime = combined.contains("anime") || combined.contains("samehadaku");
 			boolean isDonghua = combined.contains("donghua") || combined.contains("anichin") || combined.contains("3d");
 			if (!isDonghua && isAnime) return false;
 		}
 
+		if ("movie".equals(incomingFilterType)) {
+			if (!combined.contains("movie") && !combined.contains("film")) {
+				return false;
+			}
+		}
+
 		if (!"Semua Kategori".equalsIgnoreCase(selectedCategory)) {
 			String targetCat = selectedCategory.toLowerCase(Locale.US);
-			String genresStr = item.get("genres") != null ? item.get("genres").toString().toLowerCase(Locale.US) : "";
-			String categoryStr = item.get("category") != null ? item.get("category").toString().toLowerCase(Locale.US) : "";
-			if (!genresStr.contains(targetCat) && !categoryStr.contains(targetCat)) {
+			if ("romance".equals(targetCat)) {
+				boolean matchRomance = genresStr.contains("romance") || genresStr.contains("romantis")
+					|| genresStr.contains("romansa") || combined.contains("romance") || combined.contains("romantis");
+				if (!matchRomance) return false;
+			} else if ("cultivation".equals(targetCat)) {
+				boolean matchCult = combined.contains("kultivasi") || combined.contains("cultivation")
+					|| combined.contains("abadi") || combined.contains("immortal");
+				if (!matchCult) return false;
+			} else if ("comedy".equals(targetCat)) {
+				boolean matchCom = combined.contains("comedy") || combined.contains("komedi") || combined.contains("slice of life");
+				if (!matchCom) return false;
+			} else if ("mystery".equals(targetCat)) {
+				boolean matchMys = combined.contains("mystery") || combined.contains("misteri") || combined.contains("teki")
+					|| combined.contains("thriller") || combined.contains("suspense") || combined.contains("detective");
+				if (!matchMys) return false;
+			} else if (!genresStr.contains(targetCat) && !categoryStr.contains(targetCat)) {
 				return false;
 			}
 		}
 
 		if (activeStatusFilter != STATUS_ALL) {
-			String statusStr = item.get("status") != null ? item.get("status").toString().toLowerCase(Locale.US) : "";
 			if (activeStatusFilter == STATUS_ONGOING && !statusStr.contains("ongoing")) {
 				return false;
 			}
@@ -728,12 +965,27 @@ public class CatalogActivity extends AppCompatActivity {
 			}
 		}
 
-		if (activeSortMode == SORT_TITLE_ASC) {
+		if (filteredDataList.isEmpty() && !allDataList.isEmpty() && !"all".equals(incomingFilterType)) {
+			filteredDataList.addAll(allDataList);
+		}
+
+		if (activeSortMode == SORT_POPULAR) {
 			Collections.sort(filteredDataList, new Comparator<HashMap<String, Object>>() {
 				@Override
 				public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
-					String tA = a.get("title") != null ? a.get("title").toString() : "";
-					String tB = b.get("title") != null ? b.get("title").toString() : "";
+					String sA = safeStr(a, "slug", "");
+					String sB = safeStr(b, "slug", "");
+					long vA = viewsTotalMap.containsKey(sA) ? viewsTotalMap.get(sA) : 0L;
+					long vB = viewsTotalMap.containsKey(sB) ? viewsTotalMap.get(sB) : 0L;
+					return Long.compare(vB, vA);
+				}
+			});
+		} else if (activeSortMode == SORT_TITLE_ASC) {
+			Collections.sort(filteredDataList, new Comparator<HashMap<String, Object>>() {
+				@Override
+				public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+					String tA = cleanText(safeStr(a, "title", ""));
+					String tB = cleanText(safeStr(b, "title", ""));
 					return tA.compareToIgnoreCase(tB);
 				}
 			});
@@ -741,8 +993,8 @@ public class CatalogActivity extends AppCompatActivity {
 			Collections.sort(filteredDataList, new Comparator<HashMap<String, Object>>() {
 				@Override
 				public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
-					String tA = a.get("title") != null ? a.get("title").toString() : "";
-					String tB = b.get("title") != null ? b.get("title").toString() : "";
+					String tA = cleanText(safeStr(a, "title", ""));
+					String tB = cleanText(safeStr(b, "title", ""));
 					return tB.compareToIgnoreCase(tA);
 				}
 			});
@@ -995,6 +1247,7 @@ public class CatalogActivity extends AppCompatActivity {
 	@Override
 	protected void onDestroy() {
 		paginationHandler.removeCallbacksAndMessages(null);
+		detachFirebaseViewsListener();
 		stopCatalogShimmer();
 		super.onDestroy();
 	}
@@ -1075,6 +1328,7 @@ public class CatalogActivity extends AppCompatActivity {
 				view = getLayoutInflater().inflate(R.layout.custom_anime, container, false);
 			}
 			float d = view.getResources().getDisplayMetrics().density;
+			Typeface tf = getOutfitTypeface();
 
 			TextView textTitle = view.findViewById(R.id.text_title);
 			TextView textStatus = view.findViewById(R.id.text_status);
@@ -1104,15 +1358,19 @@ public class CatalogActivity extends AppCompatActivity {
 				if (view2 != null) view2.setVisibility(View.GONE);
 			} else {
 				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
-				if (textTitle != null) textTitle.setBackgroundColor(Color.TRANSPARENT);
-				if (textEpisode != null) textEpisode.setBackgroundColor(Color.TRANSPARENT);
-				if (view2 != null) view2.setVisibility(View.VISIBLE);
-
-				if (textStatus != null) {
-					textStatus.setBackground(new GradientDrawable() {{ setCornerRadius(50); setColor(0xFF3B82F6); }});
+				if (textTitle != null) {
+					textTitle.setBackgroundColor(Color.TRANSPARENT);
+					textTitle.setTypeface(tf, Typeface.NORMAL);
+					textTitle.setIncludeFontPadding(false);
+					textTitle.setText(cleanText(safeStr(item, "title", "")));
 				}
-
+				if (textEpisode != null) {
+					textEpisode.setBackgroundColor(Color.TRANSPARENT);
+					textEpisode.setTypeface(tf, Typeface.NORMAL);
+					textEpisode.setText(safeStr(item, "episode", ""));
+				}
 				if (view2 != null) {
+					view2.setVisibility(View.VISIBLE);
 					GradientDrawable gradient = new GradientDrawable(
 						GradientDrawable.Orientation.BOTTOM_TOP,
 						new int[] { Color.parseColor("#F2000000"), Color.parseColor("#80000000"), Color.TRANSPARENT }
@@ -1120,16 +1378,21 @@ public class CatalogActivity extends AppCompatActivity {
 					view2.setBackground(gradient);
 				}
 
-				if (textTitle != null) textTitle.setText(item.get("title") != null ? item.get("title").toString() : "");
-				if (textStatus != null) textStatus.setText(item.get("status") != null ? item.get("status").toString() : "");
-				if (textEpisode != null) textEpisode.setText(item.get("episode") != null ? item.get("episode").toString() : "");
+				if (textStatus != null) {
+					GradientDrawable statusBg = new GradientDrawable();
+					statusBg.setCornerRadius(50);
+					statusBg.setColor(0xFF3B82F6);
+					textStatus.setBackground(statusBg);
+					textStatus.setTypeface(tf, Typeface.NORMAL);
+					textStatus.setText(safeStr(item, "status", ""));
+				}
 
-				String cover = item.get("cover") != null ? item.get("cover").toString().trim() : "";
+				String cover = safeStr(item, "cover", "").trim();
 				if (cover.contains("i.ibb.co.com")) cover = cover.replace("i.ibb.co.com", "i.ibb.co");
 				if (cover.startsWith("http://")) cover = cover.replace("http://", "https://");
 
-				if (imgCover != null) {
-					Glide.with(getApplicationContext()).load(Uri.parse(cover)).into(imgCover);
+				if (imgCover != null && !cover.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(CatalogActivity.this).load(Uri.parse(cover)).into(imgCover);
 				}
 			}
 			return view;
