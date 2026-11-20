@@ -24,7 +24,7 @@
 			android:layout_height="wrap_content"
 			android:orientation="vertical">
 
-			<!-- Hero Banner / Slider (Persis Seperti Gambar 3) -->
+			<!-- Hero Banner / Slider (Penuh Sampai Bawah Status Bar + Header Tembus Pandang di Atasnya) -->
 			<FrameLayout
 				android:id="@+id/hero_container"
 				android:layout_width="match_parent"
