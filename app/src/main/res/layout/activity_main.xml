@@ -394,7 +394,7 @@
 				android:nestedScrollingEnabled="false"
 				tools:listitem="@layout/custom_anime" />
 
-			<!-- POPULER DI DONGFLIX (Di bawah Baru Diupdate, gaya seperti Populer Hari Ini) -->
+			<!-- POPULER DI DONGFLIX -->
 			<RelativeLayout
 				android:id="@+id/layout_section_popular_dongflix"
 				android:layout_width="match_parent"
@@ -414,6 +414,16 @@
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
+
+				<TextView
+					android:id="@+id/text_popular_dongflix_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textColor="#94A3B8"
+					android:layout_alignParentRight="true"
+					android:layout_centerVertical="true" />
 			</RelativeLayout>
 
 			<androidx.recyclerview.widget.RecyclerView
@@ -424,25 +434,35 @@
 				android:clipChildren="false"
 				android:nestedScrollingEnabled="false" />
 
-			<!-- DONGHUA ROMANTIS (Tipis-tipis) -->
+			<!-- DONGHUA ROMANTIS TIPIS-TIPIS -->
 			<RelativeLayout
 				android:id="@+id/layout_section_romance"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="6dp"
+				android:layout_marginTop="10dp"
 				android:paddingLeft="16dp"
-				android:paddingTop="14dp"
+				android:paddingTop="16dp"
 				android:paddingRight="16dp"
-				android:paddingBottom="6dp">
+				android:paddingBottom="8dp">
 
 				<TextView
 					android:id="@+id/text_title_romance"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:text="Donghua Romantis"
-					android:textSize="16sp"
-					android:textColor="#E2E8F0"
+					android:text="Donghua Romantis Tipis-Tipis"
+					android:textSize="18sp"
+					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
+					android:layout_centerVertical="true" />
+
+				<TextView
+					android:id="@+id/text_romance_see_all"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:text="Lihat semua"
+					android:textSize="14sp"
+					android:textColor="#94A3B8"
+					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
 			</RelativeLayout>
 
