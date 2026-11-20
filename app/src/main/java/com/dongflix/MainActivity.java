@@ -18,6 +18,9 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.*;
 import com.bumptech.glide.Glide;
@@ -63,7 +66,12 @@ public class MainActivity extends AppCompatActivity {
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
-	// Pull-to-refresh icon only (YouTube style)
+	// Single global Hero Slider timer agar tidak bertumpuk saat refresh
+	private final Handler heroSliderHandler = new Handler(Looper.getMainLooper());
+	private Runnable heroSliderRunnable;
+	private int heroCurrentIndex = 0;
+
+	// Pull-to-refresh icon only (YouTube style, floating)
 	private FrameLayout pullRefreshIndicator;
 	private ProgressBar pullRefreshSpinner;
 	private ImageView imgPullRefreshIcon;
@@ -244,8 +252,10 @@ public class MainActivity extends AppCompatActivity {
 			GradientDrawable pillBg = new GradientDrawable();
 			pillBg.setShape(GradientDrawable.OVAL);
 			pillBg.setColor(Color.parseColor("#181C26"));
-			pillBg.setStroke((int) (1 * d), Color.parseColor("#2AFFFFFF"));
 			pullRefreshIndicator.setBackground(pillBg);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				pullRefreshIndicator.setElevation(18f);
+			}
 		}
 		if (pullRefreshSpinner != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			pullRefreshSpinner.setIndeterminateTintList(ColorStateList.valueOf(Color.WHITE));
@@ -332,7 +342,98 @@ public class MainActivity extends AppCompatActivity {
 		}
 	}
 
-	// Lebar 114dp + margin 10dp -> 3 poster tampil penuh & poster ke-4 mengintip di kanan
+	private void startHeroAutoSlider() {
+		stopHeroAutoSlider();
+		if (listMap == null || listMap.size() < 3) return;
+
+		final float density = getResources().getDisplayMetrics().density;
+		final int activeWidth = (int) (16 * density);
+		final int inactiveWidth = (int) (5 * density);
+		final int fixedHeight = (int) (5 * density);
+		final int marginSpacing = (int) (5 * density);
+
+		final GradientDrawable activeDotDrawable = new GradientDrawable();
+		activeDotDrawable.setShape(GradientDrawable.RECTANGLE);
+		activeDotDrawable.setColor(Color.WHITE);
+		activeDotDrawable.setCornerRadius(100f);
+
+		final GradientDrawable inactiveDotDrawable = new GradientDrawable();
+		inactiveDotDrawable.setShape(GradientDrawable.RECTANGLE);
+		inactiveDotDrawable.setColor(Color.parseColor("#80FFFFFF"));
+		inactiveDotDrawable.setCornerRadius(100f);
+
+		heroCurrentIndex = 0;
+		heroSliderRunnable = new Runnable() {
+			@Override
+			public void run() {
+				if (listMap == null || listMap.size() < 3) return;
+				int pos = heroCurrentIndex % 3;
+				HashMap<String, Object> heroItem = listMap.get(pos);
+				currentHeroItem = heroItem;
+
+				String heroTitle = heroItem.get("title") != null ? heroItem.get("title").toString().trim() : "";
+				String heroSynopsis = heroItem.get("synopsis") != null ? cleanText(heroItem.get("synopsis").toString()) : "";
+				String heroCover = heroItem.get("cover") != null ? heroItem.get("cover").toString().trim() : "";
+				final String heroSlug = heroItem.get("slug") != null ? heroItem.get("slug").toString() : "";
+
+				if (heroCover.contains("i.ibb.co.com")) {
+					heroCover = heroCover.replace("i.ibb.co.com", "i.ibb.co");
+				}
+				if (heroCover.startsWith("http://")) {
+					heroCover = heroCover.replace("http://", "https://");
+				}
+
+				if (textHeroTitle != null) textHeroTitle.setText(heroTitle);
+				if (textHeroDesc != null) textHeroDesc.setText(heroSynopsis);
+				updateHeroFavoriteIcon(heroSlug);
+
+				if (imgHeroBanner != null && !heroCover.isEmpty()) {
+					Glide.with(getApplicationContext())
+						.load(Uri.parse(heroCover))
+						.centerCrop()
+						.placeholder(R.drawable.default_image)
+						.error(R.drawable.default_image)
+						.into(imgHeroBanner);
+				}
+
+				if (btnHeroPlay != null) {
+					btnHeroPlay.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							openWatchBySlug(heroSlug);
+						}
+					});
+				}
+
+				View[] dots = {dot0, dot1, dot2};
+				for (int i = 0; i < dots.length; i++) {
+					if (dots[i] != null) {
+						boolean isActive = (i == pos);
+						LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
+						params.width = isActive ? activeWidth : inactiveWidth;
+						params.height = fixedHeight;
+						params.leftMargin = (i == 0) ? 0 : marginSpacing;
+						dots[i].setLayoutParams(params);
+						dots[i].setBackground(isActive ? activeDotDrawable : inactiveDotDrawable);
+					}
+				}
+
+				heroCurrentIndex = (pos + 1) % 3;
+				heroSliderHandler.postDelayed(this, 4000);
+			}
+		};
+
+		heroSliderHandler.post(heroSliderRunnable);
+	}
+
+	private void stopHeroAutoSlider() {
+		if (heroSliderRunnable != null) {
+			heroSliderHandler.removeCallbacks(heroSliderRunnable);
+			heroSliderRunnable = null;
+		}
+		heroSliderHandler.removeCallbacksAndMessages(null);
+	}
+
 	private void bindHorizontalPosterRecycler(RecyclerView rv, ArrayList<HashMap<String, Object>> items, int widthDp, int heightDp) {
 		if (rv == null) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -1674,86 +1775,7 @@ public class MainActivity extends AppCompatActivity {
 					if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.VISIBLE);
 					if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.VISIBLE);
 
-					final float density = getResources().getDisplayMetrics().density;
-					final int activeWidth = (int) (16 * density);
-					final int inactiveWidth = (int) (5 * density);
-					final int fixedHeight = (int) (5 * density);
-					final int marginSpacing = (int) (5 * density);
-
-					final GradientDrawable activeDotDrawable = new GradientDrawable();
-					activeDotDrawable.setShape(GradientDrawable.RECTANGLE);
-					activeDotDrawable.setColor(Color.WHITE);
-					activeDotDrawable.setCornerRadius(100f);
-
-					final GradientDrawable inactiveDotDrawable = new GradientDrawable();
-					inactiveDotDrawable.setShape(GradientDrawable.RECTANGLE);
-					inactiveDotDrawable.setColor(Color.parseColor("#80FFFFFF"));
-					inactiveDotDrawable.setCornerRadius(100f);
-
-					final int[] heroCurrentIndex = {0};
-					final Handler heroHandler = new Handler(Looper.getMainLooper());
-
-					Runnable heroRunnable = new Runnable() {
-						@Override
-						public void run() {
-							int pos = heroCurrentIndex[0];
-							HashMap<String, Object> heroItem = listMap.get(pos);
-							currentHeroItem = heroItem;
-
-							String heroTitle = heroItem.get("title") != null ? heroItem.get("title").toString() : "";
-							String heroSynopsis = heroItem.get("synopsis") != null ? cleanText(heroItem.get("synopsis").toString()) : "";
-							String heroCover = heroItem.get("cover") != null ? heroItem.get("cover").toString().trim() : "";
-							final String heroSlug = heroItem.get("slug") != null ? heroItem.get("slug").toString() : "";
-
-							if (heroCover.contains("i.ibb.co.com")) {
-								heroCover = heroCover.replace("i.ibb.co.com", "i.ibb.co");
-							}
-							if (heroCover.startsWith("http://")) {
-								heroCover = heroCover.replace("http://", "https://");
-							}
-
-							if (textHeroTitle != null) textHeroTitle.setText(heroTitle);
-							if (textHeroDesc != null) textHeroDesc.setText(heroSynopsis);
-							updateHeroFavoriteIcon(heroSlug);
-
-							if (imgHeroBanner != null) {
-								Glide.with(getApplicationContext())
-								.load(Uri.parse(heroCover))
-								.centerCrop()
-								.placeholder(R.drawable.default_image)
-								.error(R.drawable.default_image)
-								.into(imgHeroBanner);
-							}
-
-							if (btnHeroPlay != null) {
-								btnHeroPlay.setOnClickListener(new View.OnClickListener() {
-									@Override
-									public void onClick(View v) {
-										openWatchBySlug(heroSlug);
-									}
-								});
-							}
-
-							View[] dots = {dot0, dot1, dot2};
-							for (int i = 0; i < dots.length; i++) {
-								if (dots[i] != null) {
-									boolean isActive = (i == pos);
-									LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
-									params.width = isActive ? activeWidth : inactiveWidth;
-									params.height = fixedHeight;
-									params.leftMargin = (i == 0) ? 0 : marginSpacing;
-									dots[i].setLayoutParams(params);
-									dots[i].setBackground(isActive ? activeDotDrawable : inactiveDotDrawable);
-								}
-							}
-
-							heroCurrentIndex[0] = (pos + 1) % 3;
-							heroHandler.postDelayed(this, 4000);
-						}
-					};
-
-					heroHandler.removeCallbacksAndMessages(null);
-					heroHandler.post(heroRunnable);
+					startHeroAutoSlider();
 				}
 
 				bindHorizontalPosterRecycler(recyclerPopular, listMap, 114, 162);
@@ -1983,36 +2005,64 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	public void _UI() {
+		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			Window window = getWindow();
 			window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
 			window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-			window.getDecorView().setSystemUiVisibility(
-				View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-			);
 			window.setStatusBarColor(Color.TRANSPARENT);
 		}
+
+		final float density = getResources().getDisplayMetrics().density;
+		final View topHeaderBar = findViewById(R.id.relativelayout69);
+		final View rootContainer = findViewById(R.id.root_main_container);
+
+		if (rootContainer != null && topHeaderBar != null) {
+			ViewCompat.setOnApplyWindowInsetsListener(rootContainer, new androidx.core.view.OnApplyWindowInsetsListener() {
+				@Override
+				public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat insets) {
+					int topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+					topHeaderBar.setPadding(
+						(int) (16 * density),
+						topInset + (int) (10 * density),
+						(int) (16 * density),
+						(int) (10 * density)
+					);
+					if (pullRefreshIndicator != null && pullRefreshIndicator.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+						FrameLayout.LayoutParams rlp = (FrameLayout.LayoutParams) pullRefreshIndicator.getLayoutParams();
+						rlp.topMargin = topInset + (int) (12 * density);
+						pullRefreshIndicator.setLayoutParams(rlp);
+					}
+					return insets;
+				}
+			});
+			ViewCompat.requestApplyInsets(rootContainer);
+		}
+
+		// Hapus background & stroke pada tombol notifikasi dan pesan
+		if (btnTopNotif != null) {
+			btnTopNotif.setBackgroundColor(Color.TRANSPARENT);
+			btnTopNotif.setForeground(null);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				btnTopNotif.setElevation(0f);
+			}
+		}
+		if (btnTopChat != null) {
+			btnTopChat.setBackgroundColor(Color.TRANSPARENT);
+			btnTopChat.setForeground(null);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				btnTopChat.setElevation(0f);
+			}
+		}
+		if (imgTopNotif != null) imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		int statusBarHeight = 0;
 		int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
 		if (resourceId > 0) {
 			statusBarHeight = getResources().getDimensionPixelSize(resourceId);
 		}
-		float density = getResources().getDisplayMetrics().density;
-
-		View topHeaderBar = findViewById(R.id.relativelayout69);
-		if (topHeaderBar != null) {
-			int horizontalPadding = (int) (16 * density);
-			int topPadding = statusBarHeight + (int) (10 * density);
-			int bottomPadding = (int) (10 * density);
-			topHeaderBar.setPadding(horizontalPadding, topPadding, horizontalPadding, bottomPadding);
-		}
-
-		applyUniversalGlassStyle(btnTopNotif, btnTopNotif);
-		applyUniversalGlassStyle(btnTopChat, btnTopChat);
-		if (imgTopNotif != null) imgTopNotif.setColorFilter(Color.WHITE);
-		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE);
-		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		if (searchBarContainer != null) {
 			LinearLayout.LayoutParams sbLp = (LinearLayout.LayoutParams) searchBarContainer.getLayoutParams();
@@ -2054,6 +2104,12 @@ public class MainActivity extends AppCompatActivity {
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
 		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
+	}
+
+	@Override
+	public void onDestroy() {
+		stopHeroAutoSlider();
+		super.onDestroy();
 	}
 
 	private void setupScrollResponsiveNavbar() {
