@@ -34,7 +34,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.text.format.DateUtils;
 import android.util.TypedValue;
 import android.view.GestureDetector;
@@ -80,6 +82,8 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.MutableData;
+import com.google.firebase.database.Transaction;
 import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -94,6 +98,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -109,6 +114,18 @@ public class WatchActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
+	private static final String ADMIN_EMAIL = "zahrulms01@gmail.com";
+
+	private static final String[] DEFAULT_STICKERS = {
+		"https://cdn-icons-png.flaticon.com/128/9408/9408175.png",
+		"https://media.tenor.com/On7KVXhzuf8AAAAj/chibi-cat.gif",
+		"https://cdn-icons-png.flaticon.com/128/9408/9408201.png",
+		"https://media.tenor.com/2s_jOsl0e8MAAAAj/dance-happy.gif",
+		"https://cdn-icons-png.flaticon.com/128/9408/9408166.png",
+		"https://media.tenor.com/kHIdycPoP6AAAAAj/anime-cry.gif",
+		"https://cdn-icons-png.flaticon.com/128/9408/9408224.png",
+		"https://media.tenor.com/gK2J_J7KkE8AAAAj/cute-love.gif"
+	};
 
 	private ArrayList<HashMap<String, Object>> eps = new ArrayList<>();
 	private RequestNetwork req_watch;
@@ -188,16 +205,19 @@ public class WatchActivity extends AppCompatActivity {
 	private boolean historyLoaded = false;
 	private boolean initialEpisodeStarted = false;
 	private long lastHistorySyncMs = 0L;
+	private boolean hasRewardedWatchExp = false;
 
-	// Komentar Firebase & BottomSheet gaya TikTok
+	// Komentar & Profil Users Firebase
 	private DatabaseReference commentsRef;
 	private ValueEventListener commentsListener;
-	private final ArrayList<HashMap<String, Object>> commentList = new ArrayList<>();
+	private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
+	private final List<String> allUserMentions = new ArrayList<>();
+	private final ArrayList<HashMap<String, Object>> mainCommentList = new ArrayList<>();
+	private final Map<String, List<HashMap<String, Object>>> repliesByParentMap = new HashMap<>();
+	private final ArrayList<String> stickerList = new ArrayList<>();
+
 	private TikTokCommentAdapter activeCommentSheetAdapter;
 	private TextView activeCommentSheetHeader;
-	private String cachedUserName = "Pengguna Dongflix";
-	private String cachedUserPhoto = "";
-
 	private Typeface outfitFont;
 
 	private static class ScoredAnimeItem {
@@ -262,42 +282,165 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	private String getUserKey() {
-		FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-		if (user == null || user.getEmail() == null) return "";
-		return user.getEmail().trim().toLowerCase(Locale.US).replace(".", ",");
+	private String sanitizeUserKey(String email, String uid) {
+		if (email != null && !email.trim().isEmpty()) {
+			return email.trim().toLowerCase(Locale.US).replace(".", ",");
+		}
+		return uid != null ? uid.trim() : "";
 	}
 
-	private void loadCurrentUserCommentMeta() {
+	private String getCurrentUserKey() {
 		FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-		if (user == null || user.getEmail() == null) return;
-		String email = user.getEmail().trim().toLowerCase(Locale.US);
-		cachedUserName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
-		if (user.getPhotoUrl() != null) cachedUserPhoto = user.getPhotoUrl().toString();
+		if (user == null) return "";
+		return sanitizeUserKey(user.getEmail(), user.getUid());
+	}
 
-		String key = getUserKey();
-		if (key.isEmpty()) return;
-		FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("users").child(key)
-			.addListenerForSingleValueEvent(new ValueEventListener() {
-				@Override
-				public void onDataChange(@NonNull DataSnapshot snap) {
-					if (!snap.exists()) return;
-					Object n = snap.child("name").getValue();
-					if (n != null && !n.toString().trim().isEmpty()) {
-						cachedUserName = n.toString().trim();
+	private int calculateLevel(long expVal) {
+		if (expVal <= 0L) return 1;
+		return (int) ((expVal - 1L) / 1000L) + 1;
+	}
+
+	private void addExpToCurrentUser(final long amount) {
+		String key = getCurrentUserKey();
+		if (key.isEmpty() || amount <= 0L) return;
+
+		DatabaseReference expRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("users")
+			.child(key)
+			.child("exp");
+
+		expRef.runTransaction(new Transaction.Handler() {
+			@NonNull
+			@Override
+			public Transaction.Result doTransaction(@NonNull MutableData currentData) {
+				long cur = 0L;
+				Object val = currentData.getValue();
+				if (val instanceof Number) {
+					cur = ((Number) val).longValue();
+				} else if (val != null) {
+					try { cur = Long.parseLong(val.toString().trim()); } catch (Exception ignored) {}
+				}
+				currentData.setValue(cur + amount);
+				return Transaction.success(currentData);
+			}
+
+			@Override
+			public void onComplete(DatabaseError error, boolean committed, DataSnapshot currentData) {
+				if (committed && currentData != null) {
+					long updatedExp = parseLongSafe(currentData.getValue(), 0L);
+					HashMap<String, String> prof = userProfileMap.get(key);
+					if (prof != null) {
+						prof.put("exp", String.valueOf(updatedExp));
+						if (activeCommentSheetAdapter != null) activeCommentSheetAdapter.notifyDataSetChanged();
 					}
-					Object p = snap.child("photoURL").getValue();
-					if (p != null && !p.toString().trim().isEmpty()) {
-						cachedUserPhoto = p.toString().trim();
+				}
+			}
+		});
+	}
+
+	private void loadUsersAndStickersFromFirebase() {
+		DatabaseReference rootDb = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference();
+
+		rootDb.child("users").addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snap) {
+				if (isFinishing() || isDestroyed() || !snap.exists()) return;
+				userProfileMap.clear();
+				allUserMentions.clear();
+				Set<String> mentionSet = new HashSet<>();
+
+				for (DataSnapshot child : snap.getChildren()) {
+					String key = child.getKey();
+					if (key == null) continue;
+
+					String email = child.child("email").getValue() != null ? child.child("email").getValue().toString().trim() : "";
+					String username = child.child("username").getValue() != null ? child.child("username").getValue().toString().trim() : "";
+					String name = child.child("name").getValue() != null ? child.child("name").getValue().toString().trim() : "";
+					String photo = child.child("photoURL").getValue() != null ? child.child("photoURL").getValue().toString().trim() : "";
+					long exp = parseLongSafe(child.child("exp").getValue(), 0L);
+
+					String fallbackUser = !username.isEmpty() ? username
+						: (!email.isEmpty() && email.contains("@") ? email.substring(0, email.indexOf("@")) : key);
+					String displayName = !name.isEmpty() ? name : fallbackUser;
+
+					HashMap<String, String> profile = new HashMap<>();
+					profile.put("key", key);
+					profile.put("email", email.toLowerCase(Locale.US));
+					profile.put("username", fallbackUser);
+					profile.put("name", displayName);
+					profile.put("photoURL", photo);
+					profile.put("exp", String.valueOf(exp));
+
+					userProfileMap.put(key, profile);
+					if (!email.isEmpty()) {
+						userProfileMap.put(email.toLowerCase(Locale.US).replace(".", ","), profile);
+					}
+
+					String mTag = !fallbackUser.isEmpty() ? fallbackUser : displayName;
+					if (!mTag.isEmpty() && mentionSet.add(mTag.toLowerCase(Locale.US))) {
+						allUserMentions.add(mTag);
 					}
 				}
 
-				@Override public void onCancelled(@NonNull DatabaseError error) {}
-			});
+				if (activeCommentSheetAdapter != null) {
+					activeCommentSheetAdapter.notifyDataSetChanged();
+				}
+			}
+
+			@Override public void onCancelled(@NonNull DatabaseError error) {}
+		});
+
+		stickerList.clear();
+		Collections.addAll(stickerList, DEFAULT_STICKERS);
+
+		rootDb.child("stickers").addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snap) {
+				if (snap.exists()) {
+					ArrayList<String> loaded = new ArrayList<>();
+					for (DataSnapshot child : snap.getChildren()) {
+						Object val = child.getValue();
+						if (val instanceof String && !val.toString().trim().isEmpty()) {
+							loaded.add(val.toString().trim());
+						} else if (val instanceof Map) {
+							Map<?, ?> m = (Map<?, ?>) val;
+							Object u = m.get("url") != null ? m.get("url") : (m.get("link") != null ? m.get("link") : m.get("image"));
+							if (u != null && !u.toString().trim().isEmpty()) {
+								loaded.add(u.toString().trim());
+							}
+						}
+					}
+					if (!loaded.isEmpty()) {
+						stickerList.clear();
+						stickerList.addAll(loaded);
+					}
+				}
+			}
+
+			@Override public void onCancelled(@NonNull DatabaseError error) {}
+		});
+	}
+
+	private HashMap<String, String> resolveUserProfile(String email, String uid) {
+		String key = sanitizeUserKey(email, uid);
+		if (!key.isEmpty() && userProfileMap.containsKey(key)) {
+			return userProfileMap.get(key);
+		}
+		if (uid != null && !uid.trim().isEmpty() && userProfileMap.containsKey(uid.trim())) {
+			return userProfileMap.get(uid.trim());
+		}
+		HashMap<String, String> fallback = new HashMap<>();
+		String derived = (email != null && email.contains("@")) ? email.substring(0, email.indexOf("@")) : "User";
+		fallback.put("email", email != null ? email.toLowerCase(Locale.US) : "");
+		fallback.put("username", derived);
+		fallback.put("name", derived);
+		fallback.put("photoURL", "");
+		fallback.put("exp", "0");
+		return fallback;
 	}
 
 	private void loadWatchHistoryFromFirebase() {
-		String userKey = getUserKey();
+		String userKey = getCurrentUserKey();
 		if (userKey.isEmpty() || currentSlug.isEmpty()) {
 			historyLoaded = true;
 			tryStartEpisodeFromHistoryIfReady();
@@ -360,38 +503,14 @@ public class WatchActivity extends AppCompatActivity {
 		int resumeMs = (pendingHistoryPositionMs > 0L && pendingHistoryPositionMs < Integer.MAX_VALUE)
 			? (int) pendingHistoryPositionMs : 0;
 
-		if (playerTextureView != null && playerTextureView.isAvailable()) {
-			playEpisodeByIndex(targetIdx, resumeMs);
-		} else if (playerTextureView != null) {
-			final int finalTargetIdx = targetIdx;
-			final int finalResumeMs = resumeMs;
-			playerTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-				@Override
-				public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-					playerSurface = new Surface(st);
-					if (!initialEpisodeStarted) {
-						initialEpisodeStarted = true;
-						playEpisodeByIndex(finalTargetIdx, finalResumeMs);
-					} else if (mediaPlayer == null && !currentPlayingUrl.isEmpty()) {
-						playEpisodeByIndex(finalTargetIdx, finalResumeMs);
-					}
-				}
-				@Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
-				@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-				@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
-			});
-			// Jalankan juga langsung agar ekstraksi stream tidak menunggu tekstur jika lambat
-			playEpisodeByIndex(targetIdx, resumeMs);
-		} else {
-			playEpisodeByIndex(targetIdx, resumeMs);
-		}
+		playEpisodeByIndex(targetIdx, resumeMs);
 	}
 
 	private void saveWatchHistoryToFirebase(int posMs, int durMs, boolean force) {
 		long now = System.currentTimeMillis();
 		if (!force && (now - lastHistorySyncMs) < 5000L) return;
 
-		String userKey = getUserKey();
+		String userKey = getCurrentUserKey();
 		if (userKey.isEmpty() || currentSlug.isEmpty()) return;
 
 		lastHistorySyncMs = now;
@@ -479,42 +598,64 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snap) {
 				if (isFinishing() || isDestroyed()) return;
-				ArrayList<HashMap<String, Object>> parsed = new ArrayList<>();
+
+				ArrayList<HashMap<String, Object>> allItems = new ArrayList<>();
 				if (snap.exists()) {
 					for (DataSnapshot child : snap.getChildren()) {
 						Object val = child.getValue();
 						if (val instanceof Map) {
-							HashMap<String, Object> item = new HashMap<>();
+							HashMap<String, Object> map = new HashMap<>();
 							for (Map.Entry<?, ?> e : ((Map<?, ?>) val).entrySet()) {
-								if (e.getKey() != null) item.put(e.getKey().toString(), e.getValue());
+								if (e.getKey() != null) map.put(e.getKey().toString(), e.getValue());
 							}
-							item.put("id", child.getKey());
-							parsed.add(item);
+							map.put("id", child.getKey());
+							allItems.add(map);
 						}
 					}
-					Collections.sort(parsed, new Comparator<HashMap<String, Object>>() {
+				}
+
+				mainCommentList.clear();
+				repliesByParentMap.clear();
+
+				for (HashMap<String, Object> item : allItems) {
+					String id = item.get("id") != null ? item.get("id").toString() : "";
+					String parentId = item.get("parentId") != null ? item.get("parentId").toString().trim() : "";
+					if (!parentId.isEmpty() && !"null".equalsIgnoreCase(parentId) && !"undefined".equalsIgnoreCase(parentId) && !parentId.equals(id)) {
+						List<HashMap<String, Object>> list = repliesByParentMap.get(parentId);
+						if (list == null) {
+							list = new ArrayList<>();
+							repliesByParentMap.put(parentId, list);
+						}
+						list.add(item);
+					} else {
+						mainCommentList.add(item);
+					}
+				}
+
+				Collections.sort(mainCommentList, new Comparator<HashMap<String, Object>>() {
+					@Override
+					public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+						long tA = parseLongSafe(a.get("timestamp"), 0L);
+						long tB = parseLongSafe(b.get("timestamp"), 0L);
+						return Long.compare(tB, tA);
+					}
+				});
+
+				for (List<HashMap<String, Object>> rList : repliesByParentMap.values()) {
+					Collections.sort(rList, new Comparator<HashMap<String, Object>>() {
 						@Override
 						public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
 							long tA = parseLongSafe(a.get("timestamp"), 0L);
 							long tB = parseLongSafe(b.get("timestamp"), 0L);
-							return Long.compare(tB, tA);
+							return Long.compare(tA, tB);
 						}
 					});
 				}
 
-				commentList.clear();
-				commentList.addAll(parsed);
-
-				int total = commentList.size();
-				if (textCommentCount != null) {
-					textCommentCount.setText(String.valueOf(total));
-				}
-				if (activeCommentSheetHeader != null) {
-					activeCommentSheetHeader.setText(total + " komentar");
-				}
-				if (activeCommentSheetAdapter != null) {
-					activeCommentSheetAdapter.notifyDataSetChanged();
-				}
+				int total = allItems.size();
+				if (textCommentCount != null) textCommentCount.setText(String.valueOf(total));
+				if (activeCommentSheetHeader != null) activeCommentSheetHeader.setText(total + " komentar");
+				if (activeCommentSheetAdapter != null) activeCommentSheetAdapter.notifyDataSetChanged();
 			}
 
 			@Override public void onCancelled(@NonNull DatabaseError error) {}
@@ -556,12 +697,17 @@ public class WatchActivity extends AppCompatActivity {
 		sheetBg.setStroke((int) (1 * d), Color.parseColor("#1FFFFFFF"));
 		root.setBackground(sheetBg);
 
+		// Header Gaya TikTok
 		FrameLayout header = new FrameLayout(this);
 		header.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (46 * d)));
 		header.setPadding((int) (16 * d), 0, (int) (12 * d), 0);
 
+		int totalCount = 0;
+		for (List<HashMap<String, Object>> r : repliesByParentMap.values()) totalCount += r.size();
+		totalCount += mainCommentList.size();
+
 		TextView tvHeader = new TextView(this);
-		tvHeader.setText(commentList.size() + " komentar");
+		tvHeader.setText(totalCount + " komentar");
 		tvHeader.setTextColor(Color.WHITE);
 		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 		tvHeader.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
@@ -590,43 +736,230 @@ public class WatchActivity extends AppCompatActivity {
 		topDiv.setBackgroundColor(Color.parseColor("#14FFFFFF"));
 		root.addView(topDiv);
 
+		// Daftar Komentar + Balasan
 		RecyclerView rvComments = new RecyclerView(this);
 		rvComments.setLayoutManager(new LinearLayoutManager(this));
 		rvComments.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 		rvComments.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
 		rvComments.setClipToPadding(false);
-		activeCommentSheetAdapter = new TikTokCommentAdapter(commentList);
+
+		final String[] selectedMainSticker = {""};
+		final String[] activeReplyParentId = {""};
+		final String[] selectedReplySticker = {""};
+
+		final ImageView ivMainStickerPreview = new ImageView(this);
+		final FrameLayout mainStickerBox = new FrameLayout(this);
+		mainStickerBox.setVisibility(View.GONE);
+		LinearLayout.LayoutParams msLp = new LinearLayout.LayoutParams((int) (64 * d), (int) (64 * d));
+		msLp.leftMargin = (int) (16 * d);
+		msLp.bottomMargin = (int) (6 * d);
+		mainStickerBox.setLayoutParams(msLp);
+		ivMainStickerPreview.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		ivMainStickerPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+		TextView btnRemoveMainSticker = new TextView(this);
+		btnRemoveMainSticker.setText("✕");
+		btnRemoveMainSticker.setTextColor(Color.WHITE);
+		btnRemoveMainSticker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+		btnRemoveMainSticker.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnRemoveMainSticker.setGravity(Gravity.CENTER);
+		btnRemoveMainSticker.setBackgroundColor(Color.parseColor("#EF4444"));
+		btnRemoveMainSticker.setLayoutParams(new FrameLayout.LayoutParams((int) (18 * d), (int) (18 * d), Gravity.TOP | Gravity.END));
+		btnRemoveMainSticker.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				selectedMainSticker[0] = "";
+				mainStickerBox.setVisibility(View.GONE);
+			}
+		});
+		mainStickerBox.addView(ivMainStickerPreview);
+		mainStickerBox.addView(btnRemoveMainSticker);
+
+		final LinearLayout replyBanner = new LinearLayout(this);
+		replyBanner.setOrientation(LinearLayout.HORIZONTAL);
+		replyBanner.setGravity(Gravity.CENTER_VERTICAL);
+		replyBanner.setVisibility(View.GONE);
+		replyBanner.setPadding((int) (16 * d), (int) (6 * d), (int) (16 * d), (int) (6 * d));
+		replyBanner.setBackgroundColor(Color.parseColor("#181D2B"));
+
+		final TextView tvReplyBanner = new TextView(this);
+		tvReplyBanner.setTextColor(Color.parseColor("#38BDF8"));
+		tvReplyBanner.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		tvReplyBanner.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvReplyBanner.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		final EditText etInput = new EditText(this);
+		etInput.setHint("Tambah komentar... (ketik @ untuk tag)");
+		etInput.setHintTextColor(Color.parseColor("#64748B"));
+		etInput.setTextColor(Color.WHITE);
+		etInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		etInput.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etInput.setMaxLines(3);
+		etInput.setPadding((int) (16 * d), (int) (9 * d), (int) (16 * d), (int) (9 * d));
+
+		GradientDrawable inputBg = new GradientDrawable();
+		inputBg.setColor(Color.parseColor("#1C212E"));
+		inputBg.setCornerRadius(1000f);
+		etInput.setBackground(inputBg);
+
+		LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+		etLp.rightMargin = (int) (8 * d);
+		etInput.setLayoutParams(etLp);
+
+		TextView btnCancelReply = new TextView(this);
+		btnCancelReply.setText("Batal");
+		btnCancelReply.setTextColor(Color.parseColor("#94A3B8"));
+		btnCancelReply.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		btnCancelReply.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCancelReply.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				activeReplyParentId[0] = "";
+				selectedReplySticker[0] = "";
+				replyBanner.setVisibility(View.GONE);
+				etInput.setText("");
+				etInput.setHint("Tambah komentar... (ketik @ untuk tag)");
+			}
+		});
+		replyBanner.addView(tvReplyBanner);
+		replyBanner.addView(btnCancelReply);
+
+		activeCommentSheetAdapter = new TikTokCommentAdapter(
+			mainCommentList,
+			repliesByParentMap,
+			new OnReplyClickListener() {
+				@Override
+				public void onReplyRequested(String parentCommentId, String mentionTag) {
+					activeReplyParentId[0] = parentCommentId;
+					selectedReplySticker[0] = "";
+					mainStickerBox.setVisibility(View.GONE);
+					replyBanner.setVisibility(View.VISIBLE);
+					tvReplyBanner.setText("Membalas @" + mentionTag);
+
+					String prefix = "@" + mentionTag + " ";
+					etInput.setText(prefix);
+					etInput.setSelection(prefix.length());
+					etInput.requestFocus();
+					InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+					if (imm != null) imm.showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT);
+				}
+			}
+		);
 		rvComments.setAdapter(activeCommentSheetAdapter);
 		root.addView(rvComments);
+
+		// Saran Mention @ saat mengetik @
+		final LinearLayout mentionBar = new LinearLayout(this);
+		mentionBar.setOrientation(LinearLayout.HORIZONTAL);
+		mentionBar.setVisibility(View.GONE);
+		mentionBar.setPadding((int) (14 * d), (int) (6 * d), (int) (14 * d), (int) (6 * d));
+		mentionBar.setBackgroundColor(Color.parseColor("#0B1329"));
+
+		etInput.addTextChangedListener(new TextWatcher() {
+			@Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+			@Override
+			public void onTextChanged(CharSequence s, int start, int before, int count) {
+				String full = s.toString();
+				int cursor = Math.min(full.length(), Math.max(0, etInput.getSelectionStart()));
+				String beforeCursor = full.substring(0, cursor);
+				int atIdx = beforeCursor.lastIndexOf('@');
+				if (atIdx >= 0 && (atIdx == 0 || Character.isWhitespace(beforeCursor.charAt(atIdx - 1)))) {
+					String q = beforeCursor.substring(atIdx + 1).toLowerCase(Locale.US);
+					mentionBar.removeAllViews();
+					int added = 0;
+					for (String mTag : allUserMentions) {
+						if (mTag.toLowerCase(Locale.US).contains(q)) {
+							TextView chip = new TextView(WatchActivity.this);
+							chip.setText("@" + mTag);
+							chip.setTextColor(Color.parseColor("#38BDF8"));
+							chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+							chip.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+							chip.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
+							GradientDrawable cBg = new GradientDrawable();
+							cBg.setColor(Color.parseColor("#162038"));
+							cBg.setCornerRadius(100f);
+							chip.setBackground(cBg);
+							LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
+								ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+							);
+							cLp.rightMargin = (int) (8 * d);
+							chip.setLayoutParams(cLp);
+							final String picked = mTag;
+							chip.setOnClickListener(new View.OnClickListener() {
+								@Override
+								public void onClick(View v) {
+									String curText = etInput.getText().toString();
+									int pos = Math.min(curText.length(), Math.max(0, etInput.getSelectionStart()));
+									int atPos = curText.substring(0, pos).lastIndexOf('@');
+									if (atPos >= 0) {
+										String nextText = curText.substring(0, atPos) + "@" + picked + " " + curText.substring(pos);
+										etInput.setText(nextText);
+										etInput.setSelection(Math.min(nextText.length(), atPos + picked.length() + 2));
+									}
+									mentionBar.setVisibility(View.GONE);
+								}
+							});
+							mentionBar.addView(chip);
+							added++;
+							if (added >= 6) break;
+						}
+					}
+					mentionBar.setVisibility(added > 0 ? View.VISIBLE : View.GONE);
+				} else {
+					mentionBar.setVisibility(View.GONE);
+				}
+			}
+			@Override public void afterTextChanged(Editable s) {}
+		});
+
+		root.addView(mentionBar);
+		root.addView(replyBanner);
+		root.addView(mainStickerBox);
 
 		View botDiv = new View(this);
 		botDiv.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * d)));
 		botDiv.setBackgroundColor(Color.parseColor("#14FFFFFF"));
 		root.addView(botDiv);
 
+		// Input Bar + Tombol Stiker di Samping Tombol Kirim
 		LinearLayout inputBar = new LinearLayout(this);
 		inputBar.setOrientation(LinearLayout.HORIZONTAL);
 		inputBar.setGravity(Gravity.CENTER_VERTICAL);
-		inputBar.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (10 * d));
+		inputBar.setPadding((int) (12 * d), (int) (8 * d), (int) (12 * d), (int) (10 * d));
 		inputBar.setBackgroundColor(Color.parseColor("#12151E"));
 
-		final EditText etComment = new EditText(this);
-		etComment.setHint("Tambah komentar...");
-		etComment.setHintTextColor(Color.parseColor("#64748B"));
-		etComment.setTextColor(Color.WHITE);
-		etComment.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		etComment.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		etComment.setMaxLines(3);
-		etComment.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+		TextView btnSticker = new TextView(this);
+		btnSticker.setText("☺");
+		btnSticker.setTextColor(Color.parseColor("#CBD5E1"));
+		btnSticker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
+		btnSticker.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnSticker.setGravity(Gravity.CENTER);
+		LinearLayout.LayoutParams stBtnLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
+		stBtnLp.rightMargin = (int) (6 * d);
+		btnSticker.setLayoutParams(stBtnLp);
+		GradientDrawable stBtnBg = new GradientDrawable();
+		stBtnBg.setShape(GradientDrawable.OVAL);
+		stBtnBg.setColor(Color.parseColor("#1C212E"));
+		btnSticker.setBackground(stBtnBg);
 
-		GradientDrawable inputBg = new GradientDrawable();
-		inputBg.setColor(Color.parseColor("#1C212E"));
-		inputBg.setCornerRadius(1000f);
-		etComment.setBackground(inputBg);
-
-		LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-		etLp.rightMargin = (int) (10 * d);
-		etComment.setLayoutParams(etLp);
+		btnSticker.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				openStickerPickerDialog(new OnStickerPickedListener() {
+					@Override
+					public void onStickerPicked(String url) {
+						if (!activeReplyParentId[0].isEmpty()) {
+							selectedReplySticker[0] = url;
+						} else {
+							selectedMainSticker[0] = url;
+						}
+						ivMainStickerPreview.setImageURI(null);
+						Glide.with(WatchActivity.this).load(Uri.parse(url)).into(ivMainStickerPreview);
+						mainStickerBox.setVisibility(View.VISIBLE);
+					}
+				});
+			}
+		});
 
 		TextView btnSend = new TextView(this);
 		btnSend.setText("Kirim");
@@ -634,7 +967,7 @@ public class WatchActivity extends AppCompatActivity {
 		btnSend.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
 		btnSend.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		btnSend.setGravity(Gravity.CENTER);
-		btnSend.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+		btnSend.setPadding((int) (14 * d), (int) (9 * d), (int) (14 * d), (int) (9 * d));
 
 		GradientDrawable sendBg = new GradientDrawable();
 		sendBg.setColor(Color.parseColor("#2563EB"));
@@ -644,33 +977,65 @@ public class WatchActivity extends AppCompatActivity {
 		btnSend.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				String text = etComment.getText().toString().trim();
-				if (text.isEmpty() || currentSlug.isEmpty()) return;
+				String text = etInput.getText().toString().trim();
+				String parentId = activeReplyParentId[0];
+				String stickerUrl = !parentId.isEmpty() ? selectedReplySticker[0] : selectedMainSticker[0];
+
+				if ((text.isEmpty() && (stickerUrl == null || stickerUrl.isEmpty())) || currentSlug.isEmpty()) return;
+
 				FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
 				if (user == null) {
 					Toast.makeText(WatchActivity.this, "Silakan login untuk berkomentar", Toast.LENGTH_SHORT).show();
 					return;
 				}
-				Map<String, Object> payload = new HashMap<>();
-				payload.put("name", cachedUserName);
-				payload.put("email", user.getEmail() != null ? user.getEmail() : "");
-				payload.put("photoURL", cachedUserPhoto);
-				payload.put("text", text);
-				payload.put("timestamp", System.currentTimeMillis());
 
+				String userKey = sanitizeUserKey(user.getEmail(), user.getUid());
+				HashMap<String, String> myProf = resolveUserProfile(user.getEmail(), user.getUid());
+				boolean isAdmin = user.getEmail() != null && ADMIN_EMAIL.equalsIgnoreCase(user.getEmail().trim());
+
+				Map<String, Object> payload = new HashMap<>();
+				payload.put("uid", user.getUid());
+				payload.put("email", user.getEmail() != null ? user.getEmail() : "");
+				payload.put("author", myProf.get("name"));
+				payload.put("username", myProf.get("username"));
+				payload.put("photoURL", myProf.get("photoURL"));
+				payload.put("text", text);
+				payload.put("stickerUrl", stickerUrl != null ? stickerUrl : "");
+				payload.put("timestamp", System.currentTimeMillis());
+				payload.put("isAdmin", isAdmin);
+				if (!parentId.isEmpty()) {
+					payload.put("parentId", parentId);
+				}
+
+				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+				String entryId = String.valueOf(System.currentTimeMillis());
 				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 					.getReference("comments")
-					.child(currentSlug)
-					.push()
+					.child(cleanKey)
+					.child(entryId)
 					.setValue(payload);
 
-				etComment.setText("");
+				addExpToCurrentUser(500L);
+
+				etInput.setText("");
+				selectedMainSticker[0] = "";
+				selectedReplySticker[0] = "";
+				activeReplyParentId[0] = "";
+				mainStickerBox.setVisibility(View.GONE);
+				replyBanner.setVisibility(View.GONE);
+				mentionBar.setVisibility(View.GONE);
+
+				if (!userKey.isEmpty() && !userProfileMap.containsKey(userKey)) {
+					userProfileMap.put(userKey, myProf);
+				}
+
 				InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-				if (imm != null) imm.hideSoftInputFromWindow(etComment.getWindowToken(), 0);
+				if (imm != null) imm.hideSoftInputFromWindow(etInput.getWindowToken(), 0);
 			}
 		});
 
-		inputBar.addView(etComment);
+		inputBar.addView(etInput);
+		inputBar.addView(btnSticker);
 		inputBar.addView(btnSend);
 		root.addView(inputBar);
 
@@ -701,11 +1066,113 @@ public class WatchActivity extends AppCompatActivity {
 		sheet.show();
 	}
 
-	private class TikTokCommentAdapter extends RecyclerView.Adapter<TikTokCommentAdapter.ViewHolder> {
-		private final List<HashMap<String, Object>> items;
+	private interface OnStickerPickedListener {
+		void onStickerPicked(String url);
+	}
 
-		TikTokCommentAdapter(List<HashMap<String, Object>> items) {
-			this.items = items;
+	private void openStickerPickerDialog(final OnStickerPickedListener listener) {
+		final float d = getResources().getDisplayMetrics().density;
+		final BottomSheetDialog picker = new BottomSheetDialog(this);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (16 * d), (int) (14 * d), (int) (16 * d), (int) (20 * d));
+
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#090E17"));
+		bg.setCornerRadii(new float[]{20 * d, 20 * d, 20 * d, 20 * d, 0f, 0f, 0f, 0f});
+		bg.setStroke((int) (1 * d), Color.parseColor("#1E293B"));
+		root.setBackground(bg);
+
+		TextView title = new TextView(this);
+		title.setText("Pilih Stiker & GIF");
+		title.setTextColor(Color.WHITE);
+		title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+		title.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		tLp.bottomMargin = (int) (12 * d);
+		title.setLayoutParams(tLp);
+		root.addView(title);
+
+		RecyclerView rvStickers = new RecyclerView(this);
+		rvStickers.setLayoutManager(new GridLayoutManager(this, 4));
+		rvStickers.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (220 * d)
+		));
+
+		rvStickers.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+			@NonNull
+			@Override
+			public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+				FrameLayout cell = new FrameLayout(parent.getContext());
+				RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, (int) (72 * d)
+				);
+				lp.setMargins((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
+				cell.setLayoutParams(lp);
+				GradientDrawable cBg = new GradientDrawable();
+				cBg.setColor(Color.parseColor("#121927"));
+				cBg.setCornerRadius(12 * d);
+				cell.setBackground(cBg);
+
+				ImageView iv = new ImageView(parent.getContext());
+				iv.setLayoutParams(new FrameLayout.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+				));
+				iv.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
+				iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+				iv.setTag("sticker_img");
+				cell.addView(iv);
+				return new RecyclerView.ViewHolder(cell) {};
+			}
+
+			@Override
+			public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int pos) {
+				final String url = stickerList.get(pos);
+				ImageView iv = holder.itemView.findViewWithTag("sticker_img");
+				if (iv != null && !isFinishing() && !isDestroyed()) {
+					Glide.with(WatchActivity.this).load(Uri.parse(url)).into(iv);
+				}
+				holder.itemView.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						picker.dismiss();
+						if (listener != null) listener.onStickerPicked(url);
+					}
+				});
+			}
+
+			@Override
+			public int getItemCount() {
+				return stickerList.size();
+			}
+		});
+
+		root.addView(rvStickers);
+		picker.setContentView(root);
+		picker.show();
+	}
+
+	private interface OnReplyClickListener {
+		void onReplyRequested(String parentCommentId, String mentionTag);
+	}
+
+	private class TikTokCommentAdapter extends RecyclerView.Adapter<TikTokCommentAdapter.ViewHolder> {
+		private final List<HashMap<String, Object>> mainItems;
+		private final Map<String, List<HashMap<String, Object>>> repliesMap;
+		private final OnReplyClickListener replyListener;
+		private final Set<String> expandedParents = new HashSet<>();
+
+		TikTokCommentAdapter(
+			List<HashMap<String, Object>> mainItems,
+			Map<String, List<HashMap<String, Object>>> repliesMap,
+			OnReplyClickListener replyListener
+		) {
+			this.mainItems = mainItems;
+			this.repliesMap = repliesMap;
+			this.replyListener = replyListener;
 		}
 
 		@NonNull
@@ -713,17 +1180,24 @@ public class WatchActivity extends AppCompatActivity {
 		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
 			float d = parent.getResources().getDisplayMetrics().density;
 
-			LinearLayout row = new LinearLayout(parent.getContext());
-			row.setOrientation(LinearLayout.HORIZONTAL);
-			row.setGravity(Gravity.TOP);
-			RecyclerView.LayoutParams rowLp = new RecyclerView.LayoutParams(
+			LinearLayout card = new LinearLayout(parent.getContext());
+			card.setOrientation(LinearLayout.HORIZONTAL);
+			card.setGravity(Gravity.TOP);
+			RecyclerView.LayoutParams cardLp = new RecyclerView.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			rowLp.bottomMargin = (int) (16 * d);
-			row.setLayoutParams(rowLp);
+			cardLp.bottomMargin = (int) (14 * d);
+			card.setLayoutParams(cardLp);
+			card.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
+
+			GradientDrawable cardBg = new GradientDrawable();
+			cardBg.setColor(Color.parseColor("#090D16"));
+			cardBg.setCornerRadius(12 * d);
+			cardBg.setStroke((int) (1 * d), Color.parseColor("#0DFFFFFF"));
+			card.setBackground(cardBg);
 
 			ImageView avatar = new ImageView(parent.getContext());
-			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
 			avLp.rightMargin = (int) (12 * d);
 			avatar.setLayoutParams(avLp);
 			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -733,77 +1207,360 @@ public class WatchActivity extends AppCompatActivity {
 			col.setOrientation(LinearLayout.VERTICAL);
 			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+			LinearLayout headerRow = new LinearLayout(parent.getContext());
+			headerRow.setOrientation(LinearLayout.HORIZONTAL);
+			headerRow.setGravity(Gravity.CENTER_VERTICAL);
+
 			TextView tvName = new TextView(parent.getContext());
 			tvName.setTextColor(Color.parseColor("#94A3B8"));
-			tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+			tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
 			tvName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvName.setTag("name");
 
+			TextView tvBadge = new TextView(parent.getContext());
+			tvBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+			tvBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvBadge.setPadding((int) (6 * d), (int) (1 * d), (int) (6 * d), (int) (1 * d));
+			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			bLp.leftMargin = (int) (6 * d);
+			tvBadge.setLayoutParams(bLp);
+			tvBadge.setTag("badge");
+
+			headerRow.addView(tvName);
+			headerRow.addView(tvBadge);
+
 			TextView tvBody = new TextView(parent.getContext());
-			tvBody.setTextColor(Color.WHITE);
+			tvBody.setTextColor(Color.parseColor("#F1F5F9"));
 			tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 			tvBody.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvBody.setLineSpacing(2 * d, 1.08f);
 			LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			bodyLp.topMargin = (int) (2 * d);
+			bodyLp.topMargin = (int) (4 * d);
 			tvBody.setLayoutParams(bodyLp);
 			tvBody.setTag("body");
+
+			ImageView ivSticker = new ImageView(parent.getContext());
+			LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams((int) (120 * d), (int) (120 * d));
+			stLp.topMargin = (int) (6 * d);
+			ivSticker.setLayoutParams(stLp);
+			ivSticker.setScaleType(ImageView.ScaleType.FIT_CENTER);
+			ivSticker.setTag("sticker");
+
+			LinearLayout footerRow = new LinearLayout(parent.getContext());
+			footerRow.setOrientation(LinearLayout.HORIZONTAL);
+			footerRow.setGravity(Gravity.CENTER_VERTICAL);
+			LinearLayout.LayoutParams fLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			fLp.topMargin = (int) (6 * d);
+			footerRow.setLayoutParams(fLp);
 
 			TextView tvTime = new TextView(parent.getContext());
 			tvTime.setTextColor(Color.parseColor("#64748B"));
 			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
 			tvTime.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			timeLp.topMargin = (int) (4 * d);
-			tvTime.setLayoutParams(timeLp);
 			tvTime.setTag("time");
 
-			col.addView(tvName);
-			col.addView(tvBody);
-			col.addView(tvTime);
+			TextView btnReply = new TextView(parent.getContext());
+			btnReply.setText("Balas");
+			btnReply.setTextColor(Color.parseColor("#94A3B8"));
+			btnReply.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			btnReply.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			LinearLayout.LayoutParams rBtnLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rBtnLp.leftMargin = (int) (14 * d);
+			btnReply.setLayoutParams(rBtnLp);
+			btnReply.setTag("btn_reply");
 
-			row.addView(avatar);
-			row.addView(col);
-			return new ViewHolder(row);
+			TextView btnDelete = new TextView(parent.getContext());
+			btnDelete.setText("Hapus");
+			btnDelete.setTextColor(Color.parseColor("#EF4444"));
+			btnDelete.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			btnDelete.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			LinearLayout.LayoutParams dBtnLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			dBtnLp.leftMargin = (int) (14 * d);
+			btnDelete.setLayoutParams(dBtnLp);
+			btnDelete.setTag("btn_delete");
+
+			footerRow.addView(tvTime);
+			footerRow.addView(btnReply);
+			footerRow.addView(btnDelete);
+
+			TextView btnToggleReplies = new TextView(parent.getContext());
+			btnToggleReplies.setTextColor(Color.parseColor("#38BDF8"));
+			btnToggleReplies.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+			btnToggleReplies.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			LinearLayout.LayoutParams tglLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			tglLp.topMargin = (int) (8 * d);
+			btnToggleReplies.setLayoutParams(tglLp);
+			btnToggleReplies.setTag("toggle_replies");
+
+			LinearLayout repliesContainer = new LinearLayout(parent.getContext());
+			repliesContainer.setOrientation(LinearLayout.VERTICAL);
+			repliesContainer.setPadding((int) (12 * d), (int) (8 * d), 0, 0);
+			repliesContainer.setTag("replies_container");
+
+			col.addView(headerRow);
+			col.addView(tvBody);
+			col.addView(ivSticker);
+			col.addView(footerRow);
+			col.addView(btnToggleReplies);
+			col.addView(repliesContainer);
+
+			card.addView(avatar);
+			card.addView(col);
+			return new ViewHolder(card);
 		}
 
 		@Override
 		public void onBindViewHolder(@NonNull ViewHolder holder, int pos) {
-			HashMap<String, Object> item = items.get(pos);
-			ImageView avatar = holder.itemView.findViewWithTag("avatar");
-			TextView tvName = holder.itemView.findViewWithTag("name");
-			TextView tvBody = holder.itemView.findViewWithTag("body");
-			TextView tvTime = holder.itemView.findViewWithTag("time");
-
-			String name = item.get("name") != null ? item.get("name").toString() : "User";
-			String body = item.get("text") != null ? item.get("text").toString() : "";
-			String photo = item.get("photoURL") != null ? item.get("photoURL").toString().trim() : "";
+			final HashMap<String, Object> item = mainItems.get(pos);
+			final String commentId = item.get("id") != null ? item.get("id").toString() : "";
+			String email = item.get("email") != null ? item.get("email").toString() : "";
+			String uid = item.get("uid") != null ? item.get("uid").toString() : "";
+			String text = item.get("text") != null ? item.get("text").toString() : "";
+			String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
 
-			if (tvName != null) tvName.setText(name);
-			if (tvBody != null) tvBody.setText(body);
+			// Nama & profil selalu diambil dari users
+			HashMap<String, String> prof = resolveUserProfile(email, uid);
+			final String displayName = prof.get("name");
+			final String mentionHandle = prof.get("username") != null && !prof.get("username").isEmpty()
+				? prof.get("username") : displayName;
+			String photoUrl = prof.get("photoURL");
+			long exp = parseLongSafe(prof.get("exp"), 0L);
+			boolean isAdmin = !email.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(email.trim());
+
+			ImageView avatar = holder.itemView.findViewWithTag("avatar");
+			TextView tvName = holder.itemView.findViewWithTag("name");
+			TextView tvBadge = holder.itemView.findViewWithTag("badge");
+			TextView tvBody = holder.itemView.findViewWithTag("body");
+			ImageView ivSticker = holder.itemView.findViewWithTag("sticker");
+			TextView tvTime = holder.itemView.findViewWithTag("time");
+			TextView btnReply = holder.itemView.findViewWithTag("btn_reply");
+			TextView btnDelete = holder.itemView.findViewWithTag("btn_delete");
+			TextView btnToggleReplies = holder.itemView.findViewWithTag("toggle_replies");
+			LinearLayout repliesContainer = holder.itemView.findViewWithTag("replies_container");
+
+			if (tvName != null) {
+				tvName.setText(displayName);
+				tvName.setTextColor(isAdmin ? Color.parseColor("#F59E0B") : Color.parseColor("#94A3B8"));
+			}
+			if (tvBadge != null) {
+				GradientDrawable bBg = new GradientDrawable();
+				bBg.setCornerRadius(100f);
+				if (isAdmin) {
+					bBg.setColor(Color.parseColor("#451A03"));
+					tvBadge.setTextColor(Color.parseColor("#FBBF24"));
+					tvBadge.setText("★ ADMIN • Lv999+");
+				} else {
+					bBg.setColor(Color.parseColor("#162338"));
+					tvBadge.setTextColor(Color.parseColor("#38BDF8"));
+					tvBadge.setText("Lv" + calculateLevel(exp));
+				}
+				tvBadge.setBackground(bBg);
+			}
+			if (tvBody != null) {
+				tvBody.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
+				tvBody.setText(text);
+			}
+			if (ivSticker != null) {
+				if (!stickerUrl.isEmpty() && !isFinishing() && !isDestroyed()) {
+					ivSticker.setVisibility(View.VISIBLE);
+					Glide.with(WatchActivity.this).load(Uri.parse(stickerUrl)).into(ivSticker);
+				} else {
+					ivSticker.setVisibility(View.GONE);
+				}
+			}
 			if (tvTime != null) {
 				tvTime.setText(DateUtils.getRelativeTimeSpanString(ts, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
 			}
 
 			if (avatar != null) {
-				if (!photo.isEmpty() && !isFinishing() && !isDestroyed()) {
-					Glide.with(WatchActivity.this).load(Uri.parse(photo)).circleCrop()
+				if (photoUrl != null && !photoUrl.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(WatchActivity.this).load(Uri.parse(photoUrl)).circleCrop()
 						.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(avatar);
 				} else {
 					avatar.setImageResource(R.drawable.ic_profile);
 					avatar.setColorFilter(Color.parseColor("#CBD5E1"));
 				}
 			}
+
+			FirebaseUser curUser = FirebaseAuth.getInstance().getCurrentUser();
+			if (btnReply != null) {
+				btnReply.setVisibility(curUser != null ? View.VISIBLE : View.GONE);
+				btnReply.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						if (replyListener != null) {
+							replyListener.onReplyRequested(commentId, mentionHandle);
+						}
+					}
+				});
+			}
+
+			if (btnDelete != null) {
+				boolean canDelete = false;
+				if (curUser != null) {
+					String curEmail = curUser.getEmail() != null ? curUser.getEmail().trim() : "";
+					if (ADMIN_EMAIL.equalsIgnoreCase(curEmail)) {
+						canDelete = true;
+					} else if (!email.isEmpty() && curEmail.equalsIgnoreCase(email.trim())) {
+						canDelete = true;
+					} else if (!uid.isEmpty() && uid.equals(curUser.getUid())) {
+						canDelete = true;
+					}
+				}
+				btnDelete.setVisibility(canDelete ? View.VISIBLE : View.GONE);
+				btnDelete.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						if (!commentId.isEmpty() && !currentSlug.isEmpty()) {
+							String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+							FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+								.getReference("comments")
+								.child(cleanKey)
+								.child(commentId)
+								.removeValue();
+						}
+					}
+				});
+			}
+
+			final List<HashMap<String, Object>> replies = repliesMap.get(commentId);
+			final boolean isExpanded = expandedParents.contains(commentId);
+			if (btnToggleReplies != null && repliesContainer != null) {
+				if (replies != null && !replies.isEmpty()) {
+					btnToggleReplies.setVisibility(View.VISIBLE);
+					btnToggleReplies.setText(isExpanded
+						? "Sembunyikan balasan ▴"
+						: "Lihat " + replies.size() + " balasan ▾");
+					repliesContainer.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
+					repliesContainer.removeAllViews();
+
+					if (isExpanded) {
+						float d = holder.itemView.getResources().getDisplayMetrics().density;
+						for (HashMap<String, Object> rItem : replies) {
+							repliesContainer.addView(buildReplyRowView(repliesContainer.getContext(), rItem, d));
+						}
+					}
+
+					btnToggleReplies.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							if (expandedParents.contains(commentId)) {
+								expandedParents.remove(commentId);
+							} else {
+								expandedParents.add(commentId);
+							}
+							notifyItemChanged(holder.getAdapterPosition());
+						}
+					});
+				} else {
+					btnToggleReplies.setVisibility(View.GONE);
+					repliesContainer.setVisibility(View.GONE);
+					repliesContainer.removeAllViews();
+				}
+			}
+		}
+
+		private View buildReplyRowView(Context ctx, HashMap<String, Object> rItem, float d) {
+			String rEmail = rItem.get("email") != null ? rItem.get("email").toString() : "";
+			String rUid = rItem.get("uid") != null ? rItem.get("uid").toString() : "";
+			String rText = rItem.get("text") != null ? rItem.get("text").toString() : "";
+			String rSticker = rItem.get("stickerUrl") != null ? rItem.get("stickerUrl").toString().trim() : "";
+			long rTs = parseLongSafe(rItem.get("timestamp"), System.currentTimeMillis());
+
+			HashMap<String, String> rProf = resolveUserProfile(rEmail, rUid);
+			String rName = rProf.get("name");
+			String rPhoto = rProf.get("photoURL");
+			long rExp = parseLongSafe(rProf.get("exp"), 0L);
+			boolean rAdmin = !rEmail.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(rEmail.trim());
+
+			LinearLayout row = new LinearLayout(ctx);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.TOP);
+			LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			lp.bottomMargin = (int) (10 * d);
+			row.setLayoutParams(lp);
+			row.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
+			GradientDrawable rBg = new GradientDrawable();
+			rBg.setColor(Color.parseColor("#111726"));
+			rBg.setCornerRadius(8 * d);
+			row.setBackground(rBg);
+
+			ImageView av = new ImageView(ctx);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (26 * d), (int) (26 * d));
+			avLp.rightMargin = (int) (10 * d);
+			av.setLayoutParams(avLp);
+			av.setScaleType(ImageView.ScaleType.CENTER_CROP);
+			if (rPhoto != null && !rPhoto.isEmpty() && !isFinishing() && !isDestroyed()) {
+				Glide.with(WatchActivity.this).load(Uri.parse(rPhoto)).circleCrop()
+					.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(av);
+			} else {
+				av.setImageResource(R.drawable.ic_profile);
+				av.setColorFilter(Color.parseColor("#CBD5E1"));
+			}
+
+			LinearLayout col = new LinearLayout(ctx);
+			col.setOrientation(LinearLayout.VERTICAL);
+			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+			TextView tvN = new TextView(ctx);
+			tvN.setText(rName + (rAdmin ? " • ★ ADMIN Lv999+" : " • Lv" + calculateLevel(rExp)));
+			tvN.setTextColor(rAdmin ? Color.parseColor("#F59E0B") : Color.parseColor("#94A3B8"));
+			tvN.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			tvN.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+			TextView tvB = new TextView(ctx);
+			tvB.setText(rText);
+			tvB.setTextColor(Color.WHITE);
+			tvB.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			tvB.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvB.setVisibility(rText.isEmpty() ? View.GONE : View.VISIBLE);
+
+			ImageView ivS = new ImageView(ctx);
+			LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams((int) (96 * d), (int) (96 * d));
+			sLp.topMargin = (int) (4 * d);
+			ivS.setLayoutParams(sLp);
+			ivS.setScaleType(ImageView.ScaleType.FIT_CENTER);
+			if (!rSticker.isEmpty() && !isFinishing() && !isDestroyed()) {
+				ivS.setVisibility(View.VISIBLE);
+				Glide.with(WatchActivity.this).load(Uri.parse(rSticker)).into(ivS);
+			} else {
+				ivS.setVisibility(View.GONE);
+			}
+
+			TextView tvT = new TextView(ctx);
+			tvT.setText(DateUtils.getRelativeTimeSpanString(rTs, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+			tvT.setTextColor(Color.parseColor("#64748B"));
+			tvT.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+			tvT.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+			col.addView(tvN);
+			col.addView(tvB);
+			col.addView(ivS);
+			col.addView(tvT);
+
+			row.addView(av);
+			row.addView(col);
+			return row;
 		}
 
 		@Override
 		public int getItemCount() {
-			return items.size();
+			return mainItems.size();
 		}
 
 		class ViewHolder extends RecyclerView.ViewHolder {
@@ -1256,7 +2013,7 @@ public class WatchActivity extends AppCompatActivity {
 		_WatchUI();
 		setupCommentSection();
 		updateBottomDividerState();
-		loadCurrentUserCommentMeta();
+		loadUsersAndStickersFromFirebase();
 
 		if (recyclerEpisode != null) {
 			recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
@@ -2959,6 +3716,11 @@ public class WatchActivity extends AppCompatActivity {
 								savedSeekPosition = 0;
 							}
 							mp.start();
+
+							if (!hasRewardedWatchExp) {
+								hasRewardedWatchExp = true;
+								addExpToCurrentUser(100L);
+							}
 
 							float targetSpeed = isHolding2xSpeed ? 2.0f : currentPlaybackSpeed;
 							if (targetSpeed != 1.0f) {
