@@ -7,7 +7,7 @@
 	android:layout_height="match_parent"
 	android:background="#000000">
 
-	<!-- Halaman Utama (Slider Penuh Sampai Bawah Status Bar + Header Tembus Pandang di Atasnya) -->
+	<!-- Halaman Utama -->
 	<androidx.core.widget.NestedScrollView
 		android:id="@+id/main_scroll_view"
 		android:layout_width="match_parent"
@@ -15,7 +15,7 @@
 		android:background="#000000"
 		android:clipToPadding="false"
 		android:fillViewport="true"
-		android:paddingBottom="118dp"
+		android:paddingBottom="132dp"
 		android:scrollbars="none">
 
 		<LinearLayout
@@ -24,11 +24,11 @@
 			android:layout_height="wrap_content"
 			android:orientation="vertical">
 
-			<!-- Hero Banner / Slider -->
+			<!-- Hero Banner / Slider (Persis Seperti Gambar 3) -->
 			<FrameLayout
 				android:id="@+id/hero_container"
 				android:layout_width="match_parent"
-				android:layout_height="440dp">
+				android:layout_height="445dp">
 
 				<ImageView
 					android:id="@+id/img_hero_banner"
@@ -45,10 +45,10 @@
 				<View
 					android:id="@+id/hero_shadow"
 					android:layout_width="match_parent"
-					android:layout_height="200dp"
+					android:layout_height="205dp"
 					android:layout_gravity="bottom" />
 
-				<!-- Header Tembus Pandang di Dalam Slider (Tanpa Background/Stroke di Notif & Pesan) -->
+				<!-- Header Tembus Pandang di Dalam Slider -->
 				<RelativeLayout
 					android:id="@+id/relativelayout69"
 					android:layout_width="match_parent"
@@ -73,8 +73,8 @@
 
 						<ImageView
 							android:id="@+id/img_user_avatar"
-							android:layout_width="40dp"
-							android:layout_height="40dp"
+							android:layout_width="38dp"
+							android:layout_height="38dp"
 							android:scaleType="centerCrop"
 							android:src="@drawable/ic_profile" />
 
@@ -100,16 +100,16 @@
 
 						<FrameLayout
 							android:id="@+id/btn_top_search"
-							android:layout_width="40dp"
-							android:layout_height="40dp"
-							android:layout_marginEnd="4dp"
+							android:layout_width="38dp"
+							android:layout_height="38dp"
+							android:layout_marginEnd="6dp"
 							android:background="@android:color/transparent"
 							android:foreground="@null">
 
 							<ImageView
 								android:id="@+id/img_top_search"
-								android:layout_width="21dp"
-								android:layout_height="21dp"
+								android:layout_width="20dp"
+								android:layout_height="20dp"
 								android:layout_gravity="center"
 								android:scaleType="fitCenter"
 								android:src="@drawable/ic_search" />
@@ -117,15 +117,15 @@
 
 						<FrameLayout
 							android:id="@+id/btn_top_chat"
-							android:layout_width="40dp"
-							android:layout_height="40dp"
+							android:layout_width="38dp"
+							android:layout_height="38dp"
 							android:background="@android:color/transparent"
 							android:foreground="@null">
 
 							<ImageView
 								android:id="@+id/img_top_chat"
-								android:layout_width="21dp"
-								android:layout_height="21dp"
+								android:layout_width="20dp"
+								android:layout_height="20dp"
 								android:layout_gravity="center"
 								android:scaleType="fitCenter"
 								android:src="@drawable/ic_chat" />
@@ -143,7 +143,7 @@
 					android:paddingRight="16dp"
 					android:paddingBottom="14dp">
 
-					<!-- Judul Slider: Maksimal 1 Baris -->
+					<!-- Judul Slider: 1 Baris -->
 					<TextView
 						android:id="@+id/text_hero_title"
 						android:layout_width="match_parent"
@@ -154,7 +154,7 @@
 						android:textColor="#FFFFFF"
 						android:textSize="22sp" />
 
-					<!-- Deskripsi Slider: Maksimal 2 Baris -->
+					<!-- Deskripsi Slider: 2 Baris -->
 					<TextView
 						android:id="@+id/text_hero_desc"
 						android:layout_width="match_parent"
@@ -606,7 +606,7 @@
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
 
-	<!-- Indikator Icon Refresh Melayang (Gaya YouTube, Tidak Menggeser Header) -->
+	<!-- Indikator Icon Refresh Melayang (Gaya YouTube) -->
 	<FrameLayout
 		android:id="@+id/pull_refresh_indicator"
 		android:layout_width="40dp"
@@ -725,7 +725,7 @@
 			android:textSize="20sp" />
 	</LinearLayout>
 
-	<!-- Bottom Navbar -->
+	<!-- Bottom Area: Miniplayer di Atas, Navbar Rapi di Bawah -->
 	<LinearLayout
 		android:id="@+id/navbar_wrapper"
 		android:layout_width="match_parent"
@@ -733,155 +733,162 @@
 		android:layout_gravity="bottom"
 		android:clipChildren="false"
 		android:clipToPadding="false"
-		android:gravity="center_vertical"
-		android:orientation="horizontal"
+		android:orientation="vertical"
 		android:paddingLeft="14dp"
 		android:paddingRight="14dp"
 		android:paddingBottom="16dp">
 
 		<FrameLayout
-			android:id="@+id/btn_compact_home"
-			android:layout_width="60dp"
-			android:layout_height="60dp"
-			android:layout_marginEnd="10dp"
-			android:visibility="gone">
-
-			<eightbitlab.com.blurview.BlurView
-				android:id="@+id/compact_home_blur_bg"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#66141824" />
-
-			<ImageView
-				android:layout_width="22dp"
-				android:layout_height="22dp"
-				android:layout_gravity="center"
-				android:src="@drawable/ic_home"
-				android:tint="#FFFFFF" />
-		</FrameLayout>
-
-		<FrameLayout
 			android:id="@+id/mini_player_inline_slot"
-			android:layout_width="0dp"
+			android:layout_width="match_parent"
 			android:layout_height="60dp"
-			android:layout_marginEnd="10dp"
-			android:layout_weight="1"
+			android:layout_marginBottom="8dp"
 			android:visibility="gone" />
 
-		<FrameLayout
-			android:id="@+id/navbar"
-			android:layout_width="0dp"
+		<LinearLayout
+			android:id="@+id/navbar_row"
+			android:layout_width="match_parent"
 			android:layout_height="64dp"
-			android:layout_weight="1">
+			android:clipChildren="false"
+			android:gravity="center_vertical"
+			android:orientation="horizontal">
 
-			<eightbitlab.com.blurview.BlurView
-				android:id="@+id/navbar_blur_bg"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#66141824" />
+			<FrameLayout
+				android:id="@+id/btn_compact_home"
+				android:layout_width="60dp"
+				android:layout_height="60dp"
+				android:layout_marginEnd="10dp"
+				android:visibility="gone">
 
-			<LinearLayout
-				android:id="@+id/navbar_tabs_row"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:baselineAligned="false"
-				android:gravity="center_vertical"
-				android:orientation="horizontal"
-				android:paddingLeft="5dp"
-				android:paddingRight="5dp">
+				<eightbitlab.com.blurview.BlurView
+					android:id="@+id/compact_home_blur_bg"
+					android:layout_width="match_parent"
+					android:layout_height="match_parent"
+					app:blurOverlayColor="#66141824" />
+
+				<ImageView
+					android:layout_width="22dp"
+					android:layout_height="22dp"
+					android:layout_gravity="center"
+					android:src="@drawable/ic_home"
+					android:tint="#FFFFFF" />
+			</FrameLayout>
+
+			<FrameLayout
+				android:id="@+id/navbar"
+				android:layout_width="0dp"
+				android:layout_height="64dp"
+				android:layout_weight="1">
+
+				<eightbitlab.com.blurview.BlurView
+					android:id="@+id/navbar_blur_bg"
+					android:layout_width="match_parent"
+					android:layout_height="match_parent"
+					app:blurOverlayColor="#66141824" />
 
 				<LinearLayout
-					android:id="@+id/tab_beranda"
-					android:layout_width="0dp"
+					android:id="@+id/navbar_tabs_row"
+					android:layout_width="match_parent"
 					android:layout_height="match_parent"
-					android:layout_weight="1"
-					android:gravity="center"
-					android:orientation="vertical">
+					android:baselineAligned="false"
+					android:gravity="center_vertical"
+					android:orientation="horizontal"
+					android:paddingLeft="5dp"
+					android:paddingRight="5dp">
 
-					<ImageView
-						android:id="@+id/img_home"
-						android:layout_width="20dp"
-						android:layout_height="20dp"
-						android:src="@drawable/ic_home" />
+					<LinearLayout
+						android:id="@+id/tab_beranda"
+						android:layout_width="0dp"
+						android:layout_height="match_parent"
+						android:layout_weight="1"
+						android:gravity="center"
+						android:orientation="vertical">
 
-					<TextView
-						android:id="@+id/txt_home"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginTop="2dp"
-						android:text="Beranda"
-						android:textColor="#FFFFFF"
-						android:textSize="11sp" />
+						<ImageView
+							android:id="@+id/img_home"
+							android:layout_width="20dp"
+							android:layout_height="20dp"
+							android:src="@drawable/ic_home" />
+
+						<TextView
+							android:id="@+id/txt_home"
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_marginTop="2dp"
+							android:text="Beranda"
+							android:textColor="#FFFFFF"
+							android:textSize="11sp" />
+					</LinearLayout>
+
+					<LinearLayout
+						android:id="@+id/tab_pustaka"
+						android:layout_width="0dp"
+						android:layout_height="match_parent"
+						android:layout_weight="1"
+						android:gravity="center"
+						android:orientation="vertical">
+
+						<ImageView
+							android:id="@+id/img_favorite"
+							android:layout_width="20dp"
+							android:layout_height="20dp"
+							android:src="@drawable/ic_bookmark" />
+
+						<TextView
+							android:id="@+id/txt_favorite"
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_marginTop="2dp"
+							android:text="Pustaka"
+							android:textColor="#94A3B8"
+							android:textSize="11sp" />
+					</LinearLayout>
+
+					<LinearLayout
+						android:id="@+id/tab_akun"
+						android:layout_width="0dp"
+						android:layout_height="match_parent"
+						android:layout_weight="1"
+						android:gravity="center"
+						android:orientation="vertical">
+
+						<ImageView
+							android:id="@+id/img_profile"
+							android:layout_width="20dp"
+							android:layout_height="20dp"
+							android:src="@drawable/ic_profile" />
+
+						<TextView
+							android:id="@+id/txt_profile"
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_marginTop="2dp"
+							android:text="Akun"
+							android:textColor="#94A3B8"
+							android:textSize="11sp" />
+					</LinearLayout>
 				</LinearLayout>
+			</FrameLayout>
 
-				<LinearLayout
-					android:id="@+id/tab_pustaka"
-					android:layout_width="0dp"
+			<FrameLayout
+				android:id="@+id/btn_circle_search"
+				android:layout_width="64dp"
+				android:layout_height="64dp"
+				android:layout_marginStart="10dp">
+
+				<eightbitlab.com.blurview.BlurView
+					android:id="@+id/search_blur_bg"
+					android:layout_width="match_parent"
 					android:layout_height="match_parent"
-					android:layout_weight="1"
-					android:gravity="center"
-					android:orientation="vertical">
+					app:blurOverlayColor="#66141824" />
 
-					<ImageView
-						android:id="@+id/img_favorite"
-						android:layout_width="20dp"
-						android:layout_height="20dp"
-						android:src="@drawable/ic_bookmark" />
-
-					<TextView
-						android:id="@+id/txt_favorite"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginTop="2dp"
-						android:text="Pustaka"
-						android:textColor="#94A3B8"
-						android:textSize="11sp" />
-				</LinearLayout>
-
-				<LinearLayout
-					android:id="@+id/tab_akun"
-					android:layout_width="0dp"
-					android:layout_height="match_parent"
-					android:layout_weight="1"
-					android:gravity="center"
-					android:orientation="vertical">
-
-					<ImageView
-						android:id="@+id/img_profile"
-						android:layout_width="20dp"
-						android:layout_height="20dp"
-						android:src="@drawable/ic_profile" />
-
-					<TextView
-						android:id="@+id/txt_profile"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginTop="2dp"
-						android:text="Akun"
-						android:textColor="#94A3B8"
-						android:textSize="11sp" />
-				</LinearLayout>
-			</LinearLayout>
-		</FrameLayout>
-
-		<FrameLayout
-			android:id="@+id/btn_circle_search"
-			android:layout_width="64dp"
-			android:layout_height="64dp"
-			android:layout_marginStart="10dp">
-
-			<eightbitlab.com.blurview.BlurView
-				android:id="@+id/search_blur_bg"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#66141824" />
-
-			<ImageView
-				android:id="@+id/img_search"
-				android:layout_width="21dp"
-				android:layout_height="21dp"
-				android:layout_gravity="center"
-				android:src="@drawable/ic_search" />
-		</FrameLayout>
+				<ImageView
+					android:id="@+id/img_search"
+					android:layout_width="21dp"
+					android:layout_height="21dp"
+					android:layout_gravity="center"
+					android:src="@drawable/ic_search" />
+			</FrameLayout>
+		</LinearLayout>
 	</LinearLayout>
 </FrameLayout>
