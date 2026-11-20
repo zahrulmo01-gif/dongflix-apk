@@ -2144,14 +2144,25 @@ public class MainActivity extends AppCompatActivity {
 		}
 		if (isNavbarCompact == compact) return;
 		isNavbarCompact = compact;
+		float d = getResources().getDisplayMetrics().density;
 
 		if (compact) {
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.GONE);
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.VISIBLE);
+			if (btnCircleSearch != null && btnCircleSearch.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+				LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) btnCircleSearch.getLayoutParams();
+				slp.leftMargin = 0;
+				btnCircleSearch.setLayoutParams(slp);
+			}
 		} else {
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.GONE);
 			if (miniPlayerInlineSlot != null) miniPlayerInlineSlot.setVisibility(View.GONE);
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.VISIBLE);
+			if (btnCircleSearch != null && btnCircleSearch.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+				LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) btnCircleSearch.getLayoutParams();
+				slp.leftMargin = (int) (10 * d);
+				btnCircleSearch.setLayoutParams(slp);
+			}
 			snapPillToTab(activeNavTabIndex, false);
 		}
 
