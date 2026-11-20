@@ -2026,9 +2026,10 @@ public class MainActivity extends AppCompatActivity {
 					int bottomInset = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
 
 					if (topHeaderBar != null) {
+						topHeaderBar.setBackgroundColor(Color.TRANSPARENT);
 						topHeaderBar.setPadding(
 							(int) (16 * density),
-							topInset + (int) (10 * density),
+							topInset + (int) (8 * density),
 							(int) (16 * density),
 							(int) (10 * density)
 						);
@@ -2094,6 +2095,15 @@ public class MainActivity extends AppCompatActivity {
 			clearBg.setShape(GradientDrawable.OVAL);
 			clearBg.setColor(Color.parseColor("#252936"));
 			btnClearSearch.setBackground(clearBg);
+		}
+
+		View headerShadow = findViewById(R.id.header_shadow);
+		if (headerShadow != null) {
+			GradientDrawable topGradient = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[] { Color.parseColor("#B3000000"), Color.TRANSPARENT }
+			);
+			headerShadow.setBackground(topGradient);
 		}
 
 		View heroShadow = findViewById(R.id.hero_shadow);
