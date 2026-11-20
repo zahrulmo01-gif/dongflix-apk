@@ -49,7 +49,6 @@ public class MainActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-	private String cover = "";
 	private String currentUserKey = "";
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
@@ -62,7 +61,6 @@ public class MainActivity extends AppCompatActivity {
 
 	private RequestNetwork dongflix_req;
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
-	private Intent i = new Intent();
 
 	private GridView gridview1;
 	private RecyclerView recyclerPopular, listPopular, recyclerSearchList;
@@ -73,10 +71,23 @@ public class MainActivity extends AppCompatActivity {
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
-	// Lanjutkan Menonton (di atas Populer Hari Ini)
+	// Pull-to-refresh indicator & state
+	private LinearLayout pullRefreshBanner;
+	private ProgressBar pullRefreshProgress;
+	private TextView pullRefreshText;
+	private boolean isRefreshingCatalog = false;
+	private float pullStartY = 0f;
+	private boolean isPullingFromTop = false;
+
+	// Lanjutkan Menonton
 	private LinearLayout layoutSectionContinue;
 	private TextView textTitleContinue, textContinueSeeAll;
 	private RecyclerView recyclerContinue;
+
+	// Seksi tambahan di bawah Donghua Terbaru (Baru Diupdate)
+	private RecyclerView recyclerCompletedDonghua;
+	private RecyclerView recyclerComedyDonghua;
+	private RecyclerView recyclerMysteryDonghua;
 
 	// Pustaka (Riwayat, Daftarku, Unduhan)
 	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
@@ -96,10 +107,6 @@ public class MainActivity extends AppCompatActivity {
 	private boolean isDraggingNavbarPill = false;
 	private float navDownRawX = 0f;
 	private float navInitialPillTx = 0f;
-
-	private ValueAnimator mainShimmerAnimator;
-	private float mainShimmerPhase = 0f;
-	private boolean isMainLoading = true;
 
 	private SharedPreferences favPrefs;
 	private HashMap<String, Object> currentHeroItem;
@@ -130,6 +137,8 @@ public class MainActivity extends AppCompatActivity {
 
 		initialize(_savedInstanceState);
 		setupContinueWatchingSection();
+		setupExtraCatalogSections();
+		setupPullToRefresh();
 		setupPustakaSection();
 		initializeLogic();
 		loadLoggedInUserProfile(currentUser);
@@ -200,6 +209,247 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 		return super.dispatchTouchEvent(ev);
+	}
+
+	private Drawable createEmptyPlaceholderDrawable(int colorHex, float radiusPx) {
+		GradientDrawable gd = new GradientDrawable();
+		gd.setShape(GradientDrawable.RECTANGLE);
+		gd.setColor(colorHex);
+		gd.setCornerRadius(radiusPx);
+		return gd;
+	}
+
+	private void setupPullToRefresh() {
+		final NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
+		if (!(mainScroll instanceof ViewGroup)) return;
+
+		View child0 = mainScroll.getChildAt(0);
+		if (!(child0 instanceof LinearLayout)) return;
+
+		LinearLayout contentCol = (LinearLayout) child0;
+		float d = getResources().getDisplayMetrics().density;
+		int statusBarHeight = 0;
+		int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+		if (resId > 0) statusBarHeight = getResources().getDimensionPixelSize(resId);
+
+		pullRefreshBanner = new LinearLayout(this);
+		pullRefreshBanner.setOrientation(LinearLayout.HORIZONTAL);
+		pullRefreshBanner.setGravity(Gravity.CENTER);
+		pullRefreshBanner.setPadding(0, statusBarHeight + (int) (14 * d), 0, (int) (8 * d));
+		pullRefreshBanner.setVisibility(View.GONE);
+
+		pullRefreshProgress = new ProgressBar(this);
+		int pSize = (int) (18 * d);
+		LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(pSize, pSize);
+		pLp.rightMargin = (int) (8 * d);
+		pullRefreshProgress.setLayoutParams(pLp);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			pullRefreshProgress.setIndeterminateTintList(ColorStateList.valueOf(Color.parseColor("#38BDF8")));
+		}
+
+		pullRefreshText = new TextView(this);
+		pullRefreshText.setText("Tarik untuk menyegarkan...");
+		pullRefreshText.setTextColor(Color.parseColor("#CBD5E1"));
+		pullRefreshText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		pullRefreshText.setTypeface(null, Typeface.BOLD);
+
+		pullRefreshBanner.addView(pullRefreshProgress);
+		pullRefreshBanner.addView(pullRefreshText);
+		contentCol.addView(pullRefreshBanner, 0);
+
+		final float thresholdPx = 95 * d;
+		mainScroll.setOnTouchListener(new View.OnTouchListener() {
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				if (isRefreshingCatalog) return false;
+
+				switch (event.getActionMasked()) {
+					case MotionEvent.ACTION_DOWN:
+						pullStartY = event.getRawY();
+						isPullingFromTop = (mainScroll.getScrollY() <= 0);
+						break;
+
+					case MotionEvent.ACTION_MOVE:
+						if (isPullingFromTop && mainScroll.getScrollY() <= 0) {
+							float deltaY = event.getRawY() - pullStartY;
+							if (deltaY > (18 * d)) {
+								if (pullRefreshBanner != null) {
+									pullRefreshBanner.setVisibility(View.VISIBLE);
+									if (pullRefreshText != null) {
+										pullRefreshText.setText(
+											deltaY >= thresholdPx
+												? "Lepaskan untuk memperbarui"
+												: "Tarik ke bawah untuk memperbarui"
+										);
+									}
+								}
+							}
+						}
+						break;
+
+					case MotionEvent.ACTION_UP:
+					case MotionEvent.ACTION_CANCEL:
+						if (isPullingFromTop && mainScroll.getScrollY() <= 0) {
+							float deltaY = event.getRawY() - pullStartY;
+							if (deltaY >= thresholdPx) {
+								triggerCatalogRefresh();
+							} else if (pullRefreshBanner != null && !isRefreshingCatalog) {
+								pullRefreshBanner.setVisibility(View.GONE);
+							}
+						}
+						isPullingFromTop = false;
+						break;
+				}
+				return false;
+			}
+		});
+	}
+
+	private void triggerCatalogRefresh() {
+		if (isRefreshingCatalog) return;
+		isRefreshingCatalog = true;
+		if (pullRefreshBanner != null) {
+			pullRefreshBanner.setVisibility(View.VISIBLE);
+		}
+		if (pullRefreshText != null) {
+			pullRefreshText.setText("Memperbarui katalog...");
+		}
+		if (dongflix_req != null && _dongflix_req_request_listener != null) {
+			dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
+		}
+	}
+
+	private void setupExtraCatalogSections() {
+		if (gridview1 == null) return;
+		ViewParent parent = gridview1.getParent();
+		if (!(parent instanceof ViewGroup)) return;
+
+		ViewGroup parentGroup = (ViewGroup) parent;
+		int gridIdx = parentGroup.indexOfChild(gridview1);
+		if (gridIdx < 0) return;
+
+		float d = getResources().getDisplayMetrics().density;
+
+		recyclerCompletedDonghua = new RecyclerView(this);
+		recyclerComedyDonghua = new RecyclerView(this);
+		recyclerMysteryDonghua = new RecyclerView(this);
+
+		ArrayList<HashMap<String, Object>> dummy = buildEmptyDummyList(8);
+
+		View secCompleted = buildHorizontalCatalogSection("Donghua Tamat", recyclerCompletedDonghua, dummy, d);
+		View secComedy = buildHorizontalCatalogSection("Donghua Komedi Ringan", recyclerComedyDonghua, dummy, d);
+		View secMystery = buildHorizontalCatalogSection("Misteri dan Teka-Teki", recyclerMysteryDonghua, dummy, d);
+
+		parentGroup.addView(secCompleted, gridIdx + 1);
+		parentGroup.addView(secComedy, gridIdx + 2);
+		parentGroup.addView(secMystery, gridIdx + 3);
+	}
+
+	private View buildHorizontalCatalogSection(String sectionTitle, RecyclerView targetRv, ArrayList<HashMap<String, Object>> initialData, float d) {
+		LinearLayout block = new LinearLayout(this);
+		block.setOrientation(LinearLayout.VERTICAL);
+		LinearLayout.LayoutParams blockLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		blockLp.topMargin = (int) (22 * d);
+		block.setLayoutParams(blockLp);
+
+		LinearLayout headerRow = new LinearLayout(this);
+		headerRow.setOrientation(LinearLayout.HORIZONTAL);
+		headerRow.setGravity(Gravity.CENTER_VERTICAL);
+		headerRow.setPadding((int) (16 * d), 0, (int) (16 * d), (int) (12 * d));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText(sectionTitle);
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		tvTitle.setTypeface(null, Typeface.BOLD);
+		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		TextView tvSeeMore = new TextView(this);
+		tvSeeMore.setText("Lihat semua");
+		tvSeeMore.setTextColor(Color.parseColor("#94A3B8"));
+		tvSeeMore.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+		tvSeeMore.setTypeface(null, Typeface.BOLD);
+		tvSeeMore.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				startActivity(new Intent(MainActivity.this, CatalogActivity.class));
+			}
+		});
+
+		headerRow.addView(tvTitle);
+		headerRow.addView(tvSeeMore);
+		block.addView(headerRow);
+
+		targetRv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		targetRv.setNestedScrollingEnabled(false);
+		targetRv.setClipToPadding(false);
+		targetRv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		targetRv.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		targetRv.setAdapter(new RecyclerPopularAdapter(initialData));
+
+		block.addView(targetRv);
+		return block;
+	}
+
+	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
+		ArrayList<HashMap<String, Object>> list = new ArrayList<>();
+		for (int i = 0; i < count; i++) {
+			HashMap<String, Object> m = new HashMap<>();
+			m.put("is_loading", true);
+			list.add(m);
+		}
+		return list;
+	}
+
+	private void populateExtraCatalogSections() {
+		if (fullCatalogList == null) return;
+
+		ArrayList<HashMap<String, Object>> completedList = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> comedyList = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> mysteryList = new ArrayList<>();
+
+		for (HashMap<String, Object> item : fullCatalogList) {
+			String status = item.get("status") != null ? item.get("status").toString().toLowerCase(Locale.US) : "";
+			String genres = item.get("genres") != null ? item.get("genres").toString().toLowerCase(Locale.US) : "";
+			String title = item.get("title") != null ? item.get("title").toString().toLowerCase(Locale.US) : "";
+			String combinedMeta = genres + " " + title;
+
+			if (status.contains("completed") || status.contains("tamat")) {
+				completedList.add(item);
+			}
+			if (combinedMeta.contains("comedy") || combinedMeta.contains("komedi") || combinedMeta.contains("slice of life")) {
+				comedyList.add(item);
+			}
+			if (combinedMeta.contains("mystery") || combinedMeta.contains("misteri")
+				|| combinedMeta.contains("thriller") || combinedMeta.contains("suspense") || combinedMeta.contains("detective")) {
+				mysteryList.add(item);
+			}
+		}
+
+		if (completedList.isEmpty()) completedList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
+		if (comedyList.isEmpty()) comedyList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
+		if (mysteryList.isEmpty()) mysteryList.addAll(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
+
+		if (recyclerCompletedDonghua != null) {
+			recyclerCompletedDonghua.setAdapter(new RecyclerPopularAdapter(
+				new ArrayList<>(completedList.subList(0, Math.min(10, completedList.size())))
+			));
+		}
+		if (recyclerComedyDonghua != null) {
+			recyclerComedyDonghua.setAdapter(new RecyclerPopularAdapter(
+				new ArrayList<>(comedyList.subList(0, Math.min(10, comedyList.size())))
+			));
+		}
+		if (recyclerMysteryDonghua != null) {
+			recyclerMysteryDonghua.setAdapter(new RecyclerPopularAdapter(
+				new ArrayList<>(mysteryList.subList(0, Math.min(10, mysteryList.size())))
+			));
+		}
 	}
 
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
@@ -1061,6 +1311,8 @@ public class MainActivity extends AppCompatActivity {
 		if (recyclerSearchList != null && (inputSearch == null || inputSearch.getText().toString().trim().isEmpty())) {
 			recyclerSearchList.setAdapter(new ListPopularAdapter(allPopularSlice));
 		}
+
+		populateExtraCatalogSections();
 	}
 
 	private void syncFirebaseViewsAndSort() {
@@ -1225,120 +1477,6 @@ public class MainActivity extends AppCompatActivity {
 		}
 	}
 
-	private Drawable createMainShimmerDrawable(final float cornerRadiusPx) {
-		return new Drawable() {
-			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-			private final Paint shimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-			private final Matrix shaderMatrix = new Matrix();
-			private LinearGradient gradient;
-			private int lastWidth = -1;
-
-			{
-				basePaint.setColor(Color.parseColor("#12141A"));
-			}
-
-			@Override
-			public void draw(Canvas canvas) {
-				Rect b = getBounds();
-				int w = b.width();
-				int h = b.height();
-				if (w <= 0 || h <= 0) return;
-
-				RectF rect = new RectF(b);
-				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, basePaint);
-
-				if (gradient == null || lastWidth != w) {
-					lastWidth = w;
-					gradient = new LinearGradient(
-						0, 0, w, 0,
-						new int[]{
-							Color.TRANSPARENT,
-							Color.parseColor("#1AFFFFFF"),
-							Color.parseColor("#33FFFFFF"),
-							Color.parseColor("#1AFFFFFF"),
-							Color.TRANSPARENT
-						},
-						new float[]{0f, 0.35f, 0.5f, 0.65f, 1f},
-						Shader.TileMode.CLAMP
-					);
-					shimmerPaint.setShader(gradient);
-				}
-
-				float translateX = -w + (2f * w * mainShimmerPhase);
-				shaderMatrix.setTranslate(translateX, 0);
-				gradient.setLocalMatrix(shaderMatrix);
-				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, shimmerPaint);
-			}
-
-			@Override public void setAlpha(int alpha) {}
-			@Override public void setColorFilter(ColorFilter colorFilter) {}
-			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-		};
-	}
-
-	private void startMainShimmer() {
-		isMainLoading = true;
-		mainShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
-		mainShimmerAnimator.setDuration(1250);
-		mainShimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
-		mainShimmerAnimator.setInterpolator(new LinearInterpolator());
-		mainShimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-			@Override
-			public void onAnimationUpdate(ValueAnimator animation) {
-				if (!isMainLoading) return;
-				mainShimmerPhase = (float) animation.getAnimatedValue();
-
-				if (imgHeroBanner != null) imgHeroBanner.invalidate();
-				if (textHeroTitle != null) textHeroTitle.invalidate();
-				if (textHeroDesc != null) textHeroDesc.invalidate();
-				if (btnHeroPlay != null) btnHeroPlay.invalidate();
-				if (btnHeroFavorite != null) btnHeroFavorite.invalidate();
-
-				if (recyclerPopular != null) {
-					for (int idx = 0; idx < recyclerPopular.getChildCount(); idx++) {
-						invalidateRecursive(recyclerPopular.getChildAt(idx));
-					}
-				}
-				if (listPopular != null) {
-					for (int idx = 0; idx < listPopular.getChildCount(); idx++) {
-						invalidateRecursive(listPopular.getChildAt(idx));
-					}
-				}
-				if (gridview1 != null) {
-					for (int idx = 0; idx < gridview1.getChildCount(); idx++) {
-						invalidateRecursive(gridview1.getChildAt(idx));
-					}
-				}
-			}
-		});
-		mainShimmerAnimator.start();
-	}
-
-	private void invalidateRecursive(View v) {
-		if (v == null) return;
-		v.invalidate();
-		if (v instanceof ViewGroup) {
-			ViewGroup vg = (ViewGroup) v;
-			for (int k = 0; k < vg.getChildCount(); k++) {
-				invalidateRecursive(vg.getChildAt(k));
-			}
-		}
-	}
-
-	private void stopMainShimmer() {
-		isMainLoading = false;
-		if (mainShimmerAnimator != null) {
-			mainShimmerAnimator.cancel();
-			mainShimmerAnimator = null;
-		}
-	}
-
-	@Override
-	public void onDestroy() {
-		stopMainShimmer();
-		super.onDestroy();
-	}
-
 	private void initialize(Bundle _savedInstanceState) {
 		dongflix_req = new RequestNetwork(this);
 
@@ -1497,7 +1635,10 @@ public class MainActivity extends AppCompatActivity {
 			@Override
 			public void onResponse(String _param1, String _param2, HashMap<String, Object> _param3) {
 				final String _response = _param2;
-				stopMainShimmer();
+				isRefreshingCatalog = false;
+				if (pullRefreshBanner != null) {
+					pullRefreshBanner.setVisibility(View.GONE);
+				}
 
 				DongflixPlayerManager.getInstance().cachedAllCatalogJson = _response;
 
@@ -1630,7 +1771,10 @@ public class MainActivity extends AppCompatActivity {
 
 			@Override
 			public void onErrorResponse(String _param1, String _param2) {
-				stopMainShimmer();
+				isRefreshingCatalog = false;
+				if (pullRefreshBanner != null) {
+					pullRefreshBanner.setVisibility(View.GONE);
+				}
 			}
 		};
 	}
@@ -1648,13 +1792,7 @@ public class MainActivity extends AppCompatActivity {
 		applyCustomFonts();
 
 		float d = getResources().getDisplayMetrics().density;
-
-		ArrayList<HashMap<String, Object>> dummyList = new ArrayList<>();
-		for (int i = 0; i < 12; i++) {
-			HashMap<String, Object> map = new HashMap<>();
-			map.put("is_loading", true);
-			dummyList.add(map);
-		}
+		ArrayList<HashMap<String, Object>> dummyList = buildEmptyDummyList(12);
 
 		if (gridview1 != null) {
 			gridview1.setAdapter(new Gridview1Adapter(dummyList));
@@ -1669,25 +1807,25 @@ public class MainActivity extends AppCompatActivity {
 
 		if (textHeroTitle != null) {
 			textHeroTitle.setText("");
-			textHeroTitle.setBackground(createMainShimmerDrawable(8 * d));
+			textHeroTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 8 * d));
 		}
 		if (textHeroDesc != null) {
 			textHeroDesc.setText("");
-			textHeroDesc.setBackground(createMainShimmerDrawable(6 * d));
+			textHeroDesc.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
 		}
 
 		if (imgHeroBanner != null) {
-			imgHeroBanner.setImageResource(android.R.color.transparent);
-			imgHeroBanner.setBackground(createMainShimmerDrawable(0f));
+			imgHeroBanner.setImageResource(0);
+			imgHeroBanner.setBackgroundColor(Color.parseColor("#12141A"));
 		}
 
 		if (btnHeroPlay != null) {
 			btnHeroPlay.setEnabled(false);
-			btnHeroPlay.setBackground(createMainShimmerDrawable(100f));
+			btnHeroPlay.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 100f));
 		}
 		if (btnHeroFavorite != null) {
 			btnHeroFavorite.setEnabled(false);
-			btnHeroFavorite.setBackground(createMainShimmerDrawable(100f));
+			btnHeroFavorite.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 100f));
 		}
 
 		if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.INVISIBLE);
@@ -1696,10 +1834,9 @@ public class MainActivity extends AppCompatActivity {
 		if (recyclerPopular != null) {
 			LinearLayoutManager layoutManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
 			recyclerPopular.setLayoutManager(layoutManager);
-			if (recyclerPopular.getOnFlingListener() == null) {
-				LinearSnapHelper snapHelper = new LinearSnapHelper();
-				snapHelper.attachToRecyclerView(recyclerPopular);
-			}
+			recyclerPopular.setOnFlingListener(null);
+			recyclerPopular.setClipToPadding(false);
+			recyclerPopular.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
 			recyclerPopular.setAdapter(new RecyclerPopularAdapter(dummyList));
 		}
 
@@ -1714,7 +1851,6 @@ public class MainActivity extends AppCompatActivity {
 			recyclerSearchList.setAdapter(new ListPopularAdapter(dummyList));
 		}
 
-		startMainShimmer();
 		dongflix_req.startRequestNetwork("GET", "https://dongflix-api1.zahrulmo01.workers.dev/", "", _dongflix_req_request_listener);
 	}
 
@@ -2056,7 +2192,7 @@ public class MainActivity extends AppCompatActivity {
 		});
 	}
 
-	// Populer Hari Ini: poster 115dp x 160dp, judul di bawah poster, Ongoing & Ep di dalam cover
+	// Kartu poster horizontal: ukuran 106dp x 148dp agar item ke-4 terlihat sedikit di kanan
 	public class RecyclerPopularAdapter extends RecyclerView.Adapter<RecyclerPopularAdapter.ViewHolder> {
 		ArrayList<HashMap<String, Object>> _data;
 
@@ -2071,16 +2207,16 @@ public class MainActivity extends AppCompatActivity {
 			LinearLayout root = new LinearLayout(parent.getContext());
 			root.setOrientation(LinearLayout.VERTICAL);
 			RecyclerView.LayoutParams rootLp = new RecyclerView.LayoutParams(
-				(int) (115 * d),
+				(int) (106 * d),
 				ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			rootLp.leftMargin = (int) (16 * d);
+			rootLp.rightMargin = (int) (10 * d);
 			root.setLayoutParams(rootLp);
 
 			androidx.cardview.widget.CardView coverCard = new androidx.cardview.widget.CardView(parent.getContext());
 			coverCard.setLayoutParams(new LinearLayout.LayoutParams(
-				(int) (115 * d),
-				(int) (160 * d)
+				(int) (106 * d),
+				(int) (148 * d)
 			));
 			coverCard.setRadius(12 * d);
 			coverCard.setCardElevation(0f);
@@ -2105,7 +2241,7 @@ public class MainActivity extends AppCompatActivity {
 			View bottomScrim = new View(parent.getContext());
 			FrameLayout.LayoutParams scrimLp = new FrameLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT,
-				(int) (64 * d),
+				(int) (60 * d),
 				Gravity.BOTTOM
 			);
 			bottomScrim.setLayoutParams(scrimLp);
@@ -2150,7 +2286,7 @@ public class MainActivity extends AppCompatActivity {
 			TextView tvTitle = new TextView(parent.getContext());
 			LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT,
-				ViewGroup.LayoutParams.WRAP_CONTENT
+				(int) (34 * d)
 			);
 			titleLp.topMargin = (int) (7 * d);
 			tvTitle.setLayoutParams(titleLp);
@@ -2170,6 +2306,12 @@ public class MainActivity extends AppCompatActivity {
 			View _view = _holder.itemView;
 			float d = _view.getResources().getDisplayMetrics().density;
 
+			if (_view.getLayoutParams() instanceof RecyclerView.LayoutParams) {
+				RecyclerView.LayoutParams rlp = (RecyclerView.LayoutParams) _view.getLayoutParams();
+				rlp.rightMargin = (_position == _data.size() - 1) ? 0 : (int) (10 * d);
+				_view.setLayoutParams(rlp);
+			}
+
 			ImageView imgCover = _view.findViewWithTag("img_cover");
 			View bottomScrim = _view.findViewWithTag("bottom_scrim");
 			TextView textStatus = _view.findViewWithTag("text_status");
@@ -2180,15 +2322,21 @@ public class MainActivity extends AppCompatActivity {
 
 			if (item.containsKey("is_loading")) {
 				if (imgCover != null) {
-					imgCover.setImageResource(android.R.color.transparent);
-					imgCover.setBackground(createMainShimmerDrawable(12 * d));
+					imgCover.setImageResource(0);
+					imgCover.setBackgroundColor(Color.parseColor("#12141A"));
 				}
 				if (bottomScrim != null) bottomScrim.setVisibility(View.GONE);
-				if (textStatus != null) textStatus.setVisibility(View.GONE);
-				if (textEpisode != null) textEpisode.setVisibility(View.GONE);
+				if (textStatus != null) {
+					textStatus.setText("");
+					textStatus.setVisibility(View.INVISIBLE);
+				}
+				if (textEpisode != null) {
+					textEpisode.setText("");
+					textEpisode.setVisibility(View.INVISIBLE);
+				}
 				if (textTitle != null) {
 					textTitle.setText("");
-					textTitle.setBackground(createMainShimmerDrawable(6 * d));
+					textTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
 				}
 				_view.setOnClickListener(null);
 			} else {
@@ -2276,28 +2424,32 @@ public class MainActivity extends AppCompatActivity {
 			if (item.containsKey("is_loading")) {
 				if (textTitle != null) {
 					textTitle.setText("");
-					textTitle.setBackground(createMainShimmerDrawable(6 * d));
+					textTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
 				}
 				if (textStatus != null) {
 					textStatus.setText("");
-					textStatus.setBackground(createMainShimmerDrawable(50f));
+					textStatus.setVisibility(View.INVISIBLE);
 				}
 				if (textEpisode != null) {
 					textEpisode.setText("");
-					textEpisode.setBackground(createMainShimmerDrawable(4 * d));
+					textEpisode.setVisibility(View.INVISIBLE);
 				}
 				if (imgCover != null) {
-					imgCover.setImageResource(android.R.color.transparent);
-					imgCover.setBackground(createMainShimmerDrawable(10 * d));
+					imgCover.setImageResource(0);
+					imgCover.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 10 * d));
 				}
 				if (view2 != null) view2.setVisibility(View.GONE);
 			} else {
 				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
 				if (textTitle != null) textTitle.setBackgroundColor(Color.TRANSPARENT);
-				if (textEpisode != null) textEpisode.setBackgroundColor(Color.TRANSPARENT);
+				if (textEpisode != null) {
+					textEpisode.setVisibility(View.VISIBLE);
+					textEpisode.setBackgroundColor(Color.TRANSPARENT);
+				}
 				if (view2 != null) view2.setVisibility(View.VISIBLE);
 
 				if (textStatus != null) {
+					textStatus.setVisibility(View.VISIBLE);
 					textStatus.setBackground(new GradientDrawable() { public GradientDrawable getIns(int a, int b) { this.setCornerRadius(a); this.setColor(b); return this; } }.getIns((int)50, 0xFF3B82F6));
 				}
 
@@ -2359,23 +2511,23 @@ public class MainActivity extends AppCompatActivity {
 			if (item.containsKey("is_loading")) {
 				if (textPopularTitle != null) {
 					textPopularTitle.setText("");
-					textPopularTitle.setBackground(createMainShimmerDrawable(100f));
+					textPopularTitle.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 8 * d));
 				}
 				if (textPopularDesc != null) {
 					textPopularDesc.setText("");
-					textPopularDesc.setBackground(createMainShimmerDrawable(6 * d));
+					textPopularDesc.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
 				}
 				if (textPopularGenre != null) {
 					textPopularGenre.setText("");
-					textPopularGenre.setBackground(createMainShimmerDrawable(6 * d));
+					textPopularGenre.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 6 * d));
 				}
 				if (textPopularStatus != null) {
-					textPopularStatus.setText("                    ");
-					textPopularStatus.setBackground(createMainShimmerDrawable(100f));
+					textPopularStatus.setText("");
+					textPopularStatus.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 100f));
 				}
 				if (imgPopularCover != null) {
-					imgPopularCover.setImageResource(android.R.color.transparent);
-					imgPopularCover.setBackground(createMainShimmerDrawable(10 * d));
+					imgPopularCover.setImageResource(0);
+					imgPopularCover.setBackground(createEmptyPlaceholderDrawable(Color.parseColor("#12141A"), 10 * d));
 				}
 				View clickTarget = (linear35 != null) ? linear35 : _view;
 				clickTarget.setOnClickListener(null);
