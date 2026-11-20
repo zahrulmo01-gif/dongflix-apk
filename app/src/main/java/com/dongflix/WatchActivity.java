@@ -220,6 +220,18 @@ public class WatchActivity extends AppCompatActivity {
 	private TextView activeCommentSheetHeader;
 	private Typeface outfitFont;
 
+	private interface OnStickerPickedListener {
+		void onStickerPicked(String url);
+	}
+
+	private interface OnReplyClickListener {
+		void onReplyRequested(String parentCommentId, String mentionTag);
+	}
+
+	private interface OnSheetItemClickListener {
+		void onItemClick(int index);
+	}
+
 	private static class ScoredAnimeItem {
 		final HashMap<String, Object> item;
 		final int score;
@@ -735,7 +747,6 @@ public class WatchActivity extends AppCompatActivity {
 		sheetBg.setCornerRadii(new float[]{18 * d, 18 * d, 18 * d, 18 * d, 0f, 0f, 0f, 0f});
 		root.setBackground(sheetBg);
 
-		// Header: "Komentar X" kiri + tombol X kanan (tanpa jumlah suka, tanpa unlike)
 		FrameLayout header = new FrameLayout(this);
 		header.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (46 * d)));
 		header.setPadding((int) (16 * d), 0, (int) (12 * d), 0);
@@ -769,7 +780,6 @@ public class WatchActivity extends AppCompatActivity {
 		header.addView(btnClose);
 		root.addView(header);
 
-		// Daftar Komentar
 		RecyclerView rvComments = new RecyclerView(this);
 		rvComments.setLayoutManager(new LinearLayoutManager(this));
 		rvComments.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -869,7 +879,6 @@ public class WatchActivity extends AppCompatActivity {
 		rvComments.setAdapter(activeCommentSheetAdapter);
 		root.addView(rvComments);
 
-		// List Saran Tag @ Rapi (Card per User dengan Avatar/Inisial, Nama & @username)
 		final RecyclerView rvMentionList = new RecyclerView(this);
 		rvMentionList.setLayoutManager(new LinearLayoutManager(this));
 		rvMentionList.setVisibility(View.GONE);
@@ -1016,7 +1025,6 @@ public class WatchActivity extends AppCompatActivity {
 		root.addView(replyBanner);
 		root.addView(stickerPreviewBox);
 
-		// Bottom Input Bar: Avatar/Inisial Kiri + Pill Input ("Tambahkan komentar..." + Stiker + @) + Kirim
 		LinearLayout bottomBar = new LinearLayout(this);
 		bottomBar.setOrientation(LinearLayout.HORIZONTAL);
 		bottomBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -1138,7 +1146,6 @@ public class WatchActivity extends AppCompatActivity {
 				HashMap<String, String> p = resolveUserProfile(u.getEmail(), u.getUid());
 				boolean isAdm = u.getEmail() != null && ADMIN_EMAIL.equalsIgnoreCase(u.getEmail().trim());
 
-				// Hanya simpan uid, email, text, stickerUrl, timestamp, parentId, isAdmin (nama & profil ambil dari users)
 				Map<String, Object> payload = new HashMap<>();
 				payload.put("uid", u.getUid());
 				payload.put("email", u.getEmail() != null ? u.getEmail() : "");
@@ -1207,8 +1214,89 @@ public class WatchActivity extends AppCompatActivity {
 		sheet.show();
 	}
 
-	private interface OnReplyClickListener {
-		void onReplyRequested(String parentCommentId, String mentionTag);
+	private void openStickerPickerDialog(final OnStickerPickedListener listener) {
+		final float d = getResources().getDisplayMetrics().density;
+		final BottomSheetDialog picker = new BottomSheetDialog(this);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (16 * d), (int) (14 * d), (int) (16 * d), (int) (20 * d));
+
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#090E17"));
+		bg.setCornerRadii(new float[]{20 * d, 20 * d, 20 * d, 20 * d, 0f, 0f, 0f, 0f});
+		bg.setStroke((int) (1 * d), Color.parseColor("#1E293B"));
+		root.setBackground(bg);
+
+		TextView title = new TextView(this);
+		title.setText("Pilih Stiker & GIF");
+		title.setTextColor(Color.WHITE);
+		title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+		title.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		tLp.bottomMargin = (int) (12 * d);
+		title.setLayoutParams(tLp);
+		root.addView(title);
+
+		RecyclerView rvStickers = new RecyclerView(this);
+		rvStickers.setLayoutManager(new GridLayoutManager(this, 4));
+		rvStickers.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (220 * d)
+		));
+
+		rvStickers.setAdapter(new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+			@NonNull
+			@Override
+			public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+				FrameLayout cell = new FrameLayout(parent.getContext());
+				RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, (int) (72 * d)
+				);
+				lp.setMargins((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
+				cell.setLayoutParams(lp);
+				GradientDrawable cBg = new GradientDrawable();
+				cBg.setColor(Color.parseColor("#121927"));
+				cBg.setCornerRadius(12 * d);
+				cell.setBackground(cBg);
+
+				ImageView iv = new ImageView(parent.getContext());
+				iv.setLayoutParams(new FrameLayout.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+				));
+				iv.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
+				iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+				iv.setTag("sticker_img");
+				cell.addView(iv);
+				return new RecyclerView.ViewHolder(cell) {};
+			}
+
+			@Override
+			public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int pos) {
+				final String url = stickerList.get(pos);
+				ImageView iv = holder.itemView.findViewWithTag("sticker_img");
+				if (iv != null && !isFinishing() && !isDestroyed()) {
+					Glide.with(WatchActivity.this).load(Uri.parse(url)).into(iv);
+				}
+				holder.itemView.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						picker.dismiss();
+						if (listener != null) listener.onStickerPicked(url);
+					}
+				});
+			}
+
+			@Override
+			public int getItemCount() {
+				return stickerList.size();
+			}
+		});
+
+		root.addView(rvStickers);
+		picker.setContentView(root);
+		picker.show();
 	}
 
 	private class TikTokCommentAdapter extends RecyclerView.Adapter<TikTokCommentAdapter.ViewHolder> {
@@ -1263,7 +1351,6 @@ public class WatchActivity extends AppCompatActivity {
 			col.setOrientation(LinearLayout.VERTICAL);
 			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-			// Nama + • admin atau • lv1
 			LinearLayout nameLine = new LinearLayout(parent.getContext());
 			nameLine.setOrientation(LinearLayout.HORIZONTAL);
 			nameLine.setGravity(Gravity.CENTER_VERTICAL);
@@ -1282,7 +1369,6 @@ public class WatchActivity extends AppCompatActivity {
 			nameLine.addView(tvName);
 			nameLine.addView(tvRoleOrLvl);
 
-			// Isi komentar
 			TextView tvBody = new TextView(parent.getContext());
 			tvBody.setTextColor(Color.parseColor("#F4F4F5"));
 			tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
@@ -1302,7 +1388,6 @@ public class WatchActivity extends AppCompatActivity {
 			ivSticker.setScaleType(ImageView.ScaleType.FIT_CENTER);
 			ivSticker.setTag("sticker");
 
-			// Tanggal + Balas (+ Hapus jika milik sendiri/admin) — tanpa jumlah suka & tanpa unlike
 			LinearLayout footerRow = new LinearLayout(parent.getContext());
 			footerRow.setOrientation(LinearLayout.HORIZONTAL);
 			footerRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1346,7 +1431,6 @@ public class WatchActivity extends AppCompatActivity {
 			footerRow.addView(btnReply);
 			footerRow.addView(btnDelete);
 
-			// — Lihat X balasan ∨
 			LinearLayout toggleRow = new LinearLayout(parent.getContext());
 			toggleRow.setOrientation(LinearLayout.HORIZONTAL);
 			toggleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1385,6 +1469,7 @@ public class WatchActivity extends AppCompatActivity {
 			col.addView(repliesContainer);
 
 			card.addView(avatar);
+			card.addView(tvInitial);
 			card.addView(col);
 			return new ViewHolder(card);
 		}
@@ -1399,7 +1484,6 @@ public class WatchActivity extends AppCompatActivity {
 			String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
 
-			// Profil & nama selalu dari users
 			HashMap<String, String> prof = resolveUserProfile(email, uid);
 			final String displayName = prof.get("name");
 			final String mentionHandle = prof.get("username") != null && !prof.get("username").isEmpty()
@@ -2870,10 +2954,6 @@ public class WatchActivity extends AppCompatActivity {
 
 		root.addView(scrollView);
 		dialogHolder[0] = createAdaptiveSheetDialog(root);
-	}
-
-	private interface OnSheetItemClickListener {
-		void onItemClick(int index);
 	}
 
 	public void showAllEpisodesBottomSheet() {
