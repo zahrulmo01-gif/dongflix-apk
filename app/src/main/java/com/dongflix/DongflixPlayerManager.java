@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
@@ -280,8 +281,8 @@ public class DongflixPlayerManager {
 		attachMiniPlayerToActivity(activity);
 	}
 
-	private void fitTextureAspectRatio(TextureView textureView, int boxW, int boxH) {
-		if (textureView == null || boxW <= 0 || boxH <= 0) return;
+	private void applyCenterCropMatrix(TextureView tv, int viewW, int viewH) {
+		if (tv == null || viewW <= 0 || viewH <= 0) return;
 		int vidW = 16;
 		int vidH = 9;
 		if (sharedMediaPlayer != null) {
@@ -295,21 +296,20 @@ public class DongflixPlayerManager {
 			} catch (Exception ignored) {}
 		}
 
-		float videoRatio = (float) vidW / (float) vidH;
-		float boxRatio = (float) boxW / (float) boxH;
-		int targetW = boxW;
-		int targetH = boxH;
+		float scaleX = 1f;
+		float scaleY = 1f;
+		float vidRatio = (float) vidW / (float) vidH;
+		float viewRatio = (float) viewW / (float) viewH;
 
-		if (videoRatio > boxRatio) {
-			targetW = boxW;
-			targetH = Math.max(1, Math.round(boxW / videoRatio));
-		} else {
-			targetH = boxH;
-			targetW = Math.max(1, Math.round(boxH * videoRatio));
+		if (vidRatio > viewRatio) {
+			scaleX = vidRatio / viewRatio;
+		} else if (viewRatio > vidRatio) {
+			scaleY = viewRatio / vidRatio;
 		}
 
-		FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(targetW, targetH, Gravity.CENTER);
-		textureView.setLayoutParams(lp);
+		Matrix matrix = new Matrix();
+		matrix.setScale(scaleX, scaleY, viewW / 2f, viewH / 2f);
+		tv.setTransform(matrix);
 	}
 
 	private View buildMiniPlayerPillView(final Activity activity, final boolean isInlineCompact) {
@@ -320,7 +320,7 @@ public class DongflixPlayerManager {
 		glassRoot.setOutlineProvider(new ViewOutlineProvider() {
 			@Override
 			public void getOutline(View view, Outline outline) {
-				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 22 * d);
+				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f);
 			}
 		});
 		glassRoot.setClipToOutline(true);
@@ -339,12 +339,12 @@ public class DongflixPlayerManager {
 			blurBg.setupWith(rootMain, new RenderScriptBlur(activity))
 				.setFrameClearDrawable(windowBackground)
 				.setBlurRadius(20f);
-			blurBg.setOverlayColor(Color.parseColor("#80121622"));
+			blurBg.setOverlayColor(Color.parseColor("#66141824"));
 		}
 
 		GradientDrawable glassBorder = new GradientDrawable();
 		glassBorder.setColor(Color.TRANSPARENT);
-		glassBorder.setCornerRadius(22 * d);
+		glassBorder.setCornerRadius(1000f);
 		glassBorder.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
 		glassRoot.setForeground(glassBorder);
 		glassRoot.addView(blurBg);
@@ -353,31 +353,27 @@ public class DongflixPlayerManager {
 		row.setOrientation(LinearLayout.HORIZONTAL);
 		row.setGravity(Gravity.CENTER_VERTICAL);
 		int hPad = isInlineCompact ? (int) (8 * d) : (int) (10 * d);
-		int vPad = (int) (8 * d);
+		int vPad = isInlineCompact ? (int) (6 * d) : (int) (8 * d);
 		row.setPadding(hPad, vPad, hPad, vPad);
 		glassRoot.addView(row);
 
-		final int thumbBoxW = isInlineCompact ? (int) (80 * d) : (int) (92 * d);
-		final int thumbBoxH = (int) (56 * d);
-
 		androidx.cardview.widget.CardView thumbCard = new androidx.cardview.widget.CardView(activity);
-		thumbCard.setLayoutParams(new LinearLayout.LayoutParams(thumbBoxW, thumbBoxH));
-		thumbCard.setRadius(12 * d);
+		final int thumbW = isInlineCompact ? (int) (44 * d) : (int) (56 * d);
+		final int thumbH = isInlineCompact ? (int) (44 * d) : (int) (44 * d);
+		thumbCard.setLayoutParams(new LinearLayout.LayoutParams(thumbW, thumbH));
+		thumbCard.setRadius(isInlineCompact ? 22 * d : 12 * d);
 		thumbCard.setCardElevation(0f);
-		thumbCard.setCardBackgroundColor(Color.parseColor("#080A0F"));
+		thumbCard.setCardBackgroundColor(Color.BLACK);
 
-		FrameLayout videoContainer = new FrameLayout(activity);
-		videoContainer.setLayoutParams(new FrameLayout.LayoutParams(
+		final TextureView miniTexture = new TextureView(activity);
+		miniTexture.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT,
 			ViewGroup.LayoutParams.MATCH_PARENT
 		));
-
-		final TextureView miniTexture = new TextureView(activity);
-		fitTextureAspectRatio(miniTexture, thumbBoxW, thumbBoxH);
 		miniTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
 			@Override
 			public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-				fitTextureAspectRatio(miniTexture, thumbBoxW, thumbBoxH);
+				applyCenterCropMatrix(miniTexture, width > 0 ? width : thumbW, height > 0 ? height : thumbH);
 				if (sharedMediaPlayer != null) {
 					try {
 						sharedMediaPlayer.setSurface(new Surface(surface));
@@ -386,19 +382,20 @@ public class DongflixPlayerManager {
 			}
 			@Override
 			public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {
-				fitTextureAspectRatio(miniTexture, thumbBoxW, thumbBoxH);
+				applyCenterCropMatrix(miniTexture, w, h);
 			}
 			@Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-			@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+			@Override public void onSurfaceTextureUpdated(SurfaceTexture s) {
+				applyCenterCropMatrix(miniTexture, miniTexture.getWidth(), miniTexture.getHeight());
+			}
 		});
-		videoContainer.addView(miniTexture);
-		thumbCard.addView(videoContainer);
+		thumbCard.addView(miniTexture);
 		row.addView(thumbCard);
 
 		LinearLayout infoCol = new LinearLayout(activity);
 		infoCol.setOrientation(LinearLayout.VERTICAL);
 		LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-		infoLp.setMargins((int) (12 * d), 0, (int) (8 * d), 0);
+		infoLp.setMargins((int) (10 * d), 0, (int) (6 * d), 0);
 		infoCol.setLayoutParams(infoLp);
 
 		TextView tvTitle = new TextView(activity);
@@ -412,7 +409,7 @@ public class DongflixPlayerManager {
 
 		TextView tvSub = new TextView(activity);
 		tvSub.setText(activeEpisodeLabel.isEmpty() ? "Dongflix" : "Episode " + activeEpisodeLabel);
-		tvSub.setTextColor(Color.parseColor("#94A3B8"));
+		tvSub.setTextColor(Color.parseColor("#9CA3AF"));
 		tvSub.setTextSize(isInlineCompact ? 11f : 12f);
 		tvSub.setMaxLines(1);
 		tvSub.setEllipsize(TextUtils.TruncateAt.END);
@@ -421,9 +418,9 @@ public class DongflixPlayerManager {
 		row.addView(infoCol);
 
 		final ImageView btnMiniPlay = new ImageView(activity);
-		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
+		LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
 		btnMiniPlay.setLayoutParams(playLp);
-		btnMiniPlay.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
+		btnMiniPlay.setPadding((int) (7 * d), (int) (7 * d), (int) (7 * d), (int) (7 * d));
 		btnMiniPlay.setColorFilter(Color.WHITE);
 		boolean playingNow = false;
 		try { playingNow = sharedMediaPlayer.isPlaying(); } catch (Exception ignored) {}
@@ -451,8 +448,8 @@ public class DongflixPlayerManager {
 
 		if (!isInlineCompact) {
 			TextView btnClose = new TextView(activity);
-			LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d));
-			closeLp.leftMargin = (int) (4 * d);
+			LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams((int) (30 * d), (int) (30 * d));
+			closeLp.leftMargin = (int) (2 * d);
 			btnClose.setLayoutParams(closeLp);
 			btnClose.setGravity(Gravity.CENTER);
 			btnClose.setText("✕");
@@ -493,11 +490,6 @@ public class DongflixPlayerManager {
 
 		if (isScrolledDownCompact && inlineSlot != null) {
 			inlineSlot.setVisibility(View.VISIBLE);
-			ViewGroup.LayoutParams slotLp = inlineSlot.getLayoutParams();
-			if (slotLp != null) {
-				slotLp.height = (int) (72 * d);
-				inlineSlot.setLayoutParams(slotLp);
-			}
 			View inlinePill = buildMiniPlayerPillView(activity, true);
 			inlineSlot.addView(inlinePill, new FrameLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT,
@@ -515,11 +507,11 @@ public class DongflixPlayerManager {
 
 		if (isMainScreen) {
 			bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
-				? (int) (104 * d)
-				: (int) (18 * d);
+				? (int) (92 * d)
+				: (int) (16 * d);
 		} else {
 			bottomMarginPx = (bottomNav != null && bottomNav.getVisibility() == View.VISIBLE)
-				? (int) (114 * d)
+				? (int) (102 * d)
 				: (int) (28 * d);
 		}
 
@@ -530,7 +522,7 @@ public class DongflixPlayerManager {
 
 		FrameLayout.LayoutParams rootLp = new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT,
-			(int) (72 * d)
+			(int) (60 * d)
 		);
 		rootLp.gravity = Gravity.BOTTOM;
 		rootLp.setMargins(sideMarginPx, 0, sideMarginPx, bottomMarginPx);
