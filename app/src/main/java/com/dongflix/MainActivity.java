@@ -71,7 +71,7 @@ public class MainActivity extends AppCompatActivity {
 	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
 	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat;
-	private View topNotifBlurBg;
+	private View topNotifBlurBg, topChatBlurBg;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
@@ -231,6 +231,15 @@ public class MainActivity extends AppCompatActivity {
 		if (notifId > 0) return notifId;
 		int bellId = getResources().getIdentifier("ic_notification", "drawable", getPackageName());
 		return bellId > 0 ? bellId : R.drawable.ic_search;
+	}
+
+	private int resolveMessageDrawableRes() {
+		String[] candidates = {"ic_chat", "ic_message", "ic_forum", "ic_comment", "ic_mail"};
+		for (String name : candidates) {
+			int id = getResources().getIdentifier(name, "drawable", getPackageName());
+			if (id > 0) return id;
+		}
+		return resolveNotificationDrawableRes();
 	}
 
 	@Override
@@ -2246,6 +2255,7 @@ public class MainActivity extends AppCompatActivity {
 		btnTopNotif = findViewById(R.id.btn_top_search);
 		btnTopChat = findViewById(R.id.btn_top_chat);
 		topNotifBlurBg = findViewById(R.id.top_notif_blur_bg);
+		topChatBlurBg = findViewById(R.id.top_chat_blur_bg);
 		imgTopNotif = findViewById(R.id.img_top_search);
 		imgTopChat = findViewById(R.id.img_top_chat);
 
@@ -2296,18 +2306,26 @@ public class MainActivity extends AppCompatActivity {
 			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
 		}
 
-		if (btnTopChat != null) {
-			btnTopChat.setVisibility(View.GONE);
-		}
 		if (imgTopNotif != null) {
 			imgTopNotif.setImageResource(resolveNotificationDrawableRes());
 			imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		}
+		if (imgTopChat != null) {
+			imgTopChat.setImageResource(resolveMessageDrawableRes());
+			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		}
 		if (btnTopNotif != null) {
 			btnTopNotif.setVisibility(View.VISIBLE);
 			btnTopNotif.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) { openNotificationsSheet(); }
+			});
+		}
+		if (btnTopChat != null) {
+			btnTopChat.setVisibility(View.VISIBLE);
+			btnTopChat.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) { startActivity(new Intent(MainActivity.this, ChatActivity.class)); }
 			});
 		}
 		if (btnHeroFavorite != null) {
@@ -2652,11 +2670,13 @@ public class MainActivity extends AppCompatActivity {
 		View searchBlur = findViewById(R.id.search_blur_bg);
 
 		setupRealTimeBlurView(topNotifBlurBg, rootMain, 20f);
+		setupRealTimeBlurView(topChatBlurBg, rootMain, 20f);
 		setupRealTimeBlurView(navBlur, rootMain, 20f);
 		setupRealTimeBlurView(compactBlur, rootMain, 20f);
 		setupRealTimeBlurView(searchBlur, rootMain, 20f);
 
 		applyUniversalGlassStyle(topNotifBlurBg, btnTopNotif);
+		applyUniversalGlassStyle(topChatBlurBg, btnTopChat);
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
 		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
