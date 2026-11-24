@@ -1043,7 +1043,7 @@ public class WatchActivity extends AppCompatActivity {
 		header.addView(btnClose);
 		root.addView(header);
 
-		RecyclerView rvComments = new RecyclerView(this);
+		final RecyclerView rvComments = new RecyclerView(this);
 		rvComments.setLayoutManager(new LinearLayoutManager(this));
 		rvComments.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 		rvComments.setPadding((int) (14 * d), (int) (6 * d), (int) (14 * d), (int) (8 * d));
@@ -1449,6 +1449,17 @@ public class WatchActivity extends AppCompatActivity {
 
 		sheet.setContentView(root);
 
+		final BottomSheetBehavior<FrameLayout>[] behaviorRef = new BottomSheetBehavior[1];
+		rvComments.addOnScrollListener(new RecyclerView.OnScrollListener() {
+			@Override
+			public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+				if (behaviorRef[0] != null) {
+					boolean atTop = !recyclerView.canScrollVertically(-1);
+					behaviorRef[0].setDraggable(atTop);
+				}
+			}
+		});
+
 		final View dialogDecor = sheet.getWindow() != null ? sheet.getWindow().getDecorView() : null;
 		final ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
 			@Override
@@ -1484,6 +1495,7 @@ public class WatchActivity extends AppCompatActivity {
 						bottomSheet.setLayoutParams(bLp);
 					}
 					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behaviorRef[0] = behavior;
 					behavior.setPeekHeight(targetH);
 					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 				}
@@ -1508,9 +1520,11 @@ public class WatchActivity extends AppCompatActivity {
 					lp.height = baseSheetHeight;
 					bottomSheet.setLayoutParams(lp);
 					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behaviorRef[0] = behavior;
 					behavior.setPeekHeight(baseSheetHeight);
 					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 					behavior.setSkipCollapsed(true);
+					behavior.setDraggable(!rvComments.canScrollVertically(-1));
 				}
 			}
 		});
@@ -1842,7 +1856,6 @@ public class WatchActivity extends AppCompatActivity {
 			toggleRow.addView(btnToggleReplies);
 			toggleRow.addView(ivToggleChevron);
 
-			// Garis vertikal ke bawah saja di sisi kiri (tanpa kotak stroke mengelilingi)
 			LinearLayout repliesWrapper = new LinearLayout(parent.getContext());
 			repliesWrapper.setOrientation(LinearLayout.HORIZONTAL);
 			LinearLayout.LayoutParams repWrapLp = new LinearLayout.LayoutParams(
@@ -2989,18 +3002,23 @@ public class WatchActivity extends AppCompatActivity {
 			return sideDialog;
 		} else {
 			final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+			final BottomSheetBehavior<FrameLayout>[] sheetBehaviorHolder = new BottomSheetBehavior[1];
+			final ScrollView[] scrollableChildHolder = new ScrollView[1];
 
 			if (contentView instanceof ViewGroup) {
 				ViewGroup vg = (ViewGroup) contentView;
 				for (int i = 0; i < vg.getChildCount(); i++) {
 					View child = vg.getChildAt(i);
 					if (child instanceof ScrollView) {
-						child.setNestedScrollingEnabled(true);
-						child.setOnTouchListener(new View.OnTouchListener() {
+						final ScrollView sv = (ScrollView) child;
+						scrollableChildHolder[0] = sv;
+						sv.setNestedScrollingEnabled(true);
+						sv.getViewTreeObserver().addOnScrollChangedListener(new ViewTreeObserver.OnScrollChangedListener() {
 							@Override
-							public boolean onTouch(View v, MotionEvent event) {
-								v.getParent().requestDisallowInterceptTouchEvent(true);
-								return false;
+							public void onScrollChanged() {
+								if (sheetBehaviorHolder[0] != null) {
+									sheetBehaviorHolder[0].setDraggable(sv.getScrollY() <= 0);
+								}
 							}
 						});
 					}
@@ -3050,10 +3068,13 @@ public class WatchActivity extends AppCompatActivity {
 						}
 
 						BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+						sheetBehaviorHolder[0] = behavior;
 						behavior.setPeekHeight(targetSheetHeight);
 						behavior.setSkipCollapsed(true);
-						behavior.setDraggable(false);
 						behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+
+						boolean isAtTop = scrollableChildHolder[0] == null || scrollableChildHolder[0].getScrollY() <= 0;
+						behavior.setDraggable(isAtTop);
 					}
 				}
 			});
@@ -3901,9 +3922,7 @@ public class WatchActivity extends AppCompatActivity {
 	public void resetControlsTimer() {
 		if (playerHandler != null && hideControlsRunnable != null) {
 			playerHandler.removeCallbacks(hideControlsRunnable);
-			if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-				playerHandler.postDelayed(hideControlsRunnable, 3500);
-			}
+			playerHandler.postDelayed(hideControlsRunnable, 3500);
 		}
 	}
 
@@ -3924,6 +3943,9 @@ public class WatchActivity extends AppCompatActivity {
 	public void hideControls() {
 		if (playerControlsOverlay != null) {
 			playerControlsOverlay.setVisibility(View.GONE);
+		}
+		if (btnUnlockScreen != null) {
+			btnUnlockScreen.setVisibility(View.GONE);
 		}
 		areControlsVisible = false;
 		updateBottomDividerState();
@@ -4882,6 +4904,9 @@ public class WatchActivity extends AppCompatActivity {
 		View.OnTouchListener playerTouchListener = new View.OnTouchListener() {
 			@Override
 			public boolean onTouch(View v, MotionEvent event) {
+				if (event.getAction() == MotionEvent.ACTION_DOWN) {
+					resetControlsTimer();
+				}
 				if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
 					if (isHolding2xSpeed) {
 						stopHold2xSpeed();
@@ -4977,14 +5002,10 @@ public class WatchActivity extends AppCompatActivity {
 							btnPlay.setImageResource(R.drawable.ic_play1);
 							getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 							saveWatchHistoryToFirebase(mediaPlayer.getCurrentPosition(), mediaPlayer.getDuration(), true);
-							if (playerHandler != null && hideControlsRunnable != null) {
-								playerHandler.removeCallbacks(hideControlsRunnable);
-							}
 						} else {
 							mediaPlayer.start();
 							btnPlay.setImageResource(R.drawable.ic_pause);
 							getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-							resetControlsTimer();
 						}
 					}
 				}
@@ -5088,6 +5109,7 @@ public class WatchActivity extends AppCompatActivity {
 			btnSettings.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
+					resetControlsTimer();
 					showSettingsBottomSheet();
 				}
 			});
@@ -5097,6 +5119,7 @@ public class WatchActivity extends AppCompatActivity {
 			btnQuality.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
+					resetControlsTimer();
 					showQualityDialog();
 				}
 			});
@@ -5106,6 +5129,7 @@ public class WatchActivity extends AppCompatActivity {
 			btnFullscreenEpisodes.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
+					resetControlsTimer();
 					showAllEpisodesBottomSheet();
 				}
 			});
@@ -5165,6 +5189,7 @@ public class WatchActivity extends AppCompatActivity {
 			btnFullscreen.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
+					resetControlsTimer();
 					toggleFullscreen();
 				}
 			});
