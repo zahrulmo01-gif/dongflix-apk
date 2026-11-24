@@ -18,6 +18,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
 import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.*;
 import com.bumptech.glide.Glide;
@@ -81,9 +82,11 @@ public class MainActivity extends AppCompatActivity {
 	private TextView textTitleContinue, textContinueSeeAll;
 	private RecyclerView recyclerContinue;
 
+	// Pustaka UI
 	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
-	private View linePustakaRiwayat, linePustakaDaftarku, linePustakaUnduhan;
-	private TextView textPustakaSectionLabel;
+	private TextView textPustakaSectionLabel, textPustakaCountBadge;
+	private LinearLayout layoutPustakaEmptyState;
+	private TextView textPustakaEmptyTitle, textPustakaEmptyDesc;
 	private RecyclerView recyclerPustakaList;
 	private int activePustakaTab = 0;
 
@@ -593,6 +596,10 @@ public class MainActivity extends AppCompatActivity {
 		}
 	}
 
+	// =========================================================================
+	// TAMPILAN PUSTAKA (RIWAYAT, DAFTARKU, UNDUHAN) & PENANGANAN UNDUHAN AMAN
+	// =========================================================================
+
 	private void setupPustakaSection() {
 		View pageFavorite = findViewById(R.id.layout_favorite);
 		if (!(pageFavorite instanceof ViewGroup)) return;
@@ -609,44 +616,104 @@ public class MainActivity extends AppCompatActivity {
 		LinearLayout root = new LinearLayout(this);
 		root.setOrientation(LinearLayout.VERTICAL);
 		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		root.setPadding((int) (16 * d), statusH + (int) (16 * d), (int) (16 * d), (int) (110 * d));
+		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), 0);
+
+		// Header Pustaka
+		LinearLayout headerRow = new LinearLayout(this);
+		headerRow.setOrientation(LinearLayout.HORIZONTAL);
+		headerRow.setGravity(Gravity.CENTER_VERTICAL);
+		headerRow.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
 		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Pustaka");
+		tvTitle.setText("Pustaka Saya");
 		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
-		root.addView(tvTitle);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-		LinearLayout tabsBar = new LinearLayout(this);
-		tabsBar.setOrientation(LinearLayout.HORIZONTAL);
-		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		tabsLp.topMargin = (int) (18 * d);
-		tabsBar.setLayoutParams(tabsLp);
+		textPustakaCountBadge = new TextView(this);
+		textPustakaCountBadge.setText("0 item");
+		textPustakaCountBadge.setTextColor(Color.parseColor("#94A3B8"));
+		textPustakaCountBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+		textPustakaCountBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textPustakaCountBadge.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
+		GradientDrawable badgeBg = new GradientDrawable();
+		badgeBg.setColor(Color.parseColor("#12141A"));
+		badgeBg.setCornerRadius(100f);
+		badgeBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		textPustakaCountBadge.setBackground(badgeBg);
 
-		tabPustakaRiwayat = new TextView(this);
-		tabPustakaDaftarku = new TextView(this);
-		tabPustakaUnduhan = new TextView(this);
-		linePustakaRiwayat = new View(this);
-		linePustakaDaftarku = new View(this);
-		linePustakaUnduhan = new View(this);
+		headerRow.addView(tvTitle);
+		headerRow.addView(textPustakaCountBadge);
+		root.addView(headerRow);
 
-		tabsBar.addView(buildPustakaTabItem("Riwayat", tabPustakaRiwayat, linePustakaRiwayat, 0, d));
-		tabsBar.addView(buildPustakaTabItem("Daftarku", tabPustakaDaftarku, linePustakaDaftarku, 1, d));
-		tabsBar.addView(buildPustakaTabItem("Unduhan", tabPustakaUnduhan, linePustakaUnduhan, 2, d));
-		root.addView(tabsBar);
+		// Segmented Pill Tabs: Riwayat | Daftarku | Unduhan
+		LinearLayout tabsPillContainer = new LinearLayout(this);
+		tabsPillContainer.setOrientation(LinearLayout.HORIZONTAL);
+		tabsPillContainer.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
+		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (44 * d));
+		tabsLp.topMargin = (int) (16 * d);
+		tabsPillContainer.setLayoutParams(tabsLp);
 
+		GradientDrawable containerBg = new GradientDrawable();
+		containerBg.setColor(Color.parseColor("#12141A"));
+		containerBg.setCornerRadius(100f);
+		containerBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		tabsPillContainer.setBackground(containerBg);
+
+		tabPustakaRiwayat = buildPustakaPillTab("Riwayat", 0, d);
+		tabPustakaDaftarku = buildPustakaPillTab("Daftarku", 1, d);
+		tabPustakaUnduhan = buildPustakaPillTab("Unduhan", 2, d);
+
+		tabsPillContainer.addView(tabPustakaRiwayat);
+		tabsPillContainer.addView(tabPustakaDaftarku);
+		tabsPillContainer.addView(tabPustakaUnduhan);
+		root.addView(tabsPillContainer);
+
+		// Sub-header section
 		textPustakaSectionLabel = new TextView(this);
-		textPustakaSectionLabel.setText("Kemarin");
-		textPustakaSectionLabel.setTextColor(Color.WHITE);
-		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		textPustakaSectionLabel.setText("Terakhir Ditonton");
+		textPustakaSectionLabel.setTextColor(Color.parseColor("#94A3B8"));
+		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+		textPustakaSectionLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		secLp.topMargin = (int) (22 * d);
-		secLp.bottomMargin = (int) (14 * d);
+		secLp.topMargin = (int) (16 * d);
+		secLp.bottomMargin = (int) (12 * d);
 		textPustakaSectionLabel.setLayoutParams(secLp);
 		root.addView(textPustakaSectionLabel);
 
+		// Empty State Box
+		layoutPustakaEmptyState = new LinearLayout(this);
+		layoutPustakaEmptyState.setOrientation(LinearLayout.VERTICAL);
+		layoutPustakaEmptyState.setGravity(Gravity.CENTER);
+		layoutPustakaEmptyState.setPadding((int) (24 * d), (int) (48 * d), (int) (24 * d), (int) (120 * d));
+		layoutPustakaEmptyState.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		layoutPustakaEmptyState.setVisibility(View.GONE);
+
+		textPustakaEmptyTitle = new TextView(this);
+		textPustakaEmptyTitle.setTextColor(Color.WHITE);
+		textPustakaEmptyTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+		textPustakaEmptyTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textPustakaEmptyTitle.setGravity(Gravity.CENTER);
+
+		textPustakaEmptyDesc = new TextView(this);
+		textPustakaEmptyDesc.setTextColor(Color.parseColor("#64748B"));
+		textPustakaEmptyDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+		textPustakaEmptyDesc.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textPustakaEmptyDesc.setGravity(Gravity.CENTER);
+		LinearLayout.LayoutParams eDescLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		eDescLp.topMargin = (int) (6 * d);
+		textPustakaEmptyDesc.setLayoutParams(eDescLp);
+
+		layoutPustakaEmptyState.addView(textPustakaEmptyTitle);
+		layoutPustakaEmptyState.addView(textPustakaEmptyDesc);
+		root.addView(layoutPustakaEmptyState);
+
+		// RecyclerView Pustaka
 		recyclerPustakaList = new RecyclerView(this);
 		recyclerPustakaList.setLayoutManager(new LinearLayoutManager(this));
+		recyclerPustakaList.setClipToPadding(false);
+		recyclerPustakaList.setPadding(0, 0, 0, (int) (130 * d));
 		recyclerPustakaList.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 		root.addView(recyclerPustakaList);
 
@@ -654,12 +721,14 @@ public class MainActivity extends AppCompatActivity {
 		updatePustakaTabVisual(activePustakaTab);
 	}
 
-	private LinearLayout buildPustakaTabItem(String label, TextView tv, View line, final int tabIndex, float d) {
-		LinearLayout wrapper = new LinearLayout(this);
-		wrapper.setOrientation(LinearLayout.VERTICAL);
-		wrapper.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-		wrapper.setPadding(0, 0, (int) (12 * d), 0);
-		wrapper.setOnClickListener(new View.OnClickListener() {
+	private TextView buildPustakaPillTab(String label, final int tabIndex, float d) {
+		TextView tv = new TextView(this);
+		tv.setText(label);
+		tv.setGravity(Gravity.CENTER);
+		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		tv.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+		tv.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				activePustakaTab = tabIndex;
@@ -667,28 +736,27 @@ public class MainActivity extends AppCompatActivity {
 				renderActivePustakaTab();
 			}
 		});
-
-		tv.setText(label);
-		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
-		tv.setPadding(0, 0, 0, (int) (8 * d));
-		line.setLayoutParams(new LinearLayout.LayoutParams((int) (24 * d), (int) (3 * d)));
-		wrapper.addView(tv);
-		wrapper.addView(line);
-		return wrapper;
+		return tv;
 	}
 
 	private void updatePustakaTabVisual(int idx) {
-		int active = Color.WHITE;
-		int inactive = Color.parseColor("#94A3B8");
-		int indicator = Color.parseColor("#38BDF8");
-
-		if (tabPustakaRiwayat != null) tabPustakaRiwayat.setTextColor(idx == 0 ? active : inactive);
-		if (tabPustakaDaftarku != null) tabPustakaDaftarku.setTextColor(idx == 1 ? active : inactive);
-		if (tabPustakaUnduhan != null) tabPustakaUnduhan.setTextColor(idx == 2 ? active : inactive);
-
-		if (linePustakaRiwayat != null) linePustakaRiwayat.setBackgroundColor(idx == 0 ? indicator : Color.TRANSPARENT);
-		if (linePustakaDaftarku != null) linePustakaDaftarku.setBackgroundColor(idx == 1 ? indicator : Color.TRANSPARENT);
-		if (linePustakaUnduhan != null) linePustakaUnduhan.setBackgroundColor(idx == 2 ? indicator : Color.TRANSPARENT);
+		float d = getResources().getDisplayMetrics().density;
+		TextView[] tabs = {tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan};
+		for (int i = 0; i < tabs.length; i++) {
+			TextView tv = tabs[i];
+			if (tv == null) continue;
+			boolean selected = (i == idx);
+			if (selected) {
+				GradientDrawable activeBg = new GradientDrawable();
+				activeBg.setColor(Color.parseColor("#2563EB"));
+				activeBg.setCornerRadius(100f);
+				tv.setBackground(activeBg);
+				tv.setTextColor(Color.WHITE);
+			} else {
+				tv.setBackgroundColor(Color.TRANSPARENT);
+				tv.setTextColor(Color.parseColor("#94A3B8"));
+			}
+		}
 	}
 
 	private void loadUserHistoryAndFavoritesFromFirebase(FirebaseUser user) {
@@ -789,27 +857,38 @@ public class MainActivity extends AppCompatActivity {
 
 	private void loadLocalDownloads() {
 		ArrayList<HashMap<String, Object>> found = new ArrayList<>();
-		File[] dirs = {
-			getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-			getExternalFilesDir(Environment.DIRECTORY_MOVIES),
-			getFilesDir()
-		};
-		for (File dir : dirs) {
-			if (dir != null && dir.exists() && dir.isDirectory()) collectDownloadFiles(dir, found);
-		}
+		try {
+			File[] dirs = {
+				getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+				getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+				getFilesDir()
+			};
+			for (File dir : dirs) {
+				if (dir != null && dir.exists() && dir.isDirectory() && dir.canRead()) {
+					collectDownloadFiles(dir, found, 0);
+				}
+			}
+		} catch (Exception ignored) {}
 		downloadsList = found;
-		if (activePustakaTab == 2) renderActivePustakaTab();
 	}
 
-	private void collectDownloadFiles(File dir, ArrayList<HashMap<String, Object>> out) {
-		File[] children = dir.listFiles();
+	private void collectDownloadFiles(File dir, ArrayList<HashMap<String, Object>> out, int depth) {
+		if (dir == null || depth > 3) return;
+		File[] children;
+		try {
+			children = dir.listFiles();
+		} catch (Exception e) {
+			return;
+		}
 		if (children == null) return;
+
 		for (File f : children) {
+			if (f == null || !f.exists() || !f.canRead()) continue;
 			if (f.isDirectory()) {
-				collectDownloadFiles(f, out);
-			} else {
+				collectDownloadFiles(f, out, depth + 1);
+			} else if (f.length() > 0L) {
 				String lower = f.getName().toLowerCase(Locale.US);
-				if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".m3u8") || lower.endsWith(".webm")) {
+				if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")) {
 					HashMap<String, Object> item = new HashMap<>();
 					item.put("title", f.getName().replaceAll("\\.[^.]+$", "").replace("_", " "));
 					item.put("episode", "Offline");
@@ -823,16 +902,111 @@ public class MainActivity extends AppCompatActivity {
 
 	private void renderActivePustakaTab() {
 		if (recyclerPustakaList == null) return;
+
+		ArrayList<HashMap<String, Object>> activeData;
+		String sectionLabel;
+		String emptyTitle;
+		String emptyDesc;
+
 		if (activePustakaTab == 0) {
-			if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText("Kemarin");
-			recyclerPustakaList.setAdapter(new PustakaListAdapter(historyList, 0));
+			activeData = historyList != null ? historyList : new ArrayList<HashMap<String, Object>>();
+			sectionLabel = "Terakhir Ditonton";
+			emptyTitle = "Belum ada riwayat tontonan";
+			emptyDesc = "Episode yang kamu tonton akan muncul di sini.";
 		} else if (activePustakaTab == 1) {
-			if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText("Daftarku");
-			recyclerPustakaList.setAdapter(new PustakaListAdapter(getMergedFavoritesList(), 1));
+			activeData = getMergedFavoritesList();
+			sectionLabel = "Daftar Tersimpan";
+			emptyTitle = "Daftarku masih kosong";
+			emptyDesc = "Simpan donghua favoritmu untuk ditonton nanti.";
 		} else {
 			loadLocalDownloads();
-			if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText("Unduhan Tersimpan");
-			recyclerPustakaList.setAdapter(new PustakaListAdapter(downloadsList, 2));
+			activeData = downloadsList != null ? downloadsList : new ArrayList<HashMap<String, Object>>();
+			sectionLabel = "Video Offline";
+			emptyTitle = "Belum ada unduhan";
+			emptyDesc = "Video yang kamu unduh akan tersimpan di perangkat ini.";
+		}
+
+		if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText(sectionLabel);
+		if (textPustakaCountBadge != null) textPustakaCountBadge.setText(activeData.size() + " item");
+
+		if (activeData.isEmpty()) {
+			if (layoutPustakaEmptyState != null) {
+				layoutPustakaEmptyState.setVisibility(View.VISIBLE);
+				if (textPustakaEmptyTitle != null) textPustakaEmptyTitle.setText(emptyTitle);
+				if (textPustakaEmptyDesc != null) textPustakaEmptyDesc.setText(emptyDesc);
+			}
+			recyclerPustakaList.setVisibility(View.GONE);
+		} else {
+			if (layoutPustakaEmptyState != null) layoutPustakaEmptyState.setVisibility(View.GONE);
+			recyclerPustakaList.setVisibility(View.VISIBLE);
+			recyclerPustakaList.setAdapter(new PustakaListAdapter(activeData, activePustakaTab));
+		}
+	}
+
+	private void openDownloadedVideoSafely(String filePath, String title) {
+		if (filePath == null || filePath.trim().isEmpty()) {
+			Toast.makeText(this, "File video tidak ditemukan", Toast.LENGTH_SHORT).show();
+			return;
+		}
+		File videoFile = new File(filePath);
+		if (!videoFile.exists() || !videoFile.canRead() || videoFile.length() <= 0L) {
+			Toast.makeText(this, "File video rusak atau sudah dihapus", Toast.LENGTH_SHORT).show();
+			renderActivePustakaTab();
+			return;
+		}
+		try {
+			Intent intent = new Intent(Intent.ACTION_VIEW);
+			Uri uri;
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+				uri = androidx.core.content.FileProvider.getUriForFile(
+					this,
+					getPackageName() + ".fileprovider",
+					videoFile
+				);
+				intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+			} else {
+				uri = Uri.fromFile(videoFile);
+			}
+			intent.setDataAndType(uri, "video/*");
+			startActivity(Intent.createChooser(intent, "Putar " + title));
+		} catch (Exception e) {
+			Toast.makeText(this, "Tidak ada pemutar video yang mendukung file ini", Toast.LENGTH_SHORT).show();
+		}
+	}
+
+	private void removePustakaItem(int mode, HashMap<String, Object> item) {
+		if (item == null) return;
+		if (mode == 0) {
+			String slug = safeStr(item, "slug", "");
+			if (!slug.isEmpty() && !currentUserKey.isEmpty()) {
+				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+					.getReference("users").child(currentUserKey).child("history").child(slug)
+					.removeValue();
+			}
+			historyList.remove(item);
+			renderContinueWatchingCards();
+			renderActivePustakaTab();
+		} else if (mode == 1) {
+			String slug = safeStr(item, "slug", "");
+			if (!slug.isEmpty()) {
+				if (favPrefs != null) favPrefs.edit().remove("fav_" + slug).apply();
+				if (!currentUserKey.isEmpty()) {
+					FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+						.getReference("users").child(currentUserKey).child("favorites").child(slug)
+						.removeValue();
+				}
+			}
+			favoritesList.remove(item);
+			renderActivePustakaTab();
+		} else {
+			String path = safeStr(item, "file_path", "");
+			if (!path.isEmpty()) {
+				try {
+					File f = new File(path);
+					if (f.exists()) f.delete();
+				} catch (Exception ignored) {}
+			}
+			renderActivePustakaTab();
 		}
 	}
 
@@ -1785,7 +1959,7 @@ public class MainActivity extends AppCompatActivity {
 			rlp.rightMargin = (int) (10 * d);
 			root.setLayoutParams(rlp);
 
-			androidx.cardview.widget.CardView card = new androidx.cardview.widget.CardView(parent.getContext());
+			CardView card = new CardView(parent.getContext());
 			card.setLayoutParams(new LinearLayout.LayoutParams(wPx, hPx));
 			card.setRadius(16 * d);
 			card.setCardElevation(0f);
@@ -1933,19 +2107,33 @@ public class MainActivity extends AppCompatActivity {
 			Context ctx = parent.getContext();
 			float d = ctx.getResources().getDisplayMetrics().density;
 
-			LinearLayout row = new LinearLayout(ctx);
-			row.setOrientation(LinearLayout.HORIZONTAL);
-			row.setGravity(Gravity.CENTER_VERTICAL);
+			LinearLayout card = new LinearLayout(ctx);
+			card.setOrientation(LinearLayout.HORIZONTAL);
+			card.setGravity(Gravity.CENTER_VERTICAL);
+			card.setPadding((int) (10 * d), (int) (10 * d), (int) (12 * d), (int) (10 * d));
 			RecyclerView.LayoutParams rlp = new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-			rlp.bottomMargin = (int) (14 * d);
-			row.setLayoutParams(rlp);
+			rlp.bottomMargin = (int) (10 * d);
+			card.setLayoutParams(rlp);
+
+			GradientDrawable cardBg = new GradientDrawable();
+			cardBg.setColor(Color.parseColor("#12141A"));
+			cardBg.setCornerRadius(16 * d);
+			cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1AFFFFFF"));
+			card.setBackground(cardBg);
+
+			CardView thumbCard = new CardView(ctx);
+			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams((int) (64 * d), (int) (86 * d));
+			tLp.rightMargin = (int) (12 * d);
+			thumbCard.setLayoutParams(tLp);
+			thumbCard.setRadius(12 * d);
+			thumbCard.setCardElevation(0f);
+			thumbCard.setCardBackgroundColor(Color.parseColor("#181C26"));
 
 			ImageView thumb = new ImageView(ctx);
-			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams((int) (68 * d), (int) (92 * d));
-			tLp.rightMargin = (int) (14 * d);
-			thumb.setLayoutParams(tLp);
+			thumb.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 			thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
 			thumb.setTag("thumb");
+			thumbCard.addView(thumb);
 
 			LinearLayout info = new LinearLayout(ctx);
 			info.setOrientation(LinearLayout.VERTICAL);
@@ -1953,30 +2141,58 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView tvTitle = new TextView(ctx);
 			tvTitle.setTextColor(Color.WHITE);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
 			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvTitle.setMaxLines(1);
+			tvTitle.setMaxLines(2);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 			tvTitle.setTag("title");
 
-			TextView tvEp = new TextView(ctx);
-			tvEp.setTextColor(Color.parseColor("#CBD5E1"));
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-			tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvEp.setTag("ep");
+			TextView tvBadge = new TextView(ctx);
+			tvBadge.setTextColor(Color.parseColor("#38BDF8"));
+			tvBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+			tvBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvBadge.setPadding((int) (8 * d), (int) (2 * d), (int) (8 * d), (int) (2 * d));
+			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			bLp.topMargin = (int) (6 * d);
+			tvBadge.setLayoutParams(bLp);
+			GradientDrawable bBg = new GradientDrawable();
+			bBg.setColor(Color.parseColor("#0C2438"));
+			bBg.setCornerRadius(100f);
+			tvBadge.setBackground(bBg);
+			tvBadge.setTag("ep");
 
 			TextView tvSub = new TextView(ctx);
 			tvSub.setTextColor(Color.parseColor("#94A3B8"));
-			tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 			tvSub.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			sLp.topMargin = (int) (4 * d);
+			tvSub.setLayoutParams(sLp);
 			tvSub.setTag("sub");
 
 			info.addView(tvTitle);
-			info.addView(tvEp);
+			info.addView(tvBadge);
 			info.addView(tvSub);
-			row.addView(thumb);
-			row.addView(info);
-			return new ViewHolder(row);
+
+			TextView btnRemove = new TextView(ctx);
+			btnRemove.setText("✕");
+			btnRemove.setTextColor(Color.parseColor("#94A3B8"));
+			btnRemove.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+			btnRemove.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			btnRemove.setGravity(Gravity.CENTER);
+			LinearLayout.LayoutParams rmLp = new LinearLayout.LayoutParams((int) (30 * d), (int) (30 * d));
+			rmLp.leftMargin = (int) (8 * d);
+			btnRemove.setLayoutParams(rmLp);
+			GradientDrawable rmBg = new GradientDrawable();
+			rmBg.setShape(GradientDrawable.OVAL);
+			rmBg.setColor(Color.parseColor("#181C26"));
+			btnRemove.setBackground(rmBg);
+			btnRemove.setTag("btn_remove");
+
+			card.addView(thumbCard);
+			card.addView(info);
+			card.addView(btnRemove);
+			return new ViewHolder(card);
 		}
 
 		@Override
@@ -1987,8 +2203,9 @@ public class MainActivity extends AppCompatActivity {
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
+			TextView btnRemove = holder.itemView.findViewWithTag("btn_remove");
 
-			final String title = cleanText(safeStr(item, "title", mode == 2 ? "Video" : "Donghua"));
+			final String title = cleanText(safeStr(item, "title", mode == 2 ? "Video Offline" : "Donghua"));
 			if (tvTitle != null) tvTitle.setText(title);
 
 			if (mode == 0) {
@@ -1997,11 +2214,20 @@ public class MainActivity extends AppCompatActivity {
 				if (tvSub != null) tvSub.setText(safeStr(item, "remainingText", "Lanjutkan menonton"));
 			} else if (mode == 1) {
 				String ep = safeStr(item, "episode", "");
-				if (tvEp != null) tvEp.setText(ep.isEmpty() ? "Daftarku" : ep);
-				if (tvSub != null) tvSub.setText(safeStr(item, "status", "Favorit"));
+				if (tvEp != null) tvEp.setText(ep.isEmpty() ? "Favorit" : ep);
+				if (tvSub != null) tvSub.setText(safeStr(item, "status", "Tersimpan di Daftarku"));
 			} else {
-				if (tvEp != null) tvEp.setText("OFFLINE");
-				if (tvSub != null) tvSub.setText(safeStr(item, "size_mb", ""));
+				if (tvEp != null) tvEp.setText("OFFLINE • " + safeStr(item, "size_mb", ""));
+				if (tvSub != null) tvSub.setText("Ketuk untuk memutar video");
+			}
+
+			if (btnRemove != null) {
+				btnRemove.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						removePustakaItem(mode, item);
+					}
+				});
 			}
 
 			if (mode == 2) {
@@ -2010,12 +2236,7 @@ public class MainActivity extends AppCompatActivity {
 				holder.itemView.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						if (!path.isEmpty()) {
-							Intent play = new Intent(MainActivity.this, WatchActivity.class);
-							play.putExtra("video_url", Uri.fromFile(new File(path)).toString());
-							play.putExtra("title", title);
-							startActivity(play);
-						}
+						openDownloadedVideoSafely(path, title);
 					}
 				});
 			} else {
