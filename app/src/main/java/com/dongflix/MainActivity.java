@@ -38,6 +38,11 @@ public class MainActivity extends AppCompatActivity {
 	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
 
 	private String currentUserKey = "";
+	private String currentUserEmail = "";
+	private String currentDisplayName = "R Z";
+	private String currentUsername = "rulsz";
+	private String currentPhotoUrl = "";
+	private long currentUserExp = 0L;
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> fullCatalogList = new ArrayList<>();
@@ -49,8 +54,10 @@ public class MainActivity extends AppCompatActivity {
 
 	private DatabaseReference viewsTotalRef;
 	private DatabaseReference viewsDailyTodayRef;
+	private DatabaseReference userProfileRef;
 	private ValueEventListener viewsTotalListener;
 	private ValueEventListener viewsDailyListener;
+	private ValueEventListener userProfileListener;
 
 	private RequestNetwork dongflix_req;
 	private RequestNetwork.RequestListener _dongflix_req_request_listener;
@@ -89,6 +96,13 @@ public class MainActivity extends AppCompatActivity {
 	private TextView textPustakaEmptyTitle, textPustakaEmptyDesc;
 	private RecyclerView recyclerPustakaList;
 	private int activePustakaTab = 0;
+
+	// Akun UI
+	private ImageView imgAccountAvatar;
+	private TextView tvAccountInitial, tvAccountName, tvAccountHandle;
+	private TextView tvStatWatchTime, tvStatSavedCount, tvStatExpCount;
+	private TextView tvAccountLevelTitle, tvAccountExpProgressLabel, tvAccountExpPercent;
+	private View viewAccountExpTrack, viewAccountExpFill;
 
 	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
 	private LinearLayout tabBeranda, tabPustaka, tabAkun;
@@ -138,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
 		setupContinueWatchingSection();
 		setupPullToRefresh();
 		setupPustakaSection();
+		setupAccountSection();
 		initializeLogic();
 		loadLoggedInUserProfile(currentUser);
 		loadUserHistoryAndFavoritesFromFirebase(currentUser);
@@ -315,447 +330,602 @@ public class MainActivity extends AppCompatActivity {
 
 	private void loadLoggedInUserProfile(FirebaseUser user) {
 		if (user == null || user.getEmail() == null) return;
-		String email = user.getEmail().trim().toLowerCase();
-		final String fallbackName = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
+		currentUserEmail = user.getEmail().trim().toLowerCase(Locale.US);
+		final String fallbackName = currentUserEmail.contains("@")
+			? currentUserEmail.substring(0, currentUserEmail.indexOf("@")) : currentUserEmail;
+
+		currentDisplayName = fallbackName;
+		currentUsername = fallbackName.toLowerCase(Locale.US).replaceAll("[^a-z0-9_]", "");
+		if (currentUsername.isEmpty()) currentUsername = "rulsz";
+		currentPhotoUrl = user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "";
 
 		TextView tvUserHeader = findViewById(R.id.text_username);
-		TextView tvProfileName = findViewById(R.id.textview65);
-		if (tvUserHeader != null) tvUserHeader.setText(fallbackName);
-		if (tvProfileName != null) tvProfileName.setText(fallbackName);
+		if (tvUserHeader != null) tvUserHeader.setText(currentDisplayName);
+		applyCircularAvatar(imgUserAvatar, currentPhotoUrl);
+		refreshAccountUi();
 
-		applyCircularAvatar(imgUserAvatar, user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "");
-		currentUserKey = email.replace(".", ",");
-
-		FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("users").child(currentUserKey)
-			.addListenerForSingleValueEvent(new ValueEventListener() {
-				@Override
-				public void onDataChange(@NonNull DataSnapshot snap) {
-					if (isFinishing() || isDestroyed()) return;
-					if (!snap.exists()) {
-						applyCircularAvatar(imgUserAvatar, "");
-						return;
-					}
-					Object nameObj = snap.child("name").getValue();
-					String resolvedName = (nameObj != null && !nameObj.toString().trim().isEmpty())
-						? nameObj.toString().trim() : fallbackName;
-					if (tvUserHeader != null) tvUserHeader.setText(resolvedName);
-					if (tvProfileName != null) tvProfileName.setText(resolvedName);
-
-					Object photoObj = snap.child("photoURL").getValue();
-					applyCircularAvatar(imgUserAvatar, photoObj != null ? photoObj.toString().trim() : "");
-				}
-
-				@Override
-				public void onCancelled(@NonNull DatabaseError error) {
-					if (!isFinishing() && !isDestroyed()) applyCircularAvatar(imgUserAvatar, "");
-				}
-			});
-	}
-
-	private void setupPullToRefresh() {
-		final NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
-		if (mainScroll == null) return;
-
-		float d = getResources().getDisplayMetrics().density;
-		if (pullRefreshIndicator != null) {
-			GradientDrawable pillBg = new GradientDrawable();
-			pillBg.setShape(GradientDrawable.OVAL);
-			pillBg.setColor(Color.parseColor("#181C26"));
-			pullRefreshIndicator.setBackground(pillBg);
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) pullRefreshIndicator.setElevation(18f);
+		currentUserKey = currentUserEmail.replace(".", ",");
+		if (userProfileRef != null && userProfileListener != null) {
+			userProfileRef.removeEventListener(userProfileListener);
 		}
-		if (pullRefreshSpinner != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			pullRefreshSpinner.setIndeterminateTintList(ColorStateList.valueOf(Color.WHITE));
-		}
-		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-
-		final float thresholdPx = 90 * d;
-		mainScroll.setOnTouchListener(new View.OnTouchListener() {
+		userProfileRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("users").child(currentUserKey);
+		userProfileListener = new ValueEventListener() {
 			@Override
-			public boolean onTouch(View v, MotionEvent event) {
-				if (isRefreshingCatalog) return false;
-				switch (event.getActionMasked()) {
-					case MotionEvent.ACTION_DOWN:
-						pullStartY = event.getRawY();
-						isPullingFromTop = (mainScroll.getScrollY() <= 0);
-						break;
-					case MotionEvent.ACTION_MOVE:
-						if (isPullingFromTop && mainScroll.getScrollY() <= 0) {
-							float deltaY = event.getRawY() - pullStartY;
-							if (deltaY > (16 * d) && pullRefreshIndicator != null) {
-								pullRefreshIndicator.setVisibility(View.VISIBLE);
-								if (imgPullRefreshIcon != null) {
-									imgPullRefreshIcon.setVisibility(View.VISIBLE);
-									imgPullRefreshIcon.setRotation(Math.min(180f, deltaY * 1.4f));
-								}
-								if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.GONE);
-							}
-						}
-						break;
-					case MotionEvent.ACTION_UP:
-					case MotionEvent.ACTION_CANCEL:
-						if (isPullingFromTop && mainScroll.getScrollY() <= 0) {
-							if (event.getRawY() - pullStartY >= thresholdPx) triggerCatalogRefresh();
-							else if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.GONE);
-						}
-						isPullingFromTop = false;
-						break;
+			public void onDataChange(@NonNull DataSnapshot snap) {
+				if (isFinishing() || isDestroyed()) return;
+				if (!snap.exists()) {
+					refreshAccountUi();
+					return;
 				}
-				return false;
+				Object nameObj = snap.child("name").getValue();
+				currentDisplayName = (nameObj != null && !nameObj.toString().trim().isEmpty())
+					? nameObj.toString().trim() : fallbackName;
+
+				Object userObj = snap.child("username").getValue();
+				if (userObj != null && !userObj.toString().trim().isEmpty()) {
+					currentUsername = userObj.toString().trim().replaceFirst("^@", "");
+				} else {
+					currentUsername = currentDisplayName.toLowerCase(Locale.US).replaceAll("[^a-z0-9_]", "");
+					if (currentUsername.isEmpty()) currentUsername = fallbackName;
+				}
+
+				Object photoObj = snap.child("photoURL").getValue();
+				currentPhotoUrl = photoObj != null ? photoObj.toString().trim() : "";
+				currentUserExp = parseLongSafe(snap.child("exp").getValue());
+
+				TextView tvHeader = findViewById(R.id.text_username);
+				if (tvHeader != null) tvHeader.setText(currentDisplayName);
+				applyCircularAvatar(imgUserAvatar, currentPhotoUrl);
+				refreshAccountUi();
 			}
-		});
-	}
 
-	private void triggerCatalogRefresh() {
-		if (isRefreshingCatalog) return;
-		isRefreshingCatalog = true;
-		if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.VISIBLE);
-		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setVisibility(View.GONE);
-		if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.VISIBLE);
-		if (dongflix_req != null && _dongflix_req_request_listener != null) {
-			dongflix_req.startRequestNetwork("GET", CATALOG_URL, "", _dongflix_req_request_listener);
-		}
-	}
-
-	private void hideRefreshIndicator() {
-		isRefreshingCatalog = false;
-		if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.GONE);
-		if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.GONE);
-		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setVisibility(View.VISIBLE);
-	}
-
-	private void startHeroAutoSlider() {
-		stopHeroAutoSlider();
-		if (listMap == null || listMap.size() < 3) return;
-
-		float d = getResources().getDisplayMetrics().density;
-		final int activeW = (int) (16 * d);
-		final int inactiveW = (int) (5 * d);
-		final int dotH = (int) (5 * d);
-		final int dotGap = (int) (5 * d);
-
-		final GradientDrawable activeDot = new GradientDrawable();
-		activeDot.setShape(GradientDrawable.RECTANGLE);
-		activeDot.setColor(Color.WHITE);
-		activeDot.setCornerRadius(100f);
-
-		final GradientDrawable inactiveDot = new GradientDrawable();
-		inactiveDot.setShape(GradientDrawable.RECTANGLE);
-		inactiveDot.setColor(Color.parseColor("#80FFFFFF"));
-		inactiveDot.setCornerRadius(100f);
-
-		heroCurrentIndex = 0;
-		heroSliderRunnable = new Runnable() {
 			@Override
-			public void run() {
-				if (isFinishing() || isDestroyed() || listMap == null || listMap.size() < 3) return;
-				int pos = heroCurrentIndex % 3;
-				HashMap<String, Object> item = listMap.get(pos);
-				currentHeroItem = item;
-
-				String heroCover = normalizeCoverUrl(safeStr(item, "cover", ""));
-				final String heroSlug = safeStr(item, "slug", "");
-
-				if (textHeroTitle != null) textHeroTitle.setText(cleanText(safeStr(item, "title", "")));
-				if (textHeroDesc != null) textHeroDesc.setText(cleanText(safeStr(item, "synopsis", "")));
-				updateHeroFavoriteIcon(heroSlug);
-
-				if (imgHeroBanner != null && !heroCover.isEmpty()) {
-					Glide.with(MainActivity.this).load(Uri.parse(heroCover)).centerCrop()
-						.placeholder(R.drawable.default_image).error(R.drawable.default_image).into(imgHeroBanner);
-				}
-				if (btnHeroPlay != null) {
-					btnHeroPlay.setOnClickListener(new View.OnClickListener() {
-						@Override
-						public void onClick(View v) { openWatchBySlug(heroSlug); }
-					});
-				}
-
-				View[] dots = {dot0, dot1, dot2};
-				for (int i = 0; i < dots.length; i++) {
-					if (dots[i] != null) {
-						boolean isActive = (i == pos);
-						if (dots[i].getLayoutParams() instanceof LinearLayout.LayoutParams) {
-							LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
-							lp.width = isActive ? activeW : inactiveW;
-							lp.height = dotH;
-							if (i > 0) lp.leftMargin = dotGap;
-							dots[i].setLayoutParams(lp);
-						}
-						dots[i].setBackground(isActive ? activeDot : inactiveDot);
-					}
-				}
-
-				heroCurrentIndex = (pos + 1) % 3;
-				heroSliderHandler.postDelayed(this, 4000);
+			public void onCancelled(@NonNull DatabaseError error) {
+				if (!isFinishing() && !isDestroyed()) refreshAccountUi();
 			}
 		};
-		heroSliderHandler.post(heroSliderRunnable);
+		userProfileRef.addValueEventListener(userProfileListener);
 	}
 
-	private void stopHeroAutoSlider() {
-		if (heroSliderRunnable != null) {
-			heroSliderHandler.removeCallbacks(heroSliderRunnable);
-			heroSliderRunnable = null;
-		}
-		heroSliderHandler.removeCallbacksAndMessages(null);
-	}
+	private void setupAccountSection() {
+		View pageProfile = findViewById(R.id.layout_profile);
+		if (!(pageProfile instanceof ViewGroup)) return;
 
-	private void bindSectionLikePopularToday(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
-		if (rv == null) return;
-		float d = getResources().getDisplayMetrics().density;
-		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-		rv.setNestedScrollingEnabled(false);
-		rv.setOnFlingListener(null);
-		rv.setClipToPadding(false);
-		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162));
-	}
-
-	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
-		ArrayList<HashMap<String, Object>> list = new ArrayList<>();
-		for (int i = 0; i < count; i++) {
-			HashMap<String, Object> m = new HashMap<>();
-			m.put("is_loading", true);
-			list.add(m);
-		}
-		return list;
-	}
-
-	private void populateCategorizedSections() {
-		if (fullCatalogList == null || fullCatalogList.isEmpty()) return;
-
-		ArrayList<HashMap<String, Object>> cultivation = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> completed = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> comedy = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> mystery = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> movie = new ArrayList<>();
-		ArrayList<HashMap<String, Object>> romance = new ArrayList<>();
-
-		for (HashMap<String, Object> item : fullCatalogList) {
-			String status = safeStr(item, "status", "").toLowerCase(Locale.US);
-			String genres = safeStr(item, "genres", "").toLowerCase(Locale.US);
-			String meta = (genres + " " + safeStr(item, "title", "") + " "
-				+ safeStr(item, "synopsis", "") + " " + safeStr(item, "type", "") + " " + safeStr(item, "episode", ""))
-				.toLowerCase(Locale.US);
-
-			if (meta.contains("kultivasi") || meta.contains("cultivation") || meta.contains("abadi") || meta.contains("immortal")) {
-				cultivation.add(item);
-			}
-			if (status.contains("completed") || status.contains("tamat")) completed.add(item);
-			if (meta.contains("comedy") || meta.contains("komedi") || meta.contains("slice of life")) comedy.add(item);
-			if (meta.contains("mystery") || meta.contains("misteri") || meta.contains("teki")
-				|| meta.contains("thriller") || meta.contains("suspense") || meta.contains("detective")) {
-				mystery.add(item);
-			}
-			if (meta.contains("movie") || meta.contains("film")) movie.add(item);
-			if (genres.contains("romance") || genres.contains("romantis") || genres.contains("romansa")
-				|| meta.contains("romance") || meta.contains("romantis")) {
-				romance.add(item);
-			}
-		}
-
-		ArrayList<HashMap<String, Object>> fallback = new ArrayList<>(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
-		if (cultivation.isEmpty()) cultivation.addAll(fallback);
-		if (completed.isEmpty()) completed.addAll(fallback);
-		if (comedy.isEmpty()) comedy.addAll(fallback);
-		if (mystery.isEmpty()) mystery.addAll(fallback);
-		if (movie.isEmpty()) movie.addAll(fallback);
-		if (romance.isEmpty()) romance.addAll(fallback);
-
-		bindSectionLikePopularToday(recyclerCultivationDonghua, new ArrayList<>(cultivation.subList(0, Math.min(10, cultivation.size()))));
-		bindSectionLikePopularToday(recyclerCompletedDonghua, new ArrayList<>(completed.subList(0, Math.min(10, completed.size()))));
-		bindSectionLikePopularToday(recyclerComedyDonghua, new ArrayList<>(comedy.subList(0, Math.min(10, comedy.size()))));
-		bindSectionLikePopularToday(recyclerMysteryDonghua, new ArrayList<>(mystery.subList(0, Math.min(10, mystery.size()))));
-		bindSectionLikePopularToday(recyclerMovieDonghua, new ArrayList<>(movie.subList(0, Math.min(10, movie.size()))));
-		bindSectionLikePopularToday(recyclerRomanceDonghua, new ArrayList<>(romance.subList(0, Math.min(10, romance.size()))));
-	}
-
-	private void setupContinueWatchingSection() {
-		layoutSectionContinue = findViewById(R.id.layout_section_continue);
-		textTitleContinue = findViewById(R.id.text_title_continue);
-		textContinueSeeAll = findViewById(R.id.text_continue_see_all);
-		recyclerContinue = findViewById(R.id.recyclerContinue);
-
-		if (recyclerContinue != null) {
-			float d = getResources().getDisplayMetrics().density;
-			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
-		}
-		if (textContinueSeeAll != null) {
-			textContinueSeeAll.setText("Lihat riwayat");
-			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
-			textContinueSeeAll.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					activePustakaTab = 0;
-					selectNavTabByIndex(1, true);
-				}
-			});
-		}
-	}
-
-	// =========================================================================
-	// TAMPILAN PUSTAKA (RIWAYAT, DAFTARKU, UNDUHAN) & PENANGANAN UNDUHAN AMAN
-	// =========================================================================
-
-	private void setupPustakaSection() {
-		View pageFavorite = findViewById(R.id.layout_favorite);
-		if (!(pageFavorite instanceof ViewGroup)) return;
-
-		ViewGroup favGroup = (ViewGroup) pageFavorite;
-		favGroup.removeAllViews();
-		favGroup.setBackgroundColor(Color.parseColor("#000000"));
+		ViewGroup profGroup = (ViewGroup) pageProfile;
+		profGroup.removeAllViews();
+		profGroup.setBackgroundColor(Color.parseColor("#000000"));
 
 		float d = getResources().getDisplayMetrics().density;
 		int statusH = 0;
 		int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
 		if (resId > 0) statusH = getResources().getDimensionPixelSize(resId);
 
+		ScrollView scroll = new ScrollView(this);
+		scroll.setFillViewport(true);
+		scroll.setVerticalScrollBarEnabled(false);
+		scroll.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
 		LinearLayout root = new LinearLayout(this);
 		root.setOrientation(LinearLayout.VERTICAL);
-		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), 0);
+		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), (int) (130 * d));
+		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-		// Header Pustaka
-		LinearLayout headerRow = new LinearLayout(this);
-		headerRow.setOrientation(LinearLayout.HORIZONTAL);
-		headerRow.setGravity(Gravity.CENTER_VERTICAL);
-		headerRow.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+		// Kartu Identitas Profil + Tombol Ubah Profil (tanpa syarat premium)
+		LinearLayout profileCard = new LinearLayout(this);
+		profileCard.setOrientation(LinearLayout.VERTICAL);
+		profileCard.setPadding((int) (18 * d), (int) (18 * d), (int) (18 * d), (int) (18 * d));
+		GradientDrawable profCardBg = new GradientDrawable();
+		profCardBg.setColor(Color.parseColor("#12141A"));
+		profCardBg.setCornerRadius(20 * d);
+		profCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
+		profileCard.setBackground(profCardBg);
 
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Pustaka Saya");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
-		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		LinearLayout topRow = new LinearLayout(this);
+		topRow.setOrientation(LinearLayout.HORIZONTAL);
+		topRow.setGravity(Gravity.CENTER_VERTICAL);
 
-		textPustakaCountBadge = new TextView(this);
-		textPustakaCountBadge.setText("0 item");
-		textPustakaCountBadge.setTextColor(Color.parseColor("#94A3B8"));
-		textPustakaCountBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-		textPustakaCountBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		textPustakaCountBadge.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
-		GradientDrawable badgeBg = new GradientDrawable();
-		badgeBg.setColor(Color.parseColor("#12141A"));
-		badgeBg.setCornerRadius(100f);
-		badgeBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-		textPustakaCountBadge.setBackground(badgeBg);
+		FrameLayout avatarHolder = new FrameLayout(this);
+		LinearLayout.LayoutParams avBoxLp = new LinearLayout.LayoutParams((int) (62 * d), (int) (62 * d));
+		avBoxLp.rightMargin = (int) (14 * d);
+		avatarHolder.setLayoutParams(avBoxLp);
 
-		headerRow.addView(tvTitle);
-		headerRow.addView(textPustakaCountBadge);
-		root.addView(headerRow);
+		imgAccountAvatar = new ImageView(this);
+		imgAccountAvatar.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		imgAccountAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-		// Segmented Pill Tabs: Riwayat | Daftarku | Unduhan
-		LinearLayout tabsPillContainer = new LinearLayout(this);
-		tabsPillContainer.setOrientation(LinearLayout.HORIZONTAL);
-		tabsPillContainer.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
-		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (44 * d));
-		tabsLp.topMargin = (int) (16 * d);
-		tabsPillContainer.setLayoutParams(tabsLp);
+		tvAccountInitial = new TextView(this);
+		tvAccountInitial.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		tvAccountInitial.setGravity(Gravity.CENTER);
+		tvAccountInitial.setTextColor(Color.WHITE);
+		tvAccountInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+		tvAccountInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 
-		GradientDrawable containerBg = new GradientDrawable();
-		containerBg.setColor(Color.parseColor("#12141A"));
-		containerBg.setCornerRadius(100f);
-		containerBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-		tabsPillContainer.setBackground(containerBg);
+		avatarHolder.addView(imgAccountAvatar);
+		avatarHolder.addView(tvAccountInitial);
 
-		tabPustakaRiwayat = buildPustakaPillTab("Riwayat", 0, d);
-		tabPustakaDaftarku = buildPustakaPillTab("Daftarku", 1, d);
-		tabPustakaUnduhan = buildPustakaPillTab("Unduhan", 2, d);
+		LinearLayout identityCol = new LinearLayout(this);
+		identityCol.setOrientation(LinearLayout.VERTICAL);
+		identityCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-		tabsPillContainer.addView(tabPustakaRiwayat);
-		tabsPillContainer.addView(tabPustakaDaftarku);
-		tabsPillContainer.addView(tabPustakaUnduhan);
-		root.addView(tabsPillContainer);
+		tvAccountName = new TextView(this);
+		tvAccountName.setText("R Z");
+		tvAccountName.setTextColor(Color.WHITE);
+		tvAccountName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
+		tvAccountName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvAccountName.setMaxLines(1);
+		tvAccountName.setEllipsize(TextUtils.TruncateAt.END);
 
-		// Sub-header section
-		textPustakaSectionLabel = new TextView(this);
-		textPustakaSectionLabel.setText("Terakhir Ditonton");
-		textPustakaSectionLabel.setTextColor(Color.parseColor("#94A3B8"));
-		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-		textPustakaSectionLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		secLp.topMargin = (int) (16 * d);
-		secLp.bottomMargin = (int) (12 * d);
-		textPustakaSectionLabel.setLayoutParams(secLp);
-		root.addView(textPustakaSectionLabel);
+		tvAccountHandle = new TextView(this);
+		tvAccountHandle.setText("@rulsz");
+		tvAccountHandle.setTextColor(Color.parseColor("#94A3B8"));
+		tvAccountHandle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+		tvAccountHandle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		hLp.topMargin = (int) (2 * d);
+		tvAccountHandle.setLayoutParams(hLp);
 
-		// Empty State Box
-		layoutPustakaEmptyState = new LinearLayout(this);
-		layoutPustakaEmptyState.setOrientation(LinearLayout.VERTICAL);
-		layoutPustakaEmptyState.setGravity(Gravity.CENTER);
-		layoutPustakaEmptyState.setPadding((int) (24 * d), (int) (48 * d), (int) (24 * d), (int) (120 * d));
-		layoutPustakaEmptyState.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		layoutPustakaEmptyState.setVisibility(View.GONE);
+		TextView tvLifetimeBadge = new TextView(this);
+		tvLifetimeBadge.setText("✦ Premium Aktif Seumur Hidup");
+		tvLifetimeBadge.setTextColor(Color.parseColor("#38BDF8"));
+		tvLifetimeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+		tvLifetimeBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvLifetimeBadge.setPadding((int) (10 * d), (int) (3 * d), (int) (10 * d), (int) (3 * d));
+		LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		bLp.topMargin = (int) (8 * d);
+		tvLifetimeBadge.setLayoutParams(bLp);
+		GradientDrawable lifeBg = new GradientDrawable();
+		lifeBg.setColor(Color.parseColor("#0C2438"));
+		lifeBg.setCornerRadius(100f);
+		lifeBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
+		tvLifetimeBadge.setBackground(lifeBg);
 
-		textPustakaEmptyTitle = new TextView(this);
-		textPustakaEmptyTitle.setTextColor(Color.WHITE);
-		textPustakaEmptyTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-		textPustakaEmptyTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		textPustakaEmptyTitle.setGravity(Gravity.CENTER);
+		identityCol.addView(tvAccountName);
+		identityCol.addView(tvAccountHandle);
+		identityCol.addView(tvLifetimeBadge);
 
-		textPustakaEmptyDesc = new TextView(this);
-		textPustakaEmptyDesc.setTextColor(Color.parseColor("#64748B"));
-		textPustakaEmptyDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-		textPustakaEmptyDesc.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		textPustakaEmptyDesc.setGravity(Gravity.CENTER);
-		LinearLayout.LayoutParams eDescLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		eDescLp.topMargin = (int) (6 * d);
-		textPustakaEmptyDesc.setLayoutParams(eDescLp);
-
-		layoutPustakaEmptyState.addView(textPustakaEmptyTitle);
-		layoutPustakaEmptyState.addView(textPustakaEmptyDesc);
-		root.addView(layoutPustakaEmptyState);
-
-		// RecyclerView Pustaka
-		recyclerPustakaList = new RecyclerView(this);
-		recyclerPustakaList.setLayoutManager(new LinearLayoutManager(this));
-		recyclerPustakaList.setClipToPadding(false);
-		recyclerPustakaList.setPadding(0, 0, 0, (int) (130 * d));
-		recyclerPustakaList.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		root.addView(recyclerPustakaList);
-
-		favGroup.addView(root);
-		updatePustakaTabVisual(activePustakaTab);
-	}
-
-	private TextView buildPustakaPillTab(String label, final int tabIndex, float d) {
-		TextView tv = new TextView(this);
-		tv.setText(label);
-		tv.setGravity(Gravity.CENTER);
-		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		tv.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-		tv.setOnClickListener(new View.OnClickListener() {
+		TextView btnEditProfile = new TextView(this);
+		btnEditProfile.setText("Ubah Profil");
+		btnEditProfile.setTextColor(Color.WHITE);
+		btnEditProfile.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		btnEditProfile.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnEditProfile.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
+		GradientDrawable editBg = new GradientDrawable();
+		editBg.setColor(Color.parseColor("#1A2030"));
+		editBg.setCornerRadius(100f);
+		editBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2AFFFFFF"));
+		btnEditProfile.setBackground(editBg);
+		btnEditProfile.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				activePustakaTab = tabIndex;
-				updatePustakaTabVisual(tabIndex);
-				renderActivePustakaTab();
+				openEditProfileDialog();
 			}
 		});
-		return tv;
+
+		topRow.addView(avatarHolder);
+		topRow.addView(identityCol);
+		topRow.addView(btnEditProfile);
+		profileCard.addView(topRow);
+
+		// Statistik 3 Kolom di dalam kartu profil
+		View innerDiv = new View(this);
+		LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d)));
+		divLp.topMargin = (int) (16 * d);
+		divLp.bottomMargin = (int) (14 * d);
+		innerDiv.setLayoutParams(divLp);
+		innerDiv.setBackgroundColor(Color.parseColor("#1AFFFFFF"));
+		profileCard.addView(innerDiv);
+
+		LinearLayout statsRow = new LinearLayout(this);
+		statsRow.setOrientation(LinearLayout.HORIZONTAL);
+		statsRow.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+		tvStatWatchTime = new TextView(this);
+		tvStatSavedCount = new TextView(this);
+		tvStatExpCount = new TextView(this);
+
+		statsRow.addView(buildStatColumn(tvStatWatchTime, "0m", "Waktu Tonton", d));
+		statsRow.addView(buildStatColumn(tvStatSavedCount, "0", "Tersimpan", d));
+		statsRow.addView(buildStatColumn(tvStatExpCount, "0", "Total XP", d));
+		profileCard.addView(statsRow);
+
+		root.addView(profileCard);
+
+		// Kartu Progres Level & XP
+		LinearLayout levelCard = new LinearLayout(this);
+		levelCard.setOrientation(LinearLayout.VERTICAL);
+		levelCard.setPadding((int) (18 * d), (int) (16 * d), (int) (18 * d), (int) (16 * d));
+		LinearLayout.LayoutParams lvlCardLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		lvlCardLp.topMargin = (int) (14 * d);
+		levelCard.setLayoutParams(lvlCardLp);
+		GradientDrawable lvlCardBg = new GradientDrawable();
+		lvlCardBg.setColor(Color.parseColor("#12141A"));
+		lvlCardBg.setCornerRadius(20 * d);
+		lvlCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
+		levelCard.setBackground(lvlCardBg);
+
+		LinearLayout lvlTopRow = new LinearLayout(this);
+		lvlTopRow.setOrientation(LinearLayout.HORIZONTAL);
+		lvlTopRow.setGravity(Gravity.CENTER_VERTICAL);
+
+		tvAccountLevelTitle = new TextView(this);
+		tvAccountLevelTitle.setText("Level 1");
+		tvAccountLevelTitle.setTextColor(Color.WHITE);
+		tvAccountLevelTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		tvAccountLevelTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvAccountLevelTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		tvAccountExpPercent = new TextView(this);
+		tvAccountExpPercent.setText("0%");
+		tvAccountExpPercent.setTextColor(Color.parseColor("#38BDF8"));
+		tvAccountExpPercent.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+		tvAccountExpPercent.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		lvlTopRow.addView(tvAccountLevelTitle);
+		lvlTopRow.addView(tvAccountExpPercent);
+		levelCard.addView(lvlTopRow);
+
+		tvAccountExpProgressLabel = new TextView(this);
+		tvAccountExpProgressLabel.setText("0 / 1000 XP menuju level berikutnya");
+		tvAccountExpProgressLabel.setTextColor(Color.parseColor("#94A3B8"));
+		tvAccountExpProgressLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+		tvAccountExpProgressLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams pLblLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		pLblLp.topMargin = (int) (4 * d);
+		pLblLp.bottomMargin = (int) (10 * d);
+		tvAccountExpProgressLabel.setLayoutParams(pLblLp);
+		levelCard.addView(tvAccountExpProgressLabel);
+
+		final FrameLayout barFrame = new FrameLayout(this);
+		barFrame.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (7 * d)));
+
+		viewAccountExpTrack = new View(this);
+		viewAccountExpTrack.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		GradientDrawable trackBg = new GradientDrawable();
+		trackBg.setColor(Color.parseColor("#1E2433"));
+		trackBg.setCornerRadius(100f);
+		viewAccountExpTrack.setBackground(trackBg);
+
+		viewAccountExpFill = new View(this);
+		viewAccountExpFill.setLayoutParams(new FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
+		GradientDrawable fillBg = new GradientDrawable();
+		fillBg.setColor(Color.parseColor("#38BDF8"));
+		fillBg.setCornerRadius(100f);
+		viewAccountExpFill.setBackground(fillBg);
+
+		barFrame.addView(viewAccountExpTrack);
+		barFrame.addView(viewAccountExpFill);
+		levelCard.addView(barFrame);
+
+		barFrame.post(new Runnable() {
+			@Override
+			public void run() {
+				updateAccountExpBarWidth(barFrame.getWidth());
+			}
+		});
+
+		root.addView(levelCard);
+
+		// Kartu Aksi Cepat
+		LinearLayout menuCard = new LinearLayout(this);
+		menuCard.setOrientation(LinearLayout.VERTICAL);
+		menuCard.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
+		LinearLayout.LayoutParams mCardLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		mCardLp.topMargin = (int) (14 * d);
+		menuCard.setLayoutParams(mCardLp);
+		GradientDrawable mCardBg = new GradientDrawable();
+		mCardBg.setColor(Color.parseColor("#12141A"));
+		mCardBg.setCornerRadius(20 * d);
+		mCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
+		menuCard.setBackground(mCardBg);
+
+		menuCard.addView(buildAccountMenuItem(
+			"Pustaka & Riwayat",
+			"Lihat riwayat tontonan dan favorit tersimpan",
+			Color.WHITE,
+			d,
+			new View.OnClickListener() {
+				@Override public void onClick(View v) { selectNavTabByIndex(1, true); }
+			}
+		));
+		menuCard.addView(buildAccountMenuItem(
+			"Chat & Komunitas",
+			"Buka ruang obrolan dan request judul donghua",
+			Color.WHITE,
+			d,
+			new View.OnClickListener() {
+				@Override public void onClick(View v) { startActivity(new Intent(MainActivity.this, ChatActivity.class)); }
+			}
+		));
+		menuCard.addView(buildAccountMenuItem(
+			"Keluar Akun",
+			"Logout dari sesi akun saat ini",
+			Color.parseColor("#F87171"),
+			d,
+			new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					FirebaseAuth.getInstance().signOut();
+					Intent i = new Intent(MainActivity.this, LoginActivity.class);
+					i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+					startActivity(i);
+					finish();
+				}
+			}
+		));
+
+		root.addView(menuCard);
+		scroll.addView(root);
+		profGroup.addView(scroll);
+		refreshAccountUi();
 	}
 
-	private void updatePustakaTabVisual(int idx) {
+	private LinearLayout buildStatColumn(TextView valueView, String initVal, String label, float d) {
+		LinearLayout col = new LinearLayout(this);
+		col.setOrientation(LinearLayout.VERTICAL);
+		col.setGravity(Gravity.CENTER);
+		col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		valueView.setText(initVal);
+		valueView.setTextColor(Color.WHITE);
+		valueView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+		valueView.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		TextView tvLbl = new TextView(this);
+		tvLbl.setText(label);
+		tvLbl.setTextColor(Color.parseColor("#94A3B8"));
+		tvLbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+		tvLbl.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams lLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		lLp.topMargin = (int) (2 * d);
+		tvLbl.setLayoutParams(lLp);
+
+		col.addView(valueView);
+		col.addView(tvLbl);
+		return col;
+	}
+
+	private LinearLayout buildAccountMenuItem(String title, String sub, int titleColor, float d, View.OnClickListener listener) {
+		LinearLayout row = new LinearLayout(this);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setGravity(Gravity.CENTER_VERTICAL);
+		row.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
+		row.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+		row.setOnClickListener(listener);
+
+		LinearLayout txtCol = new LinearLayout(this);
+		txtCol.setOrientation(LinearLayout.VERTICAL);
+		txtCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText(title);
+		tvTitle.setTextColor(titleColor);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		TextView tvSub = new TextView(this);
+		tvSub.setText(sub);
+		tvSub.setTextColor(Color.parseColor("#64748B"));
+		tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+		tvSub.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		txtCol.addView(tvTitle);
+		txtCol.addView(tvSub);
+
+		TextView chev = new TextView(this);
+		chev.setText("›");
+		chev.setTextColor(Color.parseColor("#64748B"));
+		chev.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+		chev.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		row.addView(txtCol);
+		row.addView(chev);
+		return row;
+	}
+
+	private void openEditProfileDialog() {
 		float d = getResources().getDisplayMetrics().density;
-		TextView[] tabs = {tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan};
-		for (int i = 0; i < tabs.length; i++) {
-			TextView tv = tabs[i];
-			if (tv == null) continue;
-			boolean selected = (i == idx);
-			if (selected) {
-				GradientDrawable activeBg = new GradientDrawable();
-				activeBg.setColor(Color.parseColor("#2563EB"));
-				activeBg.setCornerRadius(100f);
-				tv.setBackground(activeBg);
-				tv.setTextColor(Color.WHITE);
-			} else {
-				tv.setBackgroundColor(Color.TRANSPARENT);
-				tv.setTextColor(Color.parseColor("#94A3B8"));
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout card = new LinearLayout(this);
+		card.setOrientation(LinearLayout.VERTICAL);
+		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
+		GradientDrawable cardBg = new GradientDrawable();
+		cardBg.setColor(Color.parseColor("#12141A"));
+		cardBg.setCornerRadius(20 * d);
+		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
+		card.setBackground(cardBg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Ubah Profil");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		card.addView(tvTitle);
+
+		final EditText etName = new EditText(this);
+		etName.setText(currentDisplayName);
+		etName.setHint("Nama tampilan");
+		etName.setHintTextColor(Color.parseColor("#64748B"));
+		etName.setTextColor(Color.WHITE);
+		etName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+		etName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etName.setSingleLine(true);
+		etName.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+		LinearLayout.LayoutParams nLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		nLp.topMargin = (int) (14 * d);
+		etName.setLayoutParams(nLp);
+		GradientDrawable inBg = new GradientDrawable();
+		inBg.setColor(Color.parseColor("#181C26"));
+		inBg.setCornerRadius(12 * d);
+		inBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1FFFFFFF"));
+		etName.setBackground(inBg);
+		card.addView(etName);
+
+		final EditText etUsername = new EditText(this);
+		etUsername.setText(currentUsername);
+		etUsername.setHint("Username (tanpa @)");
+		etUsername.setHintTextColor(Color.parseColor("#64748B"));
+		etUsername.setTextColor(Color.WHITE);
+		etUsername.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+		etUsername.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etUsername.setSingleLine(true);
+		etUsername.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+		LinearLayout.LayoutParams uLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		uLp.topMargin = (int) (10 * d);
+		uLp.bottomMargin = (int) (18 * d);
+		etUsername.setLayoutParams(uLp);
+		etUsername.setBackground(inBg.getConstantState() != null ? inBg.getConstantState().newDrawable() : inBg);
+		card.addView(etUsername);
+
+		LinearLayout btnRow = new LinearLayout(this);
+		btnRow.setOrientation(LinearLayout.HORIZONTAL);
+		btnRow.setGravity(Gravity.END);
+
+		TextView btnCancel = new TextView(this);
+		btnCancel.setText("Batal");
+		btnCancel.setTextColor(Color.parseColor("#94A3B8"));
+		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCancel.setPadding((int) (16 * d), (int) (9 * d), (int) (16 * d), (int) (9 * d));
+		btnCancel.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { dialog.dismiss(); }
+		});
+
+		TextView btnSave = new TextView(this);
+		btnSave.setText("Simpan");
+		btnSave.setTextColor(Color.WHITE);
+		btnSave.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnSave.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnSave.setPadding((int) (18 * d), (int) (9 * d), (int) (18 * d), (int) (9 * d));
+		LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		sLp.leftMargin = (int) (8 * d);
+		btnSave.setLayoutParams(sLp);
+		GradientDrawable saveBg = new GradientDrawable();
+		saveBg.setColor(Color.parseColor("#2563EB"));
+		saveBg.setCornerRadius(100f);
+		btnSave.setBackground(saveBg);
+		btnSave.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String newName = etName.getText().toString().trim();
+				String newUser = etUsername.getText().toString().trim().replaceFirst("^@", "").replaceAll("\\s+", "_");
+				if (newName.isEmpty()) {
+					Toast.makeText(MainActivity.this, "Nama tidak boleh kosong", Toast.LENGTH_SHORT).show();
+					return;
+				}
+				if (newUser.isEmpty()) {
+					newUser = newName.toLowerCase(Locale.US).replaceAll("[^a-z0-9_]", "");
+					if (newUser.isEmpty()) newUser = "user";
+				}
+
+				currentDisplayName = newName;
+				currentUsername = newUser;
+
+				TextView tvHeader = findViewById(R.id.text_username);
+				if (tvHeader != null) tvHeader.setText(currentDisplayName);
+				refreshAccountUi();
+
+				if (!currentUserKey.isEmpty()) {
+					Map<String, Object> updates = new HashMap<>();
+					updates.put("name", currentDisplayName);
+					updates.put("username", currentUsername);
+					updates.put("email", currentUserEmail);
+					updates.put("isLifetimePremium", true);
+					FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+						.getReference("users")
+						.child(currentUserKey)
+						.updateChildren(updates);
+				}
+
+				Toast.makeText(MainActivity.this, "Profil diperbarui", Toast.LENGTH_SHORT).show();
+				dialog.dismiss();
 			}
+		});
+
+		btnRow.addView(btnCancel);
+		btnRow.addView(btnSave);
+		card.addView(btnRow);
+
+		dialog.setContentView(card);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			win.setLayout(Math.min((int) (340 * d), screenW - (int) (36 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
+	}
+
+	private void refreshAccountUi() {
+		if (tvAccountName != null) tvAccountName.setText(currentDisplayName);
+		if (tvAccountHandle != null) tvAccountHandle.setText("@" + currentUsername);
+
+		String initial = !currentDisplayName.trim().isEmpty()
+			? currentDisplayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
+		if (!currentPhotoUrl.trim().isEmpty()) {
+			if (imgAccountAvatar != null) {
+				imgAccountAvatar.setVisibility(View.VISIBLE);
+				imgAccountAvatar.clearColorFilter();
+				if (!isFinishing() && !isDestroyed()) {
+					Glide.with(this).load(Uri.parse(currentPhotoUrl.trim())).circleCrop()
+						.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(imgAccountAvatar);
+				}
+			}
+			if (tvAccountInitial != null) tvAccountInitial.setVisibility(View.GONE);
+		} else {
+			if (imgAccountAvatar != null) imgAccountAvatar.setVisibility(View.GONE);
+			if (tvAccountInitial != null) {
+				tvAccountInitial.setVisibility(View.VISIBLE);
+				tvAccountInitial.setText(initial);
+				GradientDrawable iniBg = new GradientDrawable();
+				iniBg.setShape(GradientDrawable.OVAL);
+				iniBg.setColor(Color.parseColor("#1D4ED8"));
+				tvAccountInitial.setBackground(iniBg);
+			}
+		}
+
+		long totalWatchedMs = 0L;
+		for (HashMap<String, Object> h : historyList) {
+			totalWatchedMs += parseLongSafe(h.get("positionMs"));
+		}
+		long totalMinutes = Math.max(0L, totalWatchedMs / 60000L);
+		String watchLabel = totalMinutes >= 60L
+			? String.format(Locale.US, "%dj %dm", totalMinutes / 60L, totalMinutes % 60L)
+			: totalMinutes + "m";
+
+		if (tvStatWatchTime != null) tvStatWatchTime.setText(watchLabel);
+		if (tvStatSavedCount != null) tvStatSavedCount.setText(String.valueOf(getMergedFavoritesList().size()));
+		if (tvStatExpCount != null) tvStatExpCount.setText(String.valueOf(currentUserExp));
+
+		int level = currentUserExp <= 0L ? 1 : (int) ((currentUserExp - 1L) / 1000L) + 1;
+		long expInLevel = currentUserExp <= 0L ? 0L : ((currentUserExp - 1L) % 1000L) + 1L;
+		int percent = (int) Math.max(0L, Math.min(100L, (expInLevel * 100L) / 1000L));
+
+		if (tvAccountLevelTitle != null) tvAccountLevelTitle.setText("Level " + level);
+		if (tvAccountExpProgressLabel != null) {
+			tvAccountExpProgressLabel.setText(expInLevel + " / 1000 XP menuju level " + (level + 1));
+		}
+		if (tvAccountExpPercent != null) tvAccountExpPercent.setText(percent + "%");
+
+		if (viewAccountExpTrack != null && viewAccountExpTrack.getParent() instanceof View) {
+			View parentBar = (View) viewAccountExpTrack.getParent();
+			if (parentBar.getWidth() > 0) {
+				updateAccountExpBarWidth(parentBar.getWidth());
+			}
+		}
+	}
+
+	private void updateAccountExpBarWidth(int totalBarWidth) {
+		if (viewAccountExpFill == null || totalBarWidth <= 0) return;
+		long expInLevel = currentUserExp <= 0L ? 0L : ((currentUserExp - 1L) % 1000L) + 1L;
+		float ratio = Math.max(0f, Math.min(1f, expInLevel / 1000f));
+		int targetW = Math.round(totalBarWidth * ratio);
+		if (ratio > 0f && targetW < 8) targetW = 8;
+		ViewGroup.LayoutParams lp = viewAccountExpFill.getLayoutParams();
+		if (lp != null && lp.width != targetW) {
+			lp.width = targetW;
+			viewAccountExpFill.setLayoutParams(lp);
 		}
 	}
 
@@ -788,6 +958,7 @@ public class MainActivity extends AppCompatActivity {
 				}
 				historyList = parsed;
 				renderContinueWatchingCards();
+				refreshAccountUi();
 				if (activePustakaTab == 0) renderActivePustakaTab();
 			}
 
@@ -809,6 +980,7 @@ public class MainActivity extends AppCompatActivity {
 					}
 				}
 				favoritesList = parsedFavs;
+				refreshAccountUi();
 				if (activePustakaTab == 1) renderActivePustakaTab();
 			}
 
@@ -1294,6 +1466,9 @@ public class MainActivity extends AppCompatActivity {
 		stopMainShimmer();
 		stopHeroAutoSlider();
 		detachFirebasePopularityListeners();
+		if (userProfileRef != null && userProfileListener != null) {
+			userProfileRef.removeEventListener(userProfileListener);
+		}
 		super.onDestroy();
 	}
 
@@ -1692,6 +1867,7 @@ public class MainActivity extends AppCompatActivity {
 			renderActivePustakaTab();
 		} else if (pages[2] != null) {
 			pages[2].setVisibility(View.VISIBLE);
+			refreshAccountUi();
 		}
 	}
 
@@ -1883,31 +2059,45 @@ public class MainActivity extends AppCompatActivity {
 
 			LinearLayout col = new LinearLayout(parent.getContext());
 			col.setOrientation(LinearLayout.VERTICAL);
-			col.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (12 * d));
+			col.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
 			col.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
+			// Judul satu baris saja di Lanjutkan Menonton
 			TextView tvTitle = new TextView(parent.getContext());
 			tvTitle.setTextColor(Color.WHITE);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
 			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvTitle.setMaxLines(2);
+			tvTitle.setSingleLine(true);
+			tvTitle.setMaxLines(1);
 			tvTitle.setEllipsize(TextUtils.TruncateAt.END);
 			tvTitle.setTag("title");
 
 			TextView tvEp = new TextView(parent.getContext());
 			tvEp.setTextColor(Color.parseColor("#CBD5E1"));
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 			tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvEp.setMaxLines(1);
+			tvEp.setEllipsize(TextUtils.TruncateAt.END);
 			tvEp.setTag("ep");
 
 			col.addView(tvTitle);
 			col.addView(tvEp);
 			card.addView(col);
 
-			View bar = new View(parent.getContext());
-			bar.setLayoutParams(new FrameLayout.LayoutParams((int) (145 * d), (int) (3 * d), Gravity.BOTTOM | Gravity.START));
-			bar.setBackgroundColor(Color.parseColor("#38BDF8"));
-			card.addView(bar);
+			// Progressbar tipis (2dp) selaras dengan progress Firebase; jika tidak ada durasi maka di tengah
+			FrameLayout barTrack = new FrameLayout(parent.getContext());
+			barTrack.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(2, (int) (2 * d)), Gravity.BOTTOM | Gravity.START
+			));
+			barTrack.setBackgroundColor(Color.parseColor("#26FFFFFF"));
+
+			View barFill = new View(parent.getContext());
+			barFill.setLayoutParams(new FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
+			barFill.setBackgroundColor(Color.parseColor("#38BDF8"));
+			barFill.setTag("bar_fill");
+
+			barTrack.addView(barFill);
+			card.addView(barTrack);
 
 			return new ViewHolder(card);
 		}
@@ -1919,6 +2109,7 @@ public class MainActivity extends AppCompatActivity {
 			ImageView thumb = holder.itemView.findViewWithTag("thumb");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
+			final View barFill = holder.itemView.findViewWithTag("bar_fill");
 
 			String epRaw = safeStr(item, "episode", "1").trim();
 			String cov = normalizeCoverUrl(safeStr(item, "cover", ""));
@@ -1929,6 +2120,33 @@ public class MainActivity extends AppCompatActivity {
 			if (thumb != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
 				Glide.with(MainActivity.this).load(Uri.parse(cov)).into(thumb);
 			}
+
+			final long posMs = parseLongSafe(item.get("positionMs"));
+			final long durMs = parseLongSafe(item.get("durationMs"));
+			if (barFill != null && barFill.getParent() instanceof View) {
+				final View parentTrack = (View) barFill.getParent();
+				parentTrack.post(new Runnable() {
+					@Override
+					public void run() {
+						int totalW = parentTrack.getWidth();
+						if (totalW <= 0) return;
+						float d = barFill.getResources().getDisplayMetrics().density;
+						int segW = Math.max((int) (18 * d), Math.round(totalW * 0.14f));
+						int leftPos;
+						if (durMs > 0L && posMs >= 0L) {
+							float ratio = Math.max(0f, Math.min(1f, (float) posMs / (float) durMs));
+							leftPos = Math.round((totalW - segW) * ratio);
+						} else {
+							// Jika tidak ada data progress durasi di Firebase, letakkan di tengah
+							leftPos = Math.max(0, (totalW - segW) / 2);
+						}
+						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(segW, ViewGroup.LayoutParams.MATCH_PARENT);
+						lp.leftMargin = leftPos;
+						barFill.setLayoutParams(lp);
+					}
+				});
+			}
+
 			holder.itemView.setOnClickListener(new View.OnClickListener() {
 				@Override public void onClick(View v) { openWatchBySlug(safeStr(item, "slug", "")); }
 			});
