@@ -793,6 +793,7 @@
 
 	<!-- BOTTOM NAVBAR + SEARCH BUTTON -->
 	<RelativeLayout
+		android:id="@+id/navbar_wrapper"
 		android:layout_width="match_parent"
 		android:layout_height="64dp"
 		android:layout_gravity="bottom"
