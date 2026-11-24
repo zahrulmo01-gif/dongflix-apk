@@ -21,6 +21,7 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
@@ -72,6 +73,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -201,7 +203,6 @@ public class WatchActivity extends AppCompatActivity {
 	private boolean isWebViewFallbackActive = false;
 	private boolean isResumingFromMiniPlayer = false;
 
-	// Riwayat nonton Firebase
 	private String pendingHistoryEpisode = "";
 	private int pendingHistoryEpisodeIndex = -1;
 	private long pendingHistoryPositionMs = 0L;
@@ -210,7 +211,6 @@ public class WatchActivity extends AppCompatActivity {
 	private long lastHistorySyncMs = 0L;
 	private boolean hasRewardedWatchExp = false;
 
-	// Komentar & Profil Users Firebase
 	private DatabaseReference commentsRef;
 	private ValueEventListener commentsListener;
 	private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
@@ -300,7 +300,7 @@ public class WatchActivity extends AppCompatActivity {
 	private Drawable resolveVectorDrawable(String resName, Drawable fallback) {
 		int id = getResources().getIdentifier(resName, "drawable", getPackageName());
 		if (id != 0) {
-			Drawable d = androidx.core.content.ContextCompat.getDrawable(this, id);
+			Drawable d = ContextCompat.getDrawable(this, id);
 			if (d != null) return d.mutate();
 		}
 		return fallback;
@@ -334,7 +334,6 @@ public class WatchActivity extends AppCompatActivity {
 				float cy = b.exactCenterY();
 				float r = Math.min(w, h) * 0.40f;
 
-				// Lingkaran stiker dengan lipatan sudut kanan bawah
 				RectF oval = new RectF(cx - r, cy - r, cx + r, cy + r);
 				path.reset();
 				path.addArc(oval, 90f, 270f);
@@ -342,18 +341,15 @@ public class WatchActivity extends AppCompatActivity {
 				path.quadTo(cx, cy, cx, cy + r);
 				canvas.drawPath(path, strokePaint);
 
-				// Garis lipatan sudut
 				path.reset();
 				path.moveTo(cx, cy + r);
 				path.lineTo(cx + r, cy);
 				canvas.drawPath(path, strokePaint);
 
-				// Mata kiri & kanan
 				float eyeR = Math.max(1.5f, r * 0.11f);
 				canvas.drawCircle(cx - r * 0.34f, cy - r * 0.18f, eyeR, fillPaint);
 				canvas.drawCircle(cx + r * 0.24f, cy - r * 0.28f, eyeR, fillPaint);
 
-				// Senyum
 				RectF smileRect = new RectF(cx - r * 0.42f, cy - r * 0.22f, cx + r * 0.32f, cy + r * 0.36f);
 				canvas.drawArc(smileRect, 25f, 120f, false, strokePaint);
 			}
@@ -392,7 +388,6 @@ public class WatchActivity extends AppCompatActivity {
 				float midX = b.exactCenterX();
 				float midY = b.exactCenterY();
 
-				// Paper-plane SVG path (M22 2 L15 22 L11 13 L2 9 Z)
 				path.reset();
 				path.moveTo(x2, y1);
 				path.lineTo(midX + (w * 0.12f), y2);
@@ -863,6 +858,114 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
+	private void showDeleteCommentConfirmDialog(final String commentId) {
+		if (commentId == null || commentId.trim().isEmpty() || currentSlug.isEmpty()) return;
+		float d = getResources().getDisplayMetrics().density;
+
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout card = new LinearLayout(this);
+		card.setOrientation(LinearLayout.VERTICAL);
+		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
+
+		GradientDrawable cardBg = new GradientDrawable();
+		cardBg.setColor(Color.parseColor("#12141A"));
+		cardBg.setCornerRadius(20 * d);
+		cardBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
+		card.setBackground(cardBg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Hapus komentar?");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		card.addView(tvTitle);
+
+		TextView tvDesc = new TextView(this);
+		tvDesc.setText("Komentar yang dihapus tidak dapat dikembalikan.");
+		tvDesc.setTextColor(Color.parseColor("#94A3B8"));
+		tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		tvDesc.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		descLp.topMargin = (int) (6 * d);
+		descLp.bottomMargin = (int) (20 * d);
+		tvDesc.setLayoutParams(descLp);
+		card.addView(tvDesc);
+
+		LinearLayout btnRow = new LinearLayout(this);
+		btnRow.setOrientation(LinearLayout.HORIZONTAL);
+		btnRow.setGravity(Gravity.END);
+		btnRow.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+
+		TextView btnCancel = new TextView(this);
+		btnCancel.setText("Batal");
+		btnCancel.setTextColor(Color.parseColor("#CBD5E1"));
+		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCancel.setGravity(Gravity.CENTER);
+		btnCancel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
+		LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		cancelLp.rightMargin = (int) (10 * d);
+		btnCancel.setLayoutParams(cancelLp);
+
+		GradientDrawable cancelBg = new GradientDrawable();
+		cancelBg.setColor(Color.parseColor("#181C26"));
+		cancelBg.setCornerRadius(100f);
+		cancelBg.setStroke((int) (1 * d), Color.parseColor("#1FFFFFFF"));
+		btnCancel.setBackground(cancelBg);
+		btnCancel.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { dialog.dismiss(); }
+		});
+
+		TextView btnConfirmDelete = new TextView(this);
+		btnConfirmDelete.setText("Hapus");
+		btnConfirmDelete.setTextColor(Color.WHITE);
+		btnConfirmDelete.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnConfirmDelete.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnConfirmDelete.setGravity(Gravity.CENTER);
+		btnConfirmDelete.setPadding((int) (20 * d), (int) (10 * d), (int) (20 * d), (int) (10 * d));
+
+		GradientDrawable delBg = new GradientDrawable();
+		delBg.setColor(Color.parseColor("#DC2626"));
+		delBg.setCornerRadius(100f);
+		btnConfirmDelete.setBackground(delBg);
+		btnConfirmDelete.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+					.getReference("comments")
+					.child(cleanKey)
+					.child(commentId)
+					.removeValue();
+				dialog.dismiss();
+			}
+		});
+
+		btnRow.addView(btnCancel);
+		btnRow.addView(btnConfirmDelete);
+		card.addView(btnRow);
+
+		dialog.setContentView(card);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			int dialogW = isLandscapeOrFullscreen()
+				? Math.min((int) (360 * d), screenW - (int) (48 * d))
+				: Math.min((int) (340 * d), screenW - (int) (36 * d));
+			win.setLayout(dialogW, ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
+	}
+
 	private void openTikTokCommentSheet() {
 		final float d = getResources().getDisplayMetrics().density;
 		final int screenH = getResources().getDisplayMetrics().heightPixels;
@@ -1032,7 +1135,6 @@ public class WatchActivity extends AppCompatActivity {
 		rvComments.setAdapter(activeCommentSheetAdapter);
 		root.addView(rvComments);
 
-		// List Saran Tag @ Rapi
 		final RecyclerView rvMentionList = new RecyclerView(this);
 		rvMentionList.setLayoutManager(new LinearLayoutManager(this));
 		rvMentionList.setVisibility(View.GONE);
@@ -1151,7 +1253,6 @@ public class WatchActivity extends AppCompatActivity {
 		root.addView(replyBanner);
 		root.addView(stickerPreviewBox);
 
-		// Garis pembatas kontainer ketik
 		View inputDivider = new View(this);
 		inputDivider.setLayoutParams(new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
@@ -1159,7 +1260,6 @@ public class WatchActivity extends AppCompatActivity {
 		inputDivider.setBackgroundColor(Color.parseColor("#1E222B"));
 		root.addView(inputDivider);
 
-		// Bottom Input Bar: Avatar/Inisial Kiri + Pill Input ("Tambahkan komentar..." + Icon Stiker SVG) + Icon Kirim SVG (muncul saat ada text)
 		final LinearLayout bottomBar = new LinearLayout(this);
 		bottomBar.setOrientation(LinearLayout.HORIZONTAL);
 		bottomBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -1349,7 +1449,6 @@ public class WatchActivity extends AppCompatActivity {
 
 		sheet.setContentView(root);
 
-		// Listener tinggi keyboard langsung dari DecorView dialog supaya bilah ketik naik tepat di atas keyboard
 		final View dialogDecor = sheet.getWindow() != null ? sheet.getWindow().getDecorView() : null;
 		final ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
 			@Override
@@ -1543,7 +1642,6 @@ public class WatchActivity extends AppCompatActivity {
 
 		root.addView(rvStickers);
 		picker.setContentView(root);
-		// Hilangkan sudut abu-abu bawaanBottomSheetDialog agar sudut lengkung #0B0D11 bersih
 		picker.setOnShowListener(new DialogInterface.OnShowListener() {
 			@Override
 			public void onShow(DialogInterface dialog) {
@@ -1612,7 +1710,6 @@ public class WatchActivity extends AppCompatActivity {
 			col.setOrientation(LinearLayout.VERTICAL);
 			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-			// Nama + Pil Admin + Pil Level
 			LinearLayout nameLine = new LinearLayout(parent.getContext());
 			nameLine.setOrientation(LinearLayout.HORIZONTAL);
 			nameLine.setGravity(Gravity.CENTER_VERTICAL);
@@ -1711,7 +1808,6 @@ public class WatchActivity extends AppCompatActivity {
 			footerRow.addView(btnReply);
 			footerRow.addView(btnDelete);
 
-			// Toggle Lihat / Sembunyikan Balasan dengan ikon chevron XML
 			LinearLayout toggleRow = new LinearLayout(parent.getContext());
 			toggleRow.setOrientation(LinearLayout.HORIZONTAL);
 			toggleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1746,7 +1842,7 @@ public class WatchActivity extends AppCompatActivity {
 			toggleRow.addView(btnToggleReplies);
 			toggleRow.addView(ivToggleChevron);
 
-			// Wrapper balasan dengan garis vertikal ke bawah saja di sisi kiri (tanpa kotak stroke)
+			// Garis vertikal ke bawah saja di sisi kiri (tanpa kotak stroke mengelilingi)
 			LinearLayout repliesWrapper = new LinearLayout(parent.getContext());
 			repliesWrapper.setOrientation(LinearLayout.HORIZONTAL);
 			LinearLayout.LayoutParams repWrapLp = new LinearLayout.LayoutParams(
@@ -1848,7 +1944,7 @@ public class WatchActivity extends AppCompatActivity {
 				lBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
 				tvLevelBadge.setBackground(lBg);
 				tvLevelBadge.setTextColor(Color.parseColor("#38BDF8"));
-				tvLevelBadge.setText("Lv" + level);
+				tvLevelBadge.setText(isAdmin && exp == 0L ? "Lv999+" : "Lv" + level);
 			}
 			if (tvBody != null) {
 				tvBody.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
@@ -1895,14 +1991,7 @@ public class WatchActivity extends AppCompatActivity {
 				btnDelete.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						if (!commentId.isEmpty() && !currentSlug.isEmpty()) {
-							String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
-							FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-								.getReference("comments")
-								.child(cleanKey)
-								.child(commentId)
-								.removeValue();
-						}
+						showDeleteCommentConfirmDialog(commentId);
 					}
 				});
 			}
@@ -2023,7 +2112,7 @@ public class WatchActivity extends AppCompatActivity {
 			}
 
 			TextView tvLvl = new TextView(ctx);
-			tvLvl.setText("Lv" + rLevel);
+			tvLvl.setText(rAdmin && rExp == 0L ? "Lv999+" : "Lv" + rLevel);
 			tvLvl.setTextColor(Color.parseColor("#38BDF8"));
 			tvLvl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
 			tvLvl.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
@@ -2900,6 +2989,24 @@ public class WatchActivity extends AppCompatActivity {
 			return sideDialog;
 		} else {
 			final BottomSheetDialog sheetDialog = new BottomSheetDialog(this);
+
+			if (contentView instanceof ViewGroup) {
+				ViewGroup vg = (ViewGroup) contentView;
+				for (int i = 0; i < vg.getChildCount(); i++) {
+					View child = vg.getChildAt(i);
+					if (child instanceof ScrollView) {
+						child.setNestedScrollingEnabled(true);
+						child.setOnTouchListener(new View.OnTouchListener() {
+							@Override
+							public boolean onTouch(View v, MotionEvent event) {
+								v.getParent().requestDisallowInterceptTouchEvent(true);
+								return false;
+							}
+						});
+					}
+				}
+			}
+
 			sheetDialog.setContentView(contentView);
 
 			if (allowVideoInteraction) {
@@ -2945,6 +3052,7 @@ public class WatchActivity extends AppCompatActivity {
 						BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
 						behavior.setPeekHeight(targetSheetHeight);
 						behavior.setSkipCollapsed(true);
+						behavior.setDraggable(false);
 						behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 					}
 				}
