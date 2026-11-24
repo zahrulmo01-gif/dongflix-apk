@@ -71,7 +71,8 @@ public class MainActivity extends AppCompatActivity {
 	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
 	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat;
-	private View topNotifBlurBg, topChatBlurBg;
+	private FrameLayout topActionPillContainer;
+	private View topActionPillBlurBg;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
@@ -233,13 +234,100 @@ public class MainActivity extends AppCompatActivity {
 		return bellId > 0 ? bellId : R.drawable.ic_search;
 	}
 
-	private int resolveMessageDrawableRes() {
-		String[] candidates = {"ic_chat", "ic_message", "ic_forum", "ic_comment", "ic_mail"};
-		for (String name : candidates) {
-			int id = getResources().getIdentifier(name, "drawable", getPackageName());
-			if (id > 0) return id;
+	private void mergeTopHeaderButtonsIntoSinglePill() {
+		float d = getResources().getDisplayMetrics().density;
+		int notifRes = resolveNotificationDrawableRes();
+
+		if (imgTopNotif != null) {
+			imgTopNotif.setImageResource(notifRes);
+			imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		}
-		return resolveNotificationDrawableRes();
+		if (imgTopChat != null) {
+			imgTopChat.setImageResource(notifRes);
+			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		}
+
+		if (btnTopNotif == null || btnTopChat == null) return;
+		if (!(btnTopNotif.getParent() instanceof ViewGroup) || !(btnTopChat.getParent() instanceof ViewGroup)) return;
+
+		if (topActionPillContainer == null) {
+			ViewGroup parentNotif = (ViewGroup) btnTopNotif.getParent();
+			int insertIndex = parentNotif.indexOfChild(btnTopNotif);
+			ViewGroup.LayoutParams origLp = btnTopNotif.getLayoutParams();
+
+			FrameLayout pill = new FrameLayout(this);
+			FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, (int) (42 * d)
+			);
+			if (origLp instanceof RelativeLayout.LayoutParams) {
+				RelativeLayout.LayoutParams rlp = new RelativeLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, (int) (42 * d)
+				);
+				rlp.addRule(RelativeLayout.ALIGN_PARENT_END);
+				rlp.addRule(RelativeLayout.CENTER_VERTICAL);
+				pill.setLayoutParams(rlp);
+			} else if (origLp instanceof LinearLayout.LayoutParams) {
+				LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, (int) (42 * d)
+				);
+				llp.gravity = Gravity.CENTER_VERTICAL;
+				pill.setLayoutParams(llp);
+			} else {
+				pill.setLayoutParams(pillLp);
+			}
+
+			ViewGroup rootMain = findViewById(R.id.root_main_container);
+			BlurView blurView = new BlurView(this);
+			blurView.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+			blurView.setOverlayColor(Color.parseColor("#66141824"));
+			setupRealTimeBlurView(blurView, rootMain, 20f);
+			topActionPillBlurBg = blurView;
+			pill.addView(blurView);
+
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.CENTER_VERTICAL);
+			row.setPadding((int) (6 * d), 0, (int) (6 * d), 0);
+			row.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+
+			if (btnTopNotif.getParent() != null) ((ViewGroup) btnTopNotif.getParent()).removeView(btnTopNotif);
+			if (btnTopChat.getParent() != null) ((ViewGroup) btnTopChat.getParent()).removeView(btnTopChat);
+
+			int slotSize = (int) (36 * d);
+			btnTopNotif.setBackground(null);
+			btnTopNotif.setForeground(null);
+			btnTopNotif.setLayoutParams(new LinearLayout.LayoutParams(slotSize, slotSize));
+
+			View sep = new View(this);
+			LinearLayout.LayoutParams sepLp = new LinearLayout.LayoutParams(
+				Math.max(1, (int) (1 * d)), (int) (18 * d)
+			);
+			sepLp.setMargins((int) (2 * d), 0, (int) (2 * d), 0);
+			sep.setLayoutParams(sepLp);
+			sep.setBackgroundColor(Color.parseColor("#26FFFFFF"));
+
+			btnTopChat.setBackground(null);
+			btnTopChat.setForeground(null);
+			btnTopChat.setLayoutParams(new LinearLayout.LayoutParams(slotSize, slotSize));
+
+			row.addView(btnTopNotif);
+			row.addView(sep);
+			row.addView(btnTopChat);
+			pill.addView(row);
+
+			if (insertIndex >= 0 && insertIndex <= parentNotif.getChildCount()) {
+				parentNotif.addView(pill, insertIndex);
+			} else {
+				parentNotif.addView(pill);
+			}
+			topActionPillContainer = pill;
+		}
+
+		applyUniversalGlassStyle(topActionPillBlurBg, topActionPillContainer);
 	}
 
 	@Override
@@ -2254,8 +2342,6 @@ public class MainActivity extends AppCompatActivity {
 
 		btnTopNotif = findViewById(R.id.btn_top_search);
 		btnTopChat = findViewById(R.id.btn_top_chat);
-		topNotifBlurBg = findViewById(R.id.top_notif_blur_bg);
-		topChatBlurBg = findViewById(R.id.top_chat_blur_bg);
 		imgTopNotif = findViewById(R.id.img_top_search);
 		imgTopChat = findViewById(R.id.img_top_chat);
 
@@ -2306,44 +2392,23 @@ public class MainActivity extends AppCompatActivity {
 			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
 		}
 
-		if (imgPlayIcon != null) {
-			imgPlayIcon.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN);
-		}
-		ImageView imgSearchBarIcon = findViewById(R.id.img_search_bar_icon);
-		if (imgSearchBarIcon != null) {
-			imgSearchBarIcon.setColorFilter(Color.parseColor("#94A3B8"), PorterDuff.Mode.SRC_IN);
-		}
-		ImageView imgCompactHomeIcon = findViewById(R.id.img_compact_home_icon);
-		if (imgCompactHomeIcon != null) {
-			imgCompactHomeIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		}
-
-		if (imgTopNotif != null) {
-			imgTopNotif.setImageResource(resolveNotificationDrawableRes());
-			imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		}
-		if (imgTopChat != null) {
-			imgTopChat.setImageResource(resolveMessageDrawableRes());
-			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		}
+		mergeTopHeaderButtonsIntoSinglePill();
 		if (btnTopNotif != null) {
-			btnTopNotif.setVisibility(View.VISIBLE);
 			btnTopNotif.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) { openNotificationsSheet(); }
-			});
-		}
-		if (btnTopChat != null) {
-			btnTopChat.setVisibility(View.VISIBLE);
-			btnTopChat.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) { startActivity(new Intent(MainActivity.this, ChatActivity.class)); }
 			});
 		}
 		if (btnHeroFavorite != null) {
 			btnHeroFavorite.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) { if (currentHeroItem != null) toggleFavoriteItem(currentHeroItem); }
+			});
+		}
+		if (btnTopChat != null) {
+			btnTopChat.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) { startActivity(new Intent(MainActivity.this, ChatActivity.class)); }
 			});
 		}
 		if (gridview1 != null) {
@@ -2515,7 +2580,6 @@ public class MainActivity extends AppCompatActivity {
 		bv.setupWith(root, new RenderScriptBlur(this))
 			.setFrameClearDrawable(getWindow().getDecorView().getBackground())
 			.setBlurRadius(radius);
-		bv.setOverlayColor(Color.parseColor("#66141824"));
 		bv.setOutlineProvider(new ViewOutlineProvider() {
 			@Override public void getOutline(View view, Outline outline) { outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f); }
 		});
@@ -2644,6 +2708,7 @@ public class MainActivity extends AppCompatActivity {
 		View topHeader = findViewById(R.id.relativelayout69);
 		if (topHeader != null) topHeader.setPadding((int) (16 * d), statusH + (int) (8 * d), (int) (16 * d), (int) (10 * d));
 
+		mergeTopHeaderButtonsIntoSinglePill();
 		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		if (searchBarContainer != null) {
@@ -2682,14 +2747,12 @@ public class MainActivity extends AppCompatActivity {
 		View compactBlur = findViewById(R.id.compact_home_blur_bg);
 		View searchBlur = findViewById(R.id.search_blur_bg);
 
-		setupRealTimeBlurView(topNotifBlurBg, rootMain, 20f);
-		setupRealTimeBlurView(topChatBlurBg, rootMain, 20f);
+		setupRealTimeBlurView(topActionPillBlurBg, rootMain, 20f);
 		setupRealTimeBlurView(navBlur, rootMain, 20f);
 		setupRealTimeBlurView(compactBlur, rootMain, 20f);
 		setupRealTimeBlurView(searchBlur, rootMain, 20f);
 
-		applyUniversalGlassStyle(topNotifBlurBg, btnTopNotif);
-		applyUniversalGlassStyle(topChatBlurBg, btnTopChat);
+		applyUniversalGlassStyle(topActionPillBlurBg, topActionPillContainer);
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
 		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
