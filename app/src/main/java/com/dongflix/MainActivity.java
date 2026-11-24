@@ -71,6 +71,8 @@ public class MainActivity extends AppCompatActivity {
 	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
 	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat;
+	private FrameLayout topActionPillContainer;
+	private View topActionPillBlurBg;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
@@ -223,6 +225,109 @@ public class MainActivity extends AppCompatActivity {
 				for (int i = 0; i < vg.getChildCount(); i++) queue.add(vg.getChildAt(i));
 			}
 		}
+	}
+
+	private int resolveNotificationDrawableRes() {
+		int notifId = getResources().getIdentifier("ic_notifications", "drawable", getPackageName());
+		if (notifId > 0) return notifId;
+		int bellId = getResources().getIdentifier("ic_notification", "drawable", getPackageName());
+		return bellId > 0 ? bellId : R.drawable.ic_search;
+	}
+
+	private void mergeTopHeaderButtonsIntoSinglePill() {
+		float d = getResources().getDisplayMetrics().density;
+		int notifRes = resolveNotificationDrawableRes();
+
+		if (imgTopNotif != null) {
+			imgTopNotif.setImageResource(notifRes);
+			imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		}
+		if (imgTopChat != null) {
+			imgTopChat.setImageResource(notifRes);
+			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		}
+
+		if (btnTopNotif == null || btnTopChat == null) return;
+		if (!(btnTopNotif.getParent() instanceof ViewGroup) || !(btnTopChat.getParent() instanceof ViewGroup)) return;
+
+		if (topActionPillContainer == null) {
+			ViewGroup parentNotif = (ViewGroup) btnTopNotif.getParent();
+			int insertIndex = parentNotif.indexOfChild(btnTopNotif);
+			ViewGroup.LayoutParams origLp = btnTopNotif.getLayoutParams();
+
+			FrameLayout pill = new FrameLayout(this);
+			FrameLayout.LayoutParams pillLp = new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, (int) (42 * d)
+			);
+			if (origLp instanceof RelativeLayout.LayoutParams) {
+				RelativeLayout.LayoutParams rlp = new RelativeLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, (int) (42 * d)
+				);
+				rlp.addRule(RelativeLayout.ALIGN_PARENT_END);
+				rlp.addRule(RelativeLayout.CENTER_VERTICAL);
+				pill.setLayoutParams(rlp);
+			} else if (origLp instanceof LinearLayout.LayoutParams) {
+				LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, (int) (42 * d)
+				);
+				llp.gravity = Gravity.CENTER_VERTICAL;
+				pill.setLayoutParams(llp);
+			} else {
+				pill.setLayoutParams(pillLp);
+			}
+
+			ViewGroup rootMain = findViewById(R.id.root_main_container);
+			BlurView blurView = new BlurView(this);
+			blurView.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+			blurView.setOverlayColor(Color.parseColor("#66141824"));
+			setupRealTimeBlurView(blurView, rootMain, 20f);
+			topActionPillBlurBg = blurView;
+			pill.addView(blurView);
+
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.CENTER_VERTICAL);
+			row.setPadding((int) (6 * d), 0, (int) (6 * d), 0);
+			row.setLayoutParams(new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+
+			if (btnTopNotif.getParent() != null) ((ViewGroup) btnTopNotif.getParent()).removeView(btnTopNotif);
+			if (btnTopChat.getParent() != null) ((ViewGroup) btnTopChat.getParent()).removeView(btnTopChat);
+
+			int slotSize = (int) (36 * d);
+			btnTopNotif.setBackground(null);
+			btnTopNotif.setForeground(null);
+			btnTopNotif.setLayoutParams(new LinearLayout.LayoutParams(slotSize, slotSize));
+
+			View sep = new View(this);
+			LinearLayout.LayoutParams sepLp = new LinearLayout.LayoutParams(
+				Math.max(1, (int) (1 * d)), (int) (18 * d)
+			);
+			sepLp.setMargins((int) (2 * d), 0, (int) (2 * d), 0);
+			sep.setLayoutParams(sepLp);
+			sep.setBackgroundColor(Color.parseColor("#26FFFFFF"));
+
+			btnTopChat.setBackground(null);
+			btnTopChat.setForeground(null);
+			btnTopChat.setLayoutParams(new LinearLayout.LayoutParams(slotSize, slotSize));
+
+			row.addView(btnTopNotif);
+			row.addView(sep);
+			row.addView(btnTopChat);
+			pill.addView(row);
+
+			if (insertIndex >= 0 && insertIndex <= parentNotif.getChildCount()) {
+				parentNotif.addView(pill, insertIndex);
+			} else {
+				parentNotif.addView(pill);
+			}
+			topActionPillContainer = pill;
+		}
+
+		applyUniversalGlassStyle(topActionPillBlurBg, topActionPillContainer);
 	}
 
 	@Override
@@ -2287,10 +2392,7 @@ public class MainActivity extends AppCompatActivity {
 			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
 		}
 
-		if (imgTopNotif != null) {
-			int notifId = getResources().getIdentifier("ic_notifications", "drawable", getPackageName());
-			imgTopNotif.setImageResource(notifId > 0 ? notifId : R.drawable.ic_search);
-		}
+		mergeTopHeaderButtonsIntoSinglePill();
 		if (btnTopNotif != null) {
 			btnTopNotif.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -2606,10 +2708,7 @@ public class MainActivity extends AppCompatActivity {
 		View topHeader = findViewById(R.id.relativelayout69);
 		if (topHeader != null) topHeader.setPadding((int) (16 * d), statusH + (int) (8 * d), (int) (16 * d), (int) (10 * d));
 
-		applyUniversalGlassStyle(btnTopNotif, btnTopNotif);
-		applyUniversalGlassStyle(btnTopChat, btnTopChat);
-		if (imgTopNotif != null) imgTopNotif.setColorFilter(Color.WHITE);
-		if (imgTopChat != null) imgTopChat.setColorFilter(Color.WHITE);
+		mergeTopHeaderButtonsIntoSinglePill();
 		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		if (searchBarContainer != null) {
@@ -2648,10 +2747,12 @@ public class MainActivity extends AppCompatActivity {
 		View compactBlur = findViewById(R.id.compact_home_blur_bg);
 		View searchBlur = findViewById(R.id.search_blur_bg);
 
+		setupRealTimeBlurView(topActionPillBlurBg, rootMain, 20f);
 		setupRealTimeBlurView(navBlur, rootMain, 20f);
 		setupRealTimeBlurView(compactBlur, rootMain, 20f);
 		setupRealTimeBlurView(searchBlur, rootMain, 20f);
 
+		applyUniversalGlassStyle(topActionPillBlurBg, topActionPillContainer);
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
 		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
