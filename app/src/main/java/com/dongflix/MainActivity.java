@@ -70,7 +70,8 @@ public class MainActivity extends AppCompatActivity {
 	private TextView textCultivationSeeAll, textCompletedSeeAll, textComedySeeAll, textMysterySeeAll, textMovieSeeAll;
 	private ImageView imgHeroBanner, imgPlayIcon, imgHeroFavorite, imgTopNotif, imgTopChat, imgUserAvatar;
 	private LinearLayout btnHeroPlay, indicatorCapsule, searchBarContainer;
-	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat;
+	private FrameLayout btnHeroFavorite, btnTopNotif, btnTopChat, topActionPill;
+	private View topActionPillBlurBg;
 	private View dot0, dot1, dot2;
 	private EditText inputSearch;
 
@@ -2265,6 +2266,8 @@ public class MainActivity extends AppCompatActivity {
 		dot1 = findViewById(R.id.dot_1);
 		dot2 = findViewById(R.id.dot_2);
 
+		topActionPill = findViewById(R.id.top_action_pill);
+		topActionPillBlurBg = findViewById(R.id.top_action_pill_blur_bg);
 		btnTopNotif = findViewById(R.id.btn_top_search);
 		btnTopChat = findViewById(R.id.btn_top_chat);
 		imgTopNotif = findViewById(R.id.img_top_search);
@@ -2505,6 +2508,7 @@ public class MainActivity extends AppCompatActivity {
 		bv.setupWith(root, new RenderScriptBlur(this))
 			.setFrameClearDrawable(getWindow().getDecorView().getBackground())
 			.setBlurRadius(radius);
+		bv.setOverlayColor(Color.parseColor("#66141824"));
 		bv.setOutlineProvider(new ViewOutlineProvider() {
 			@Override public void getOutline(View view, Outline outline) { outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f); }
 		});
@@ -2634,8 +2638,6 @@ public class MainActivity extends AppCompatActivity {
 		if (topHeader != null) topHeader.setPadding((int) (16 * d), statusH + (int) (8 * d), (int) (16 * d), (int) (10 * d));
 
 		applyHeaderActionIcons();
-		applyUniversalGlassStyle(btnTopNotif, btnTopNotif);
-		applyUniversalGlassStyle(btnTopChat, btnTopChat);
 		if (imgHeroFavorite != null) imgHeroFavorite.setColorFilter(Color.WHITE);
 
 		if (searchBarContainer != null) {
@@ -2674,10 +2676,12 @@ public class MainActivity extends AppCompatActivity {
 		View compactBlur = findViewById(R.id.compact_home_blur_bg);
 		View searchBlur = findViewById(R.id.search_blur_bg);
 
+		setupRealTimeBlurView(topActionPillBlurBg, rootMain, 20f);
 		setupRealTimeBlurView(navBlur, rootMain, 20f);
 		setupRealTimeBlurView(compactBlur, rootMain, 20f);
 		setupRealTimeBlurView(searchBlur, rootMain, 20f);
 
+		applyUniversalGlassStyle(topActionPillBlurBg, topActionPill);
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
 		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
