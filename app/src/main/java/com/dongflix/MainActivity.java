@@ -387,6 +387,403 @@ public class MainActivity extends AppCompatActivity {
 		userProfileRef.addValueEventListener(userProfileListener);
 	}
 
+	private void setupPullToRefresh() {
+		final NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
+		if (mainScroll == null) return;
+
+		float d = getResources().getDisplayMetrics().density;
+		if (pullRefreshIndicator != null) {
+			GradientDrawable pillBg = new GradientDrawable();
+			pillBg.setShape(GradientDrawable.OVAL);
+			pillBg.setColor(Color.parseColor("#181C26"));
+			pullRefreshIndicator.setBackground(pillBg);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) pullRefreshIndicator.setElevation(18f);
+		}
+		if (pullRefreshSpinner != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			pullRefreshSpinner.setIndeterminateTintList(ColorStateList.valueOf(Color.WHITE));
+		}
+		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+
+		final float thresholdPx = 90 * d;
+		mainScroll.setOnTouchListener(new View.OnTouchListener() {
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				if (isRefreshingCatalog) return false;
+				switch (event.getActionMasked()) {
+					case MotionEvent.ACTION_DOWN:
+						pullStartY = event.getRawY();
+						isPullingFromTop = (mainScroll.getScrollY() <= 0);
+						break;
+					case MotionEvent.ACTION_MOVE:
+						if (isPullingFromTop && mainScroll.getScrollY() <= 0) {
+							float deltaY = event.getRawY() - pullStartY;
+							if (deltaY > (16 * d) && pullRefreshIndicator != null) {
+								pullRefreshIndicator.setVisibility(View.VISIBLE);
+								if (imgPullRefreshIcon != null) {
+									imgPullRefreshIcon.setVisibility(View.VISIBLE);
+									imgPullRefreshIcon.setRotation(Math.min(180f, deltaY * 1.4f));
+								}
+								if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.GONE);
+							}
+						}
+						break;
+					case MotionEvent.ACTION_UP:
+					case MotionEvent.ACTION_CANCEL:
+						if (isPullingFromTop && mainScroll.getScrollY() <= 0) {
+							if (event.getRawY() - pullStartY >= thresholdPx) triggerCatalogRefresh();
+							else if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.GONE);
+						}
+						isPullingFromTop = false;
+						break;
+				}
+				return false;
+			}
+		});
+	}
+
+	private void triggerCatalogRefresh() {
+		if (isRefreshingCatalog) return;
+		isRefreshingCatalog = true;
+		if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.VISIBLE);
+		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setVisibility(View.GONE);
+		if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.VISIBLE);
+		if (dongflix_req != null && _dongflix_req_request_listener != null) {
+			dongflix_req.startRequestNetwork("GET", CATALOG_URL, "", _dongflix_req_request_listener);
+		}
+	}
+
+	private void hideRefreshIndicator() {
+		isRefreshingCatalog = false;
+		if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.GONE);
+		if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.GONE);
+		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setVisibility(View.VISIBLE);
+	}
+
+	private void startHeroAutoSlider() {
+		stopHeroAutoSlider();
+		if (listMap == null || listMap.size() < 3) return;
+
+		float d = getResources().getDisplayMetrics().density;
+		final int activeW = (int) (16 * d);
+		final int inactiveW = (int) (5 * d);
+		final int dotH = (int) (5 * d);
+		final int dotGap = (int) (5 * d);
+
+		final GradientDrawable activeDot = new GradientDrawable();
+		activeDot.setShape(GradientDrawable.RECTANGLE);
+		activeDot.setColor(Color.WHITE);
+		activeDot.setCornerRadius(100f);
+
+		final GradientDrawable inactiveDot = new GradientDrawable();
+		inactiveDot.setShape(GradientDrawable.RECTANGLE);
+		inactiveDot.setColor(Color.parseColor("#80FFFFFF"));
+		inactiveDot.setCornerRadius(100f);
+
+		heroCurrentIndex = 0;
+		heroSliderRunnable = new Runnable() {
+			@Override
+			public void run() {
+				if (isFinishing() || isDestroyed() || listMap == null || listMap.size() < 3) return;
+				int pos = heroCurrentIndex % 3;
+				HashMap<String, Object> item = listMap.get(pos);
+				currentHeroItem = item;
+
+				String heroCover = normalizeCoverUrl(safeStr(item, "cover", ""));
+				final String heroSlug = safeStr(item, "slug", "");
+
+				if (textHeroTitle != null) textHeroTitle.setText(cleanText(safeStr(item, "title", "")));
+				if (textHeroDesc != null) textHeroDesc.setText(cleanText(safeStr(item, "synopsis", "")));
+				updateHeroFavoriteIcon(heroSlug);
+
+				if (imgHeroBanner != null && !heroCover.isEmpty()) {
+					Glide.with(MainActivity.this).load(Uri.parse(heroCover)).centerCrop()
+						.placeholder(R.drawable.default_image).error(R.drawable.default_image).into(imgHeroBanner);
+				}
+				if (btnHeroPlay != null) {
+					btnHeroPlay.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) { openWatchBySlug(heroSlug); }
+					});
+				}
+
+				View[] dots = {dot0, dot1, dot2};
+				for (int i = 0; i < dots.length; i++) {
+					if (dots[i] != null) {
+						boolean isActive = (i == pos);
+						if (dots[i].getLayoutParams() instanceof LinearLayout.LayoutParams) {
+							LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
+							lp.width = isActive ? activeW : inactiveW;
+							lp.height = dotH;
+							if (i > 0) lp.leftMargin = dotGap;
+							dots[i].setLayoutParams(lp);
+						}
+						dots[i].setBackground(isActive ? activeDot : inactiveDot);
+					}
+				}
+
+				heroCurrentIndex = (pos + 1) % 3;
+				heroSliderHandler.postDelayed(this, 4000);
+			}
+		};
+		heroSliderHandler.post(heroSliderRunnable);
+	}
+
+	private void stopHeroAutoSlider() {
+		if (heroSliderRunnable != null) {
+			heroSliderHandler.removeCallbacks(heroSliderRunnable);
+			heroSliderRunnable = null;
+		}
+		heroSliderHandler.removeCallbacksAndMessages(null);
+	}
+
+	private void bindSectionLikePopularToday(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
+		if (rv == null) return;
+		float d = getResources().getDisplayMetrics().density;
+		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		rv.setNestedScrollingEnabled(false);
+		rv.setOnFlingListener(null);
+		rv.setClipToPadding(false);
+		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162));
+	}
+
+	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
+		ArrayList<HashMap<String, Object>> list = new ArrayList<>();
+		for (int i = 0; i < count; i++) {
+			HashMap<String, Object> m = new HashMap<>();
+			m.put("is_loading", true);
+			list.add(m);
+		}
+		return list;
+	}
+
+	private void populateCategorizedSections() {
+		if (fullCatalogList == null || fullCatalogList.isEmpty()) return;
+
+		ArrayList<HashMap<String, Object>> cultivation = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> completed = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> comedy = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> mystery = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> movie = new ArrayList<>();
+		ArrayList<HashMap<String, Object>> romance = new ArrayList<>();
+
+		for (HashMap<String, Object> item : fullCatalogList) {
+			String status = safeStr(item, "status", "").toLowerCase(Locale.US);
+			String genres = safeStr(item, "genres", "").toLowerCase(Locale.US);
+			String meta = (genres + " " + safeStr(item, "title", "") + " "
+				+ safeStr(item, "synopsis", "") + " " + safeStr(item, "type", "") + " " + safeStr(item, "episode", ""))
+				.toLowerCase(Locale.US);
+
+			if (meta.contains("kultivasi") || meta.contains("cultivation") || meta.contains("abadi") || meta.contains("immortal")) {
+				cultivation.add(item);
+			}
+			if (status.contains("completed") || status.contains("tamat")) completed.add(item);
+			if (meta.contains("comedy") || meta.contains("komedi") || meta.contains("slice of life")) comedy.add(item);
+			if (meta.contains("mystery") || meta.contains("misteri") || meta.contains("teki")
+				|| meta.contains("thriller") || meta.contains("suspense") || meta.contains("detective")) {
+				mystery.add(item);
+			}
+			if (meta.contains("movie") || meta.contains("film")) movie.add(item);
+			if (genres.contains("romance") || genres.contains("romantis") || genres.contains("romansa")
+				|| meta.contains("romance") || meta.contains("romantis")) {
+				romance.add(item);
+			}
+		}
+
+		ArrayList<HashMap<String, Object>> fallback = new ArrayList<>(fullCatalogList.subList(0, Math.min(8, fullCatalogList.size())));
+		if (cultivation.isEmpty()) cultivation.addAll(fallback);
+		if (completed.isEmpty()) completed.addAll(fallback);
+		if (comedy.isEmpty()) comedy.addAll(fallback);
+		if (mystery.isEmpty()) mystery.addAll(fallback);
+		if (movie.isEmpty()) movie.addAll(fallback);
+		if (romance.isEmpty()) romance.addAll(fallback);
+
+		bindSectionLikePopularToday(recyclerCultivationDonghua, new ArrayList<>(cultivation.subList(0, Math.min(10, cultivation.size()))));
+		bindSectionLikePopularToday(recyclerCompletedDonghua, new ArrayList<>(completed.subList(0, Math.min(10, completed.size()))));
+		bindSectionLikePopularToday(recyclerComedyDonghua, new ArrayList<>(comedy.subList(0, Math.min(10, comedy.size()))));
+		bindSectionLikePopularToday(recyclerMysteryDonghua, new ArrayList<>(mystery.subList(0, Math.min(10, mystery.size()))));
+		bindSectionLikePopularToday(recyclerMovieDonghua, new ArrayList<>(movie.subList(0, Math.min(10, movie.size()))));
+		bindSectionLikePopularToday(recyclerRomanceDonghua, new ArrayList<>(romance.subList(0, Math.min(10, romance.size()))));
+	}
+
+	private void setupContinueWatchingSection() {
+		layoutSectionContinue = findViewById(R.id.layout_section_continue);
+		textTitleContinue = findViewById(R.id.text_title_continue);
+		textContinueSeeAll = findViewById(R.id.text_continue_see_all);
+		recyclerContinue = findViewById(R.id.recyclerContinue);
+
+		if (recyclerContinue != null) {
+			float d = getResources().getDisplayMetrics().density;
+			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+			recyclerContinue.setNestedScrollingEnabled(false);
+			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+		}
+		if (textContinueSeeAll != null) {
+			textContinueSeeAll.setText("Lihat riwayat");
+			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
+			textContinueSeeAll.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					activePustakaTab = 0;
+					selectNavTabByIndex(1, true);
+				}
+			});
+		}
+	}
+
+	private void setupPustakaSection() {
+		View pageFavorite = findViewById(R.id.layout_favorite);
+		if (!(pageFavorite instanceof ViewGroup)) return;
+
+		ViewGroup favGroup = (ViewGroup) pageFavorite;
+		favGroup.removeAllViews();
+		favGroup.setBackgroundColor(Color.parseColor("#000000"));
+
+		float d = getResources().getDisplayMetrics().density;
+		int statusH = 0;
+		int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+		if (resId > 0) statusH = getResources().getDimensionPixelSize(resId);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), 0);
+
+		LinearLayout headerRow = new LinearLayout(this);
+		headerRow.setOrientation(LinearLayout.HORIZONTAL);
+		headerRow.setGravity(Gravity.CENTER_VERTICAL);
+		headerRow.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Pustaka Saya");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		textPustakaCountBadge = new TextView(this);
+		textPustakaCountBadge.setText("0 item");
+		textPustakaCountBadge.setTextColor(Color.parseColor("#94A3B8"));
+		textPustakaCountBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+		textPustakaCountBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textPustakaCountBadge.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
+		GradientDrawable badgeBg = new GradientDrawable();
+		badgeBg.setColor(Color.parseColor("#12141A"));
+		badgeBg.setCornerRadius(100f);
+		badgeBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		textPustakaCountBadge.setBackground(badgeBg);
+
+		headerRow.addView(tvTitle);
+		headerRow.addView(textPustakaCountBadge);
+		root.addView(headerRow);
+
+		LinearLayout tabsPillContainer = new LinearLayout(this);
+		tabsPillContainer.setOrientation(LinearLayout.HORIZONTAL);
+		tabsPillContainer.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
+		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (44 * d));
+		tabsLp.topMargin = (int) (16 * d);
+		tabsPillContainer.setLayoutParams(tabsLp);
+
+		GradientDrawable containerBg = new GradientDrawable();
+		containerBg.setColor(Color.parseColor("#12141A"));
+		containerBg.setCornerRadius(100f);
+		containerBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		tabsPillContainer.setBackground(containerBg);
+
+		tabPustakaRiwayat = buildPustakaPillTab("Riwayat", 0);
+		tabPustakaDaftarku = buildPustakaPillTab("Daftarku", 1);
+		tabPustakaUnduhan = buildPustakaPillTab("Unduhan", 2);
+
+		tabsPillContainer.addView(tabPustakaRiwayat);
+		tabsPillContainer.addView(tabPustakaDaftarku);
+		tabsPillContainer.addView(tabPustakaUnduhan);
+		root.addView(tabsPillContainer);
+
+		textPustakaSectionLabel = new TextView(this);
+		textPustakaSectionLabel.setText("Terakhir Ditonton");
+		textPustakaSectionLabel.setTextColor(Color.parseColor("#94A3B8"));
+		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+		textPustakaSectionLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		secLp.topMargin = (int) (16 * d);
+		secLp.bottomMargin = (int) (12 * d);
+		textPustakaSectionLabel.setLayoutParams(secLp);
+		root.addView(textPustakaSectionLabel);
+
+		layoutPustakaEmptyState = new LinearLayout(this);
+		layoutPustakaEmptyState.setOrientation(LinearLayout.VERTICAL);
+		layoutPustakaEmptyState.setGravity(Gravity.CENTER);
+		layoutPustakaEmptyState.setPadding((int) (24 * d), (int) (48 * d), (int) (24 * d), (int) (120 * d));
+		layoutPustakaEmptyState.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		layoutPustakaEmptyState.setVisibility(View.GONE);
+
+		textPustakaEmptyTitle = new TextView(this);
+		textPustakaEmptyTitle.setTextColor(Color.WHITE);
+		textPustakaEmptyTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+		textPustakaEmptyTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textPustakaEmptyTitle.setGravity(Gravity.CENTER);
+
+		textPustakaEmptyDesc = new TextView(this);
+		textPustakaEmptyDesc.setTextColor(Color.parseColor("#64748B"));
+		textPustakaEmptyDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+		textPustakaEmptyDesc.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textPustakaEmptyDesc.setGravity(Gravity.CENTER);
+		LinearLayout.LayoutParams eDescLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		eDescLp.topMargin = (int) (6 * d);
+		textPustakaEmptyDesc.setLayoutParams(eDescLp);
+
+		layoutPustakaEmptyState.addView(textPustakaEmptyTitle);
+		layoutPustakaEmptyState.addView(textPustakaEmptyDesc);
+		root.addView(layoutPustakaEmptyState);
+
+		recyclerPustakaList = new RecyclerView(this);
+		recyclerPustakaList.setLayoutManager(new LinearLayoutManager(this));
+		recyclerPustakaList.setClipToPadding(false);
+		recyclerPustakaList.setPadding(0, 0, 0, (int) (130 * d));
+		recyclerPustakaList.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		root.addView(recyclerPustakaList);
+
+		favGroup.addView(root);
+		updatePustakaTabVisual(activePustakaTab);
+	}
+
+	private TextView buildPustakaPillTab(String label, final int tabIndex) {
+		TextView tv = new TextView(this);
+		tv.setText(label);
+		tv.setGravity(Gravity.CENTER);
+		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		tv.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+		tv.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				activePustakaTab = tabIndex;
+				updatePustakaTabVisual(tabIndex);
+				renderActivePustakaTab();
+			}
+		});
+		return tv;
+	}
+
+	private void updatePustakaTabVisual(int idx) {
+		TextView[] tabs = {tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan};
+		for (int i = 0; i < tabs.length; i++) {
+			TextView tv = tabs[i];
+			if (tv == null) continue;
+			boolean selected = (i == idx);
+			if (selected) {
+				GradientDrawable activeBg = new GradientDrawable();
+				activeBg.setColor(Color.parseColor("#2563EB"));
+				activeBg.setCornerRadius(100f);
+				tv.setBackground(activeBg);
+				tv.setTextColor(Color.WHITE);
+			} else {
+				tv.setBackgroundColor(Color.TRANSPARENT);
+				tv.setTextColor(Color.parseColor("#94A3B8"));
+			}
+		}
+	}
+
 	private void setupAccountSection() {
 		View pageProfile = findViewById(R.id.layout_profile);
 		if (!(pageProfile instanceof ViewGroup)) return;
@@ -410,7 +807,6 @@ public class MainActivity extends AppCompatActivity {
 		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), (int) (130 * d));
 		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-		// Kartu Identitas Profil + Tombol Ubah Profil (tanpa syarat premium)
 		LinearLayout profileCard = new LinearLayout(this);
 		profileCard.setOrientation(LinearLayout.VERTICAL);
 		profileCard.setPadding((int) (18 * d), (int) (18 * d), (int) (18 * d), (int) (18 * d));
@@ -506,7 +902,6 @@ public class MainActivity extends AppCompatActivity {
 		topRow.addView(btnEditProfile);
 		profileCard.addView(topRow);
 
-		// Statistik 3 Kolom di dalam kartu profil
 		View innerDiv = new View(this);
 		LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d)));
 		divLp.topMargin = (int) (16 * d);
@@ -530,7 +925,6 @@ public class MainActivity extends AppCompatActivity {
 
 		root.addView(profileCard);
 
-		// Kartu Progres Level & XP
 		LinearLayout levelCard = new LinearLayout(this);
 		levelCard.setOrientation(LinearLayout.VERTICAL);
 		levelCard.setPadding((int) (18 * d), (int) (16 * d), (int) (18 * d), (int) (16 * d));
@@ -605,7 +999,6 @@ public class MainActivity extends AppCompatActivity {
 
 		root.addView(levelCard);
 
-		// Kartu Aksi Cepat
 		LinearLayout menuCard = new LinearLayout(this);
 		menuCard.setOrientation(LinearLayout.VERTICAL);
 		menuCard.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
@@ -2062,7 +2455,6 @@ public class MainActivity extends AppCompatActivity {
 			col.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
 			col.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
-			// Judul satu baris saja di Lanjutkan Menonton
 			TextView tvTitle = new TextView(parent.getContext());
 			tvTitle.setTextColor(Color.WHITE);
 			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
@@ -2084,7 +2476,6 @@ public class MainActivity extends AppCompatActivity {
 			col.addView(tvEp);
 			card.addView(col);
 
-			// Progressbar tipis (2dp) selaras dengan progress Firebase; jika tidak ada durasi maka di tengah
 			FrameLayout barTrack = new FrameLayout(parent.getContext());
 			barTrack.setLayoutParams(new FrameLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(2, (int) (2 * d)), Gravity.BOTTOM | Gravity.START
@@ -2137,7 +2528,6 @@ public class MainActivity extends AppCompatActivity {
 							float ratio = Math.max(0f, Math.min(1f, (float) posMs / (float) durMs));
 							leftPos = Math.round((totalW - segW) * ratio);
 						} else {
-							// Jika tidak ada data progress durasi di Firebase, letakkan di tengah
 							leftPos = Math.max(0, (totalW - segW) / 2);
 						}
 						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(segW, ViewGroup.LayoutParams.MATCH_PARENT);
