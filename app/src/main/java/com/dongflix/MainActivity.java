@@ -616,7 +616,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
@@ -2854,7 +2854,6 @@ public class MainActivity extends AppCompatActivity {
 						} else if (durMs > 0L && posMs <= 0L) {
 							fillW = 0;
 						} else {
-							// Jika tidak ada progress durasi di Firebase, tampilkan 50% (tengah)
 							fillW = totalW / 2;
 						}
 						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(fillW, ViewGroup.LayoutParams.MATCH_PARENT);
