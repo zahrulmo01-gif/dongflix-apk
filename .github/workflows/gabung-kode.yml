@@ -1,0 +1,31 @@
+name: Gabungkan Kode Java & Gradle
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gabung:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Gabungkan file ke satu teks
+        run: |
+          {
+            echo "=== app/build.gradle ==="
+            cat app/build.gradle
+            for f in $(find app/src/main/java -name "*.java" | sort); do
+              echo ""
+              echo "=== $f ==="
+              cat "$f"
+            done
+          } > semua_kode.txt
+          wc -l -c semua_kode.txt
+          cat semua_kode.txt
+
+      - name: Upload hasil gabungan
+        uses: actions/upload-artifact@v4
+        with:
+          name: semua-kode-java
+          path: semua_kode.txt
