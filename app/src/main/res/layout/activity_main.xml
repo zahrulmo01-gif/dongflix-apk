@@ -116,7 +116,8 @@
 								android:layout_width="20dp"
 								android:layout_height="20dp"
 								android:layout_gravity="center"
-								android:src="@drawable/ic_search"
+								android:contentDescription="Notifikasi"
+								android:src="@drawable/ic_notifications"
 								android:scaleType="fitCenter" />
 						</FrameLayout>
 
@@ -131,6 +132,7 @@
 								android:layout_width="20dp"
 								android:layout_height="20dp"
 								android:layout_gravity="center"
+								android:contentDescription="Pesan"
 								android:src="@drawable/ic_chat"
 								android:scaleType="fitCenter" />
 						</FrameLayout>
