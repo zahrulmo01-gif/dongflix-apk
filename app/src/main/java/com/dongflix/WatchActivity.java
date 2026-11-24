@@ -48,6 +48,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.LinearInterpolator;
@@ -71,9 +72,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -299,7 +297,74 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	private Drawable createSendArrowIcon(final int color, final float strokeWidthPx) {
+	private Drawable resolveVectorDrawable(String resName, Drawable fallback) {
+		int id = getResources().getIdentifier(resName, "drawable", getPackageName());
+		if (id != 0) {
+			Drawable d = androidx.core.content.ContextCompat.getDrawable(this, id);
+			if (d != null) return d.mutate();
+		}
+		return fallback;
+	}
+
+	private Drawable createStickerSvgDrawable(final int color, final float strokePx) {
+		return new Drawable() {
+			private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Path path = new Path();
+
+			{
+				strokePaint.setColor(color);
+				strokePaint.setStyle(Paint.Style.STROKE);
+				strokePaint.setStrokeWidth(strokePx);
+				strokePaint.setStrokeCap(Paint.Cap.ROUND);
+				strokePaint.setStrokeJoin(Paint.Join.ROUND);
+
+				fillPaint.setColor(color);
+				fillPaint.setStyle(Paint.Style.FILL);
+			}
+
+			@Override
+			public void draw(@NonNull Canvas canvas) {
+				Rect b = getBounds();
+				float w = b.width();
+				float h = b.height();
+				if (w <= 0 || h <= 0) return;
+
+				float cx = b.exactCenterX();
+				float cy = b.exactCenterY();
+				float r = Math.min(w, h) * 0.40f;
+
+				// Lingkaran stiker dengan lipatan sudut kanan bawah
+				RectF oval = new RectF(cx - r, cy - r, cx + r, cy + r);
+				path.reset();
+				path.addArc(oval, 90f, 270f);
+				path.lineTo(cx + r, cy);
+				path.quadTo(cx, cy, cx, cy + r);
+				canvas.drawPath(path, strokePaint);
+
+				// Garis lipatan sudut
+				path.reset();
+				path.moveTo(cx, cy + r);
+				path.lineTo(cx + r, cy);
+				canvas.drawPath(path, strokePaint);
+
+				// Mata kiri & kanan
+				float eyeR = Math.max(1.5f, r * 0.11f);
+				canvas.drawCircle(cx - r * 0.34f, cy - r * 0.18f, eyeR, fillPaint);
+				canvas.drawCircle(cx + r * 0.24f, cy - r * 0.28f, eyeR, fillPaint);
+
+				// Senyum
+				RectF smileRect = new RectF(cx - r * 0.42f, cy - r * 0.22f, cx + r * 0.32f, cy + r * 0.36f);
+				canvas.drawArc(smileRect, 25f, 120f, false, strokePaint);
+			}
+
+			@Override public void setAlpha(int alpha) { strokePaint.setAlpha(alpha); fillPaint.setAlpha(alpha); }
+			@Override public void setColorFilter(ColorFilter colorFilter) { strokePaint.setColorFilter(colorFilter); fillPaint.setColorFilter(colorFilter); }
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+	}
+
+	private Drawable createSendSvgDrawable(final int color, final float strokePx) {
 		return new Drawable() {
 			private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 			private final Path path = new Path();
@@ -307,7 +372,7 @@ public class WatchActivity extends AppCompatActivity {
 			{
 				paint.setColor(color);
 				paint.setStyle(Paint.Style.STROKE);
-				paint.setStrokeWidth(strokeWidthPx);
+				paint.setStrokeWidth(strokePx);
 				paint.setStrokeCap(Paint.Cap.ROUND);
 				paint.setStrokeJoin(Paint.Join.ROUND);
 			}
@@ -319,17 +384,24 @@ public class WatchActivity extends AppCompatActivity {
 				float h = b.height();
 				if (w <= 0 || h <= 0) return;
 
-				path.reset();
-				float left = b.left + (w * 0.22f);
-				float right = b.right - (w * 0.20f);
+				float p = Math.min(w, h) * 0.18f;
+				float x1 = b.left + p;
+				float y1 = b.top + p;
+				float x2 = b.right - p;
+				float y2 = b.bottom - p;
+				float midX = b.exactCenterX();
 				float midY = b.exactCenterY();
-				float arrowSpan = Math.min(w, h) * 0.26f;
 
-				path.moveTo(left, midY);
-				path.lineTo(right, midY);
-				path.moveTo(right - arrowSpan, midY - arrowSpan);
-				path.lineTo(right, midY);
-				path.lineTo(right - arrowSpan, midY + arrowSpan);
+				// Paper-plane SVG path (M22 2 L15 22 L11 13 L2 9 Z)
+				path.reset();
+				path.moveTo(x2, y1);
+				path.lineTo(midX + (w * 0.12f), y2);
+				path.lineTo(midX - (w * 0.04f), midY + (h * 0.04f));
+				path.lineTo(x1, midY - (h * 0.12f));
+				path.close();
+
+				path.moveTo(x2, y1);
+				path.lineTo(midX - (w * 0.04f), midY + (h * 0.04f));
 				canvas.drawPath(path, paint);
 			}
 
@@ -793,7 +865,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	private void openTikTokCommentSheet() {
 		final float d = getResources().getDisplayMetrics().density;
-		int screenH = getResources().getDisplayMetrics().heightPixels;
+		final int screenH = getResources().getDisplayMetrics().heightPixels;
 		final int[] videoBottomHolder = new int[]{(int) (220 * d)};
 		if (layoutPlayer != null && layoutPlayer.getHeight() > 0) {
 			int[] loc = new int[2];
@@ -805,7 +877,10 @@ public class WatchActivity extends AppCompatActivity {
 		final BottomSheetDialog sheet = new BottomSheetDialog(this);
 		if (sheet.getWindow() != null) {
 			sheet.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-			sheet.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+			sheet.getWindow().setSoftInputMode(
+				WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+				| WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+			);
 		}
 
 		final LinearLayout root = new LinearLayout(this);
@@ -817,7 +892,6 @@ public class WatchActivity extends AppCompatActivity {
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
 		root.setBackground(sheetBg);
 
-		// Drag handle + Header
 		View handle = new View(this);
 		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int) (38 * d), (int) (4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -893,13 +967,6 @@ public class WatchActivity extends AppCompatActivity {
 		btnRemoveSticker.setGravity(Gravity.CENTER);
 		btnRemoveSticker.setBackgroundColor(Color.parseColor("#EF4444"));
 		btnRemoveSticker.setLayoutParams(new FrameLayout.LayoutParams((int) (18 * d), (int) (18 * d), Gravity.TOP | Gravity.END));
-		btnRemoveSticker.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				selectedStickerUrl[0] = "";
-				stickerPreviewBox.setVisibility(View.GONE);
-			}
-		});
 		stickerPreviewBox.addView(ivStickerPreview);
 		stickerPreviewBox.addView(btnRemoveSticker);
 
@@ -1092,8 +1159,8 @@ public class WatchActivity extends AppCompatActivity {
 		inputDivider.setBackgroundColor(Color.parseColor("#1E222B"));
 		root.addView(inputDivider);
 
-		// Bottom Input Bar: Avatar/Inisial Kiri + Pill Input ("Tambahkan komentar..." + Stiker) + Icon Kirim (muncul saat ada teks/stiker)
-		LinearLayout bottomBar = new LinearLayout(this);
+		// Bottom Input Bar: Avatar/Inisial Kiri + Pill Input ("Tambahkan komentar..." + Icon Stiker SVG) + Icon Kirim SVG (muncul saat ada text)
+		final LinearLayout bottomBar = new LinearLayout(this);
 		bottomBar.setOrientation(LinearLayout.HORIZONTAL);
 		bottomBar.setGravity(Gravity.CENTER_VERTICAL);
 		bottomBar.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (12 * d));
@@ -1128,7 +1195,7 @@ public class WatchActivity extends AppCompatActivity {
 		LinearLayout inputPill = new LinearLayout(this);
 		inputPill.setOrientation(LinearLayout.HORIZONTAL);
 		inputPill.setGravity(Gravity.CENTER_VERTICAL);
-		inputPill.setPadding((int) (6 * d), (int) (2 * d), (int) (8 * d), (int) (2 * d));
+		inputPill.setPadding((int) (4 * d), (int) (2 * d), (int) (6 * d), (int) (2 * d));
 		LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
 		inputPill.setLayoutParams(pillLp);
 		GradientDrawable pillInputBg = new GradientDrawable();
@@ -1136,20 +1203,19 @@ public class WatchActivity extends AppCompatActivity {
 		pillInputBg.setCornerRadius(1000f);
 		inputPill.setBackground(pillInputBg);
 
-		TextView btnSticker = new TextView(this);
-		btnSticker.setText("☺");
-		btnSticker.setTextColor(Color.parseColor("#CBD5E1"));
-		btnSticker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
-		btnSticker.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnSticker.setGravity(Gravity.CENTER);
+		ImageView btnSticker = new ImageView(this);
 		btnSticker.setLayoutParams(new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d)));
+		btnSticker.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
+		btnSticker.setImageDrawable(resolveVectorDrawable("ic_sticker", createStickerSvgDrawable(Color.parseColor("#CBD5E1"), Math.max(1.6f, 1.5f * d))));
+		btnSticker.setColorFilter(Color.parseColor("#CBD5E1"), PorterDuff.Mode.SRC_IN);
 
 		final ImageView btnSendIcon = new ImageView(this);
 		LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
 		sendLp.leftMargin = (int) (8 * d);
 		btnSendIcon.setLayoutParams(sendLp);
 		btnSendIcon.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
-		btnSendIcon.setImageDrawable(createSendArrowIcon(Color.WHITE, Math.max(2f, 2f * d)));
+		btnSendIcon.setImageDrawable(resolveVectorDrawable("ic_send", createSendSvgDrawable(Color.WHITE, Math.max(1.8f, 1.7f * d))));
+		btnSendIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		GradientDrawable sendBg = new GradientDrawable();
 		sendBg.setShape(GradientDrawable.OVAL);
 		sendBg.setColor(Color.parseColor("#2563EB"));
@@ -1160,8 +1226,7 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void run() {
 				boolean hasText = !etInput.getText().toString().trim().isEmpty();
-				boolean hasSticker = !selectedStickerUrl[0].isEmpty();
-				btnSendIcon.setVisibility((hasText || hasSticker) ? View.VISIBLE : View.GONE);
+				btnSendIcon.setVisibility(hasText ? View.VISIBLE : View.GONE);
 			}
 		};
 
@@ -1175,7 +1240,6 @@ public class WatchActivity extends AppCompatActivity {
 						ivStickerPreview.setImageURI(null);
 						Glide.with(WatchActivity.this).load(Uri.parse(url)).into(ivStickerPreview);
 						stickerPreviewBox.setVisibility(View.VISIBLE);
-						refreshSendVisibility.run();
 					}
 				});
 			}
@@ -1186,7 +1250,6 @@ public class WatchActivity extends AppCompatActivity {
 			public void onClick(View v) {
 				selectedStickerUrl[0] = "";
 				stickerPreviewBox.setVisibility(View.GONE);
-				refreshSendVisibility.run();
 			}
 		});
 
@@ -1284,32 +1347,64 @@ public class WatchActivity extends AppCompatActivity {
 		bottomBar.addView(btnSendIcon);
 		root.addView(bottomBar);
 
-		// Pastikan bilah ketik naik bersama keyboard dan tidak menabrak area bawah video
-		ViewCompat.setOnApplyWindowInsetsListener(root, new androidx.core.view.OnApplyWindowInsetsListener() {
-			@NonNull
+		sheet.setContentView(root);
+
+		// Listener tinggi keyboard langsung dari DecorView dialog supaya bilah ketik naik tepat di atas keyboard
+		final View dialogDecor = sheet.getWindow() != null ? sheet.getWindow().getDecorView() : null;
+		final ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
 			@Override
-			public WindowInsetsCompat onApplyWindowInsets(@NonNull View v, @NonNull WindowInsetsCompat insets) {
-				Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-				int imeBottom = ime.bottom;
-				int currentScreenH = getResources().getDisplayMetrics().heightPixels;
-				int maxAllowedH = Math.max((int) (240 * d), currentScreenH - videoBottomHolder[0] - imeBottom);
+			public void onGlobalLayout() {
+				if (dialogDecor == null) return;
+				Rect r = new Rect();
+				dialogDecor.getWindowVisibleDisplayFrame(r);
+				int fullH = dialogDecor.getRootView().getHeight();
+				int keypadHeight = Math.max(0, fullH - r.bottom);
+
+				int availableAboveKeyboard = Math.max((int) (180 * d), r.bottom - videoBottomHolder[0]);
+				int targetH = keypadHeight > (int) (100 * d)
+					? Math.min(baseSheetHeight, availableAboveKeyboard)
+					: baseSheetHeight;
+
 				ViewGroup.LayoutParams lp = root.getLayoutParams();
-				if (lp != null && lp.height != maxAllowedH) {
-					lp.height = maxAllowedH;
+				if (lp != null && lp.height != targetH) {
+					lp.height = targetH;
 					root.setLayoutParams(lp);
 				}
-				root.setPadding(0, 0, 0, imeBottom > 0 ? (int) (4 * d) : 0);
-				return insets;
-			}
-		});
+				bottomBar.setPadding(
+					(int) (14 * d),
+					(int) (8 * d),
+					(int) (14 * d),
+					keypadHeight > (int) (100 * d) ? (int) (10 * d) : (int) (12 * d)
+				);
 
-		sheet.setContentView(root);
+				FrameLayout bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					ViewGroup.LayoutParams bLp = bottomSheet.getLayoutParams();
+					if (bLp != null && bLp.height != targetH) {
+						bLp.height = targetH;
+						bottomSheet.setLayoutParams(bLp);
+					}
+					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behavior.setPeekHeight(targetH);
+					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+				}
+			}
+		};
+
+		if (dialogDecor != null) {
+			dialogDecor.getViewTreeObserver().addOnGlobalLayoutListener(keyboardLayoutListener);
+		}
+
 		sheet.setOnShowListener(new DialogInterface.OnShowListener() {
 			@Override
 			public void onShow(DialogInterface dialog) {
 				FrameLayout bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
 				if (bottomSheet != null) {
 					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					bottomSheet.setBackgroundTintList(null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+						bottomSheet.setElevation(0f);
+					}
 					ViewGroup.LayoutParams lp = bottomSheet.getLayoutParams();
 					lp.height = baseSheetHeight;
 					bottomSheet.setLayoutParams(lp);
@@ -1323,6 +1418,9 @@ public class WatchActivity extends AppCompatActivity {
 		sheet.setOnDismissListener(new DialogInterface.OnDismissListener() {
 			@Override
 			public void onDismiss(DialogInterface dialog) {
+				if (dialogDecor != null) {
+					dialogDecor.getViewTreeObserver().removeOnGlobalLayoutListener(keyboardLayoutListener);
+				}
 				activeCommentSheetAdapter = null;
 				activeCommentSheetHeader = null;
 			}
@@ -1445,6 +1543,20 @@ public class WatchActivity extends AppCompatActivity {
 
 		root.addView(rvStickers);
 		picker.setContentView(root);
+		// Hilangkan sudut abu-abu bawaanBottomSheetDialog agar sudut lengkung #0B0D11 bersih
+		picker.setOnShowListener(new DialogInterface.OnShowListener() {
+			@Override
+			public void onShow(DialogInterface dialog) {
+				FrameLayout bottomSheet = picker.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					bottomSheet.setBackgroundTintList(null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+						bottomSheet.setElevation(0f);
+					}
+				}
+			}
+		});
 		picker.show();
 	}
 
@@ -1500,7 +1612,7 @@ public class WatchActivity extends AppCompatActivity {
 			col.setOrientation(LinearLayout.VERTICAL);
 			col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-			// Nama + Pil Admin / Level
+			// Nama + Pil Admin + Pil Level
 			LinearLayout nameLine = new LinearLayout(parent.getContext());
 			nameLine.setOrientation(LinearLayout.HORIZONTAL);
 			nameLine.setGravity(Gravity.CENTER_VERTICAL);
@@ -1511,19 +1623,31 @@ public class WatchActivity extends AppCompatActivity {
 			tvName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvName.setTag("name");
 
-			TextView tvBadge = new TextView(parent.getContext());
-			tvBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
-			tvBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvBadge.setPadding((int) (7 * d), (int) (2 * d), (int) (7 * d), (int) (2 * d));
-			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+			TextView tvAdminBadge = new TextView(parent.getContext());
+			tvAdminBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+			tvAdminBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvAdminBadge.setPadding((int) (7 * d), (int) (2 * d), (int) (7 * d), (int) (2 * d));
+			LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			bLp.leftMargin = (int) (6 * d);
-			tvBadge.setLayoutParams(bLp);
-			tvBadge.setTag("badge");
+			aLp.leftMargin = (int) (6 * d);
+			tvAdminBadge.setLayoutParams(aLp);
+			tvAdminBadge.setTag("admin_badge");
+
+			TextView tvLevelBadge = new TextView(parent.getContext());
+			tvLevelBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+			tvLevelBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvLevelBadge.setPadding((int) (7 * d), (int) (2 * d), (int) (7 * d), (int) (2 * d));
+			LinearLayout.LayoutParams lLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			lLp.leftMargin = (int) (5 * d);
+			tvLevelBadge.setLayoutParams(lLp);
+			tvLevelBadge.setTag("level_badge");
 
 			nameLine.addView(tvName);
-			nameLine.addView(tvBadge);
+			nameLine.addView(tvAdminBadge);
+			nameLine.addView(tvLevelBadge);
 
 			TextView tvBody = new TextView(parent.getContext());
 			tvBody.setTextColor(Color.WHITE);
@@ -1587,6 +1711,7 @@ public class WatchActivity extends AppCompatActivity {
 			footerRow.addView(btnReply);
 			footerRow.addView(btnDelete);
 
+			// Toggle Lihat / Sembunyikan Balasan dengan ikon chevron XML
 			LinearLayout toggleRow = new LinearLayout(parent.getContext());
 			toggleRow.setOrientation(LinearLayout.HORIZONTAL);
 			toggleRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -1609,31 +1734,51 @@ public class WatchActivity extends AppCompatActivity {
 			btnToggleReplies.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			btnToggleReplies.setTag("toggle_replies");
 
+			ImageView ivToggleChevron = new ImageView(parent.getContext());
+			LinearLayout.LayoutParams chevLp = new LinearLayout.LayoutParams((int) (13 * d), (int) (13 * d));
+			chevLp.leftMargin = (int) (4 * d);
+			ivToggleChevron.setLayoutParams(chevLp);
+			ivToggleChevron.setImageResource(R.drawable.ic_chevron_down);
+			ivToggleChevron.setColorFilter(Color.parseColor("#94A3B8"), PorterDuff.Mode.SRC_IN);
+			ivToggleChevron.setTag("toggle_chevron");
+
 			toggleRow.addView(dash);
 			toggleRow.addView(btnToggleReplies);
+			toggleRow.addView(ivToggleChevron);
 
-			// Container balasan dengan garis vertikal ke bawah di sisi kiri
-			LinearLayout repliesContainer = new LinearLayout(parent.getContext());
-			repliesContainer.setOrientation(LinearLayout.VERTICAL);
-			LinearLayout.LayoutParams repLp = new LinearLayout.LayoutParams(
+			// Wrapper balasan dengan garis vertikal ke bawah saja di sisi kiri (tanpa kotak stroke)
+			LinearLayout repliesWrapper = new LinearLayout(parent.getContext());
+			repliesWrapper.setOrientation(LinearLayout.HORIZONTAL);
+			LinearLayout.LayoutParams repWrapLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			repLp.topMargin = (int) (8 * d);
-			repLp.leftMargin = (int) (4 * d);
-			repliesContainer.setLayoutParams(repLp);
-			repliesContainer.setPadding((int) (12 * d), (int) (2 * d), 0, (int) (2 * d));
-			GradientDrawable vLine = new GradientDrawable();
-			vLine.setColor(Color.parseColor("#0B0D11"));
-			vLine.setStroke((int) (2 * d), Color.parseColor("#27272A"));
-			repliesContainer.setBackground(vLine);
+			repWrapLp.topMargin = (int) (8 * d);
+			repWrapLp.leftMargin = (int) (2 * d);
+			repliesWrapper.setLayoutParams(repWrapLp);
+			repliesWrapper.setTag("replies_wrapper");
+
+			View verticalLine = new View(parent.getContext());
+			LinearLayout.LayoutParams vLineLp = new LinearLayout.LayoutParams(
+				Math.max(2, (int) (1.8f * d)), ViewGroup.LayoutParams.MATCH_PARENT
+			);
+			vLineLp.rightMargin = (int) (10 * d);
+			verticalLine.setLayoutParams(vLineLp);
+			verticalLine.setBackgroundColor(Color.parseColor("#27272A"));
+
+			LinearLayout repliesContainer = new LinearLayout(parent.getContext());
+			repliesContainer.setOrientation(LinearLayout.VERTICAL);
+			repliesContainer.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 			repliesContainer.setTag("replies_container");
+
+			repliesWrapper.addView(verticalLine);
+			repliesWrapper.addView(repliesContainer);
 
 			col.addView(nameLine);
 			col.addView(tvBody);
 			col.addView(ivSticker);
 			col.addView(footerRow);
 			col.addView(toggleRow);
-			col.addView(repliesContainer);
+			col.addView(repliesWrapper);
 
 			card.addView(avatar);
 			card.addView(tvInitial);
@@ -1664,7 +1809,8 @@ public class WatchActivity extends AppCompatActivity {
 			ImageView avatar = holder.itemView.findViewWithTag("avatar");
 			TextView tvInitial = holder.itemView.findViewWithTag("initial");
 			TextView tvName = holder.itemView.findViewWithTag("name");
-			TextView tvBadge = holder.itemView.findViewWithTag("badge");
+			TextView tvAdminBadge = holder.itemView.findViewWithTag("admin_badge");
+			TextView tvLevelBadge = holder.itemView.findViewWithTag("level_badge");
 			TextView tvBody = holder.itemView.findViewWithTag("body");
 			ImageView ivSticker = holder.itemView.findViewWithTag("sticker");
 			TextView tvTime = holder.itemView.findViewWithTag("time");
@@ -1672,6 +1818,8 @@ public class WatchActivity extends AppCompatActivity {
 			TextView btnDelete = holder.itemView.findViewWithTag("btn_delete");
 			View toggleBox = holder.itemView.findViewWithTag("toggle_box");
 			TextView btnToggleReplies = holder.itemView.findViewWithTag("toggle_replies");
+			ImageView ivToggleChevron = holder.itemView.findViewWithTag("toggle_chevron");
+			View repliesWrapper = holder.itemView.findViewWithTag("replies_wrapper");
 			LinearLayout repliesContainer = holder.itemView.findViewWithTag("replies_container");
 
 			bindAvatarOrInitial(avatar, tvInitial, photoUrl, displayName);
@@ -1679,21 +1827,28 @@ public class WatchActivity extends AppCompatActivity {
 			if (tvName != null) {
 				tvName.setText(displayName);
 			}
-			if (tvBadge != null) {
-				GradientDrawable bBg = new GradientDrawable();
-				bBg.setCornerRadius(100f);
+			if (tvAdminBadge != null) {
 				if (isAdmin) {
-					bBg.setColor(Color.parseColor("#451A03"));
-					bBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#F59E0B"));
-					tvBadge.setTextColor(Color.parseColor("#FBBF24"));
-					tvBadge.setText("★ ADMIN");
+					tvAdminBadge.setVisibility(View.VISIBLE);
+					GradientDrawable aBg = new GradientDrawable();
+					aBg.setCornerRadius(100f);
+					aBg.setColor(Color.parseColor("#451A03"));
+					aBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#F59E0B"));
+					tvAdminBadge.setBackground(aBg);
+					tvAdminBadge.setTextColor(Color.parseColor("#FBBF24"));
+					tvAdminBadge.setText("★ ADMIN");
 				} else {
-					bBg.setColor(Color.parseColor("#0C2438"));
-					bBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
-					tvBadge.setTextColor(Color.parseColor("#38BDF8"));
-					tvBadge.setText("Lv" + level);
+					tvAdminBadge.setVisibility(View.GONE);
 				}
-				tvBadge.setBackground(bBg);
+			}
+			if (tvLevelBadge != null) {
+				GradientDrawable lBg = new GradientDrawable();
+				lBg.setCornerRadius(100f);
+				lBg.setColor(Color.parseColor("#0C2438"));
+				lBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
+				tvLevelBadge.setBackground(lBg);
+				tvLevelBadge.setTextColor(Color.parseColor("#38BDF8"));
+				tvLevelBadge.setText("Lv" + level);
 			}
 			if (tvBody != null) {
 				tvBody.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
@@ -1754,13 +1909,16 @@ public class WatchActivity extends AppCompatActivity {
 
 			final List<HashMap<String, Object>> replies = repliesMap.get(commentId);
 			final boolean isExpanded = expandedParents.contains(commentId);
-			if (toggleBox != null && btnToggleReplies != null && repliesContainer != null) {
+			if (toggleBox != null && btnToggleReplies != null && repliesWrapper != null && repliesContainer != null) {
 				if (replies != null && !replies.isEmpty()) {
 					toggleBox.setVisibility(View.VISIBLE);
 					btnToggleReplies.setText(isExpanded
-						? "Sembunyikan balasan ▴"
-						: "Lihat " + replies.size() + " balasan ∨");
-					repliesContainer.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
+						? "Sembunyikan balasan"
+						: "Lihat " + replies.size() + " balasan");
+					if (ivToggleChevron != null) {
+						ivToggleChevron.setRotation(isExpanded ? 180f : 0f);
+					}
+					repliesWrapper.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
 					repliesContainer.removeAllViews();
 
 					if (isExpanded) {
@@ -1782,7 +1940,7 @@ public class WatchActivity extends AppCompatActivity {
 					});
 				} else {
 					toggleBox.setVisibility(View.GONE);
-					repliesContainer.setVisibility(View.GONE);
+					repliesWrapper.setVisibility(View.GONE);
 					repliesContainer.removeAllViews();
 				}
 			}
@@ -1810,7 +1968,7 @@ public class WatchActivity extends AppCompatActivity {
 			);
 			lp.bottomMargin = (int) (10 * d);
 			row.setLayoutParams(lp);
-			row.setPadding((int) (4 * d), (int) (2 * d), (int) (4 * d), (int) (2 * d));
+			row.setPadding((int) (2 * d), (int) (2 * d), (int) (2 * d), (int) (2 * d));
 
 			ImageView av = new ImageView(ctx);
 			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (24 * d), (int) (24 * d));
@@ -1842,34 +2000,45 @@ public class WatchActivity extends AppCompatActivity {
 			tvN.setTextColor(Color.parseColor("#CBD5E1"));
 			tvN.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
 			tvN.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			nRow.addView(tvN);
 
-			TextView tvTag = new TextView(ctx);
-			tvTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
-			tvTag.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvTag.setPadding((int) (6 * d), (int) (1 * d), (int) (6 * d), (int) (1 * d));
-			LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+			if (rAdmin) {
+				TextView tvAdm = new TextView(ctx);
+				tvAdm.setText("★ ADMIN");
+				tvAdm.setTextColor(Color.parseColor("#FBBF24"));
+				tvAdm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+				tvAdm.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				tvAdm.setPadding((int) (6 * d), (int) (1 * d), (int) (6 * d), (int) (1 * d));
+				LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				aLp.leftMargin = (int) (6 * d);
+				tvAdm.setLayoutParams(aLp);
+				GradientDrawable aBg = new GradientDrawable();
+				aBg.setCornerRadius(100f);
+				aBg.setColor(Color.parseColor("#451A03"));
+				aBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#F59E0B"));
+				tvAdm.setBackground(aBg);
+				nRow.addView(tvAdm);
+			}
+
+			TextView tvLvl = new TextView(ctx);
+			tvLvl.setText("Lv" + rLevel);
+			tvLvl.setTextColor(Color.parseColor("#38BDF8"));
+			tvLvl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f);
+			tvLvl.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvLvl.setPadding((int) (6 * d), (int) (1 * d), (int) (6 * d), (int) (1 * d));
+			LinearLayout.LayoutParams lLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			tLp.leftMargin = (int) (6 * d);
-			tvTag.setLayoutParams(tLp);
-
-			GradientDrawable tagBg = new GradientDrawable();
-			tagBg.setCornerRadius(100f);
-			if (rAdmin) {
-				tagBg.setColor(Color.parseColor("#451A03"));
-				tagBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#F59E0B"));
-				tvTag.setTextColor(Color.parseColor("#FBBF24"));
-				tvTag.setText("★ ADMIN");
-			} else {
-				tagBg.setColor(Color.parseColor("#0C2438"));
-				tagBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
-				tvTag.setTextColor(Color.parseColor("#38BDF8"));
-				tvTag.setText("Lv" + rLevel);
-			}
-			tvTag.setBackground(tagBg);
-
-			nRow.addView(tvN);
-			nRow.addView(tvTag);
+			lLp.leftMargin = (int) (5 * d);
+			tvLvl.setLayoutParams(lLp);
+			GradientDrawable lBg = new GradientDrawable();
+			lBg.setCornerRadius(100f);
+			lBg.setColor(Color.parseColor("#0C2438"));
+			lBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
+			tvLvl.setBackground(lBg);
+			nRow.addView(tvLvl);
 
 			TextView tvB = new TextView(ctx);
 			tvB.setText(rText);
@@ -4854,6 +5023,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		TextView btnSeeAllEpisodes = findViewById(R.id.textview85);
 		if (btnSeeAllEpisodes != null) {
+			btnSeeAllEpisodes.setTextColor(Color.parseColor("#94A3B8"));
 			btnSeeAllEpisodes.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
