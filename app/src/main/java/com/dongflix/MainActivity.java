@@ -91,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
 
 	// Pustaka UI
 	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
-	private TextView textPustakaSectionLabel, textPustakaCountBadge;
+	private TextView textPustakaCountBadge;
 	private LinearLayout layoutPustakaEmptyState;
 	private TextView textPustakaEmptyTitle, textPustakaEmptyDesc;
 	private RecyclerView recyclerPustakaList;
@@ -616,7 +616,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+			recyclerContinue.setLayoutParams(new LinearLayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
@@ -638,6 +638,13 @@ public class MainActivity extends AppCompatActivity {
 		ViewGroup favGroup = (ViewGroup) pageFavorite;
 		favGroup.removeAllViews();
 		favGroup.setBackgroundColor(Color.parseColor("#000000"));
+		favGroup.setPadding(0, 0, 0, 0);
+		if (favGroup.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+			ViewGroup.MarginLayoutParams pLp = (ViewGroup.MarginLayoutParams) favGroup.getLayoutParams();
+			pLp.leftMargin = 0;
+			pLp.rightMargin = 0;
+			favGroup.setLayoutParams(pLp);
+		}
 
 		float d = getResources().getDisplayMetrics().density;
 		int statusH = 0;
@@ -682,6 +689,7 @@ public class MainActivity extends AppCompatActivity {
 		tabsPillContainer.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
 		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (44 * d));
 		tabsLp.topMargin = (int) (14 * d);
+		tabsLp.bottomMargin = (int) (6 * d);
 		tabsPillContainer.setLayoutParams(tabsLp);
 
 		GradientDrawable containerBg = new GradientDrawable();
@@ -698,17 +706,6 @@ public class MainActivity extends AppCompatActivity {
 		tabsPillContainer.addView(tabPustakaDaftarku);
 		tabsPillContainer.addView(tabPustakaUnduhan);
 		root.addView(tabsPillContainer);
-
-		textPustakaSectionLabel = new TextView(this);
-		textPustakaSectionLabel.setText("Terakhir Ditonton");
-		textPustakaSectionLabel.setTextColor(Color.parseColor("#94A3B8"));
-		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-		textPustakaSectionLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		secLp.topMargin = (int) (14 * d);
-		secLp.bottomMargin = (int) (10 * d);
-		textPustakaSectionLabel.setLayoutParams(secLp);
-		root.addView(textPustakaSectionLabel);
 
 		layoutPustakaEmptyState = new LinearLayout(this);
 		layoutPustakaEmptyState.setOrientation(LinearLayout.VERTICAL);
@@ -791,6 +788,13 @@ public class MainActivity extends AppCompatActivity {
 		ViewGroup profGroup = (ViewGroup) pageProfile;
 		profGroup.removeAllViews();
 		profGroup.setBackgroundColor(Color.parseColor("#000000"));
+		profGroup.setPadding(0, 0, 0, 0);
+		if (profGroup.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+			ViewGroup.MarginLayoutParams pLp = (ViewGroup.MarginLayoutParams) profGroup.getLayoutParams();
+			pLp.leftMargin = 0;
+			pLp.rightMargin = 0;
+			profGroup.setLayoutParams(pLp);
+		}
 
 		float d = getResources().getDisplayMetrics().density;
 		int statusH = 0;
@@ -807,7 +811,6 @@ public class MainActivity extends AppCompatActivity {
 		root.setPadding((int) (12 * d), statusH + (int) (12 * d), (int) (12 * d), (int) (130 * d));
 		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-		// Top Bar Akun + Tombol Setting di atas kanan
 		LinearLayout topHeaderBar = new LinearLayout(this);
 		topHeaderBar.setOrientation(LinearLayout.HORIZONTAL);
 		topHeaderBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -846,7 +849,6 @@ public class MainActivity extends AppCompatActivity {
 		topHeaderBar.addView(btnAccountSetting);
 		root.addView(topHeaderBar);
 
-		// Kartu Identitas Profil + Tombol Ubah Profil (tanpa syarat premium)
 		LinearLayout profileCard = new LinearLayout(this);
 		profileCard.setOrientation(LinearLayout.VERTICAL);
 		profileCard.setPadding((int) (16 * d), (int) (16 * d), (int) (16 * d), (int) (16 * d));
@@ -949,7 +951,6 @@ public class MainActivity extends AppCompatActivity {
 
 		root.addView(profileCard);
 
-		// Banner Premium Aktif Seumur Hidup tepat di atas Level
 		LinearLayout lifetimeBanner = new LinearLayout(this);
 		lifetimeBanner.setOrientation(LinearLayout.HORIZONTAL);
 		lifetimeBanner.setGravity(Gravity.CENTER_VERTICAL);
@@ -980,7 +981,6 @@ public class MainActivity extends AppCompatActivity {
 		lifetimeBanner.addView(tvLifetimeSub);
 		root.addView(lifetimeBanner);
 
-		// Kartu Progres Level & XP
 		LinearLayout levelCard = new LinearLayout(this);
 		levelCard.setOrientation(LinearLayout.VERTICAL);
 		levelCard.setPadding((int) (16 * d), (int) (15 * d), (int) (16 * d), (int) (15 * d));
@@ -1055,7 +1055,6 @@ public class MainActivity extends AppCompatActivity {
 
 		root.addView(levelCard);
 
-		// Kartu Aksi Cepat (termasuk Komentar Saya)
 		LinearLayout menuCard = new LinearLayout(this);
 		menuCard.setOrientation(LinearLayout.VERTICAL);
 		menuCard.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
@@ -1818,7 +1817,6 @@ public class MainActivity extends AppCompatActivity {
 			emptyDesc = "Video yang kamu unduh akan tersimpan di perangkat ini.";
 		}
 
-		if (textPustakaSectionLabel != null) textPustakaSectionLabel.setText(sectionLabel);
 		if (textPustakaCountBadge != null) textPustakaCountBadge.setText(activeData.size() + " item");
 
 		if (activeData.isEmpty()) {
@@ -1831,7 +1829,7 @@ public class MainActivity extends AppCompatActivity {
 		} else {
 			if (layoutPustakaEmptyState != null) layoutPustakaEmptyState.setVisibility(View.GONE);
 			recyclerPustakaList.setVisibility(View.VISIBLE);
-			recyclerPustakaList.setAdapter(new PustakaListAdapter(activeData, activePustakaTab));
+			recyclerPustakaList.setAdapter(new PustakaListAdapter(activeData, activePustakaTab, sectionLabel));
 		}
 	}
 
@@ -2849,16 +2847,18 @@ public class MainActivity extends AppCompatActivity {
 						int totalW = parentTrack.getWidth();
 						if (totalW <= 0) return;
 						float d = barFill.getResources().getDisplayMetrics().density;
-						int segW = Math.max((int) (18 * d), Math.round(totalW * 0.14f));
-						int leftPos;
-						if (durMs > 0L && posMs >= 0L) {
+						int fillW;
+						if (durMs > 0L && posMs > 0L) {
 							float ratio = Math.max(0f, Math.min(1f, (float) posMs / (float) durMs));
-							leftPos = Math.round((totalW - segW) * ratio);
+							fillW = Math.max(Math.round(6 * d), Math.round(totalW * ratio));
+						} else if (durMs > 0L && posMs <= 0L) {
+							fillW = 0;
 						} else {
-							leftPos = Math.max(0, (totalW - segW) / 2);
+							// Jika tidak ada progress durasi di Firebase, tampilkan 50% (tengah)
+							fillW = totalW / 2;
 						}
-						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(segW, ViewGroup.LayoutParams.MATCH_PARENT);
-						lp.leftMargin = leftPos;
+						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(fillW, ViewGroup.LayoutParams.MATCH_PARENT);
+						lp.leftMargin = 0;
 						barFill.setLayoutParams(lp);
 					}
 				});
@@ -3028,19 +3028,44 @@ public class MainActivity extends AppCompatActivity {
 		public class ViewHolder extends RecyclerView.ViewHolder { public ViewHolder(View v) { super(v); } }
 	}
 
-	public class PustakaListAdapter extends RecyclerView.Adapter<PustakaListAdapter.ViewHolder> {
+	public class PustakaListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+		private static final int TYPE_HEADER = 0;
+		private static final int TYPE_ITEM = 1;
+
 		private final ArrayList<HashMap<String, Object>> data;
 		private final int mode;
+		private final String sectionLabel;
 
-		public PustakaListAdapter(ArrayList<HashMap<String, Object>> arr, int mode) {
+		public PustakaListAdapter(ArrayList<HashMap<String, Object>> arr, int mode, String sectionLabel) {
 			this.data = arr;
 			this.mode = mode;
+			this.sectionLabel = sectionLabel;
+		}
+
+		@Override
+		public int getItemViewType(int position) {
+			return position == 0 ? TYPE_HEADER : TYPE_ITEM;
 		}
 
 		@NonNull @Override
-		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+		public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
 			Context ctx = parent.getContext();
 			float d = ctx.getResources().getDisplayMetrics().density;
+
+			if (viewType == TYPE_HEADER) {
+				TextView tvHeader = new TextView(ctx);
+				tvHeader.setText(sectionLabel);
+				tvHeader.setTextColor(Color.parseColor("#94A3B8"));
+				tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+				tvHeader.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				RecyclerView.LayoutParams hLp = new RecyclerView.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				hLp.topMargin = (int) (4 * d);
+				hLp.bottomMargin = (int) (10 * d);
+				tvHeader.setLayoutParams(hLp);
+				return new HeaderViewHolder(tvHeader);
+			}
 
 			LinearLayout card = new LinearLayout(ctx);
 			card.setOrientation(LinearLayout.HORIZONTAL);
@@ -3127,12 +3152,19 @@ public class MainActivity extends AppCompatActivity {
 			card.addView(thumbCard);
 			card.addView(info);
 			card.addView(btnRemove);
-			return new ViewHolder(card);
+			return new ItemViewHolder(card);
 		}
 
 		@Override
-		public void onBindViewHolder(@NonNull ViewHolder holder, int pos) {
-			final HashMap<String, Object> item = data.get(pos);
+		public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int pos) {
+			if (getItemViewType(pos) == TYPE_HEADER) {
+				if (holder.itemView instanceof TextView) {
+					((TextView) holder.itemView).setText(sectionLabel);
+				}
+				return;
+			}
+
+			final HashMap<String, Object> item = data.get(pos - 1);
 			if (item == null) return;
 			ImageView img = holder.itemView.findViewWithTag("thumb");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
@@ -3186,8 +3218,9 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 
-		@Override public int getItemCount() { return data.size(); }
-		class ViewHolder extends RecyclerView.ViewHolder { ViewHolder(@NonNull View v) { super(v); } }
+		@Override public int getItemCount() { return data.isEmpty() ? 0 : data.size() + 1; }
+		class HeaderViewHolder extends RecyclerView.ViewHolder { HeaderViewHolder(@NonNull View v) { super(v); } }
+		class ItemViewHolder extends RecyclerView.ViewHolder { ItemViewHolder(@NonNull View v) { super(v); } }
 	}
 
 	public class Gridview1Adapter extends BaseAdapter {
