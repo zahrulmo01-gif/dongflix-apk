@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout
 	xmlns:android="http://schemas.android.com/apk/res/android"
-	xmlns:app="http://schemas.android.com/apk/res-auto"
 	xmlns:tools="http://schemas.android.com/tools"
 	android:id="@+id/root_main_container"
 	android:layout_width="match_parent"
@@ -97,46 +96,68 @@
 						</LinearLayout>
 					</LinearLayout>
 
-					<LinearLayout
-						android:id="@+id/linear82"
+					<FrameLayout
+						android:id="@+id/top_action_pill"
 						android:layout_width="wrap_content"
-						android:layout_height="48dp"
-						android:gravity="center_vertical"
-						android:orientation="horizontal"
+						android:layout_height="42dp"
 						android:layout_alignParentRight="true"
-						android:layout_alignParentTop="true">
+						android:layout_alignParentTop="true"
+						android:layout_marginTop="3dp"
+						android:clipToOutline="true">
 
-						<FrameLayout
-							android:id="@+id/btn_top_search"
-							android:layout_width="42dp"
-							android:layout_height="42dp">
+						<eightbitlab.com.blurview.BlurView
+							android:id="@+id/top_action_pill_blur_bg"
+							android:layout_width="match_parent"
+							android:layout_height="match_parent" />
 
-							<ImageView
-								android:id="@+id/img_top_search"
-								android:layout_width="20dp"
-								android:layout_height="20dp"
-								android:layout_gravity="center"
-								android:contentDescription="Notifikasi"
-								android:src="@drawable/ic_notifications"
-								android:scaleType="fitCenter" />
-						</FrameLayout>
+						<LinearLayout
+							android:id="@+id/linear82"
+							android:layout_width="wrap_content"
+							android:layout_height="match_parent"
+							android:gravity="center_vertical"
+							android:orientation="horizontal"
+							android:paddingLeft="4dp"
+							android:paddingRight="4dp">
 
-						<FrameLayout
-							android:id="@+id/btn_top_chat"
-							android:layout_width="42dp"
-							android:layout_height="42dp"
-							android:layout_marginLeft="10dp">
+							<FrameLayout
+								android:id="@+id/btn_top_search"
+								android:layout_width="38dp"
+								android:layout_height="38dp">
 
-							<ImageView
-								android:id="@+id/img_top_chat"
-								android:layout_width="20dp"
-								android:layout_height="20dp"
-								android:layout_gravity="center"
-								android:contentDescription="Pesan"
-								android:src="@drawable/ic_chat"
-								android:scaleType="fitCenter" />
-						</FrameLayout>
-					</LinearLayout>
+								<ImageView
+									android:id="@+id/img_top_search"
+									android:layout_width="20dp"
+									android:layout_height="20dp"
+									android:layout_gravity="center"
+									android:contentDescription="Notifikasi"
+									android:src="@drawable/ic_notifications"
+									android:scaleType="fitCenter" />
+							</FrameLayout>
+
+							<View
+								android:id="@+id/top_action_divider"
+								android:layout_width="1dp"
+								android:layout_height="18dp"
+								android:layout_marginLeft="2dp"
+								android:layout_marginRight="2dp"
+								android:background="#26FFFFFF" />
+
+							<FrameLayout
+								android:id="@+id/btn_top_chat"
+								android:layout_width="38dp"
+								android:layout_height="38dp">
+
+								<ImageView
+									android:id="@+id/img_top_chat"
+									android:layout_width="20dp"
+									android:layout_height="20dp"
+									android:layout_gravity="center"
+									android:contentDescription="Pesan"
+									android:src="@drawable/ic_chat"
+									android:scaleType="fitCenter" />
+							</FrameLayout>
+						</LinearLayout>
+					</FrameLayout>
 				</RelativeLayout>
 
 				<RelativeLayout
@@ -886,13 +907,13 @@
 			android:layout_width="0dp"
 			android:layout_height="64dp"
 			android:layout_weight="1"
-			android:layout_marginRight="10dp">
+			android:layout_marginRight="10dp"
+			android:clipToOutline="true">
 
 			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/navbar_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#9910131C" />
+				android:layout_height="match_parent" />
 
 			<LinearLayout
 				android:layout_width="match_parent"
@@ -982,13 +1003,13 @@
 			android:id="@+id/btn_compact_home"
 			android:layout_width="58dp"
 			android:layout_height="58dp"
+			android:clipToOutline="true"
 			android:visibility="gone">
 
 			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/compact_home_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#9910131C" />
+				android:layout_height="match_parent" />
 
 			<ImageView
 				android:layout_width="23dp"
@@ -1010,13 +1031,13 @@
 		<FrameLayout
 			android:id="@+id/btn_circle_search"
 			android:layout_width="64dp"
-			android:layout_height="64dp">
+			android:layout_height="64dp"
+			android:clipToOutline="true">
 
 			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/search_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				app:blurOverlayColor="#9910131C" />
+				android:layout_height="match_parent" />
 
 			<ImageView
 				android:id="@+id/img_search"
