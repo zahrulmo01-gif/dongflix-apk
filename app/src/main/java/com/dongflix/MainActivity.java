@@ -2306,6 +2306,18 @@ public class MainActivity extends AppCompatActivity {
 			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
 		}
 
+		if (imgPlayIcon != null) {
+			imgPlayIcon.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN);
+		}
+		ImageView imgSearchBarIcon = findViewById(R.id.img_search_bar_icon);
+		if (imgSearchBarIcon != null) {
+			imgSearchBarIcon.setColorFilter(Color.parseColor("#94A3B8"), PorterDuff.Mode.SRC_IN);
+		}
+		ImageView imgCompactHomeIcon = findViewById(R.id.img_compact_home_icon);
+		if (imgCompactHomeIcon != null) {
+			imgCompactHomeIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		}
+
 		if (imgTopNotif != null) {
 			imgTopNotif.setImageResource(resolveNotificationDrawableRes());
 			imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
@@ -2503,6 +2515,7 @@ public class MainActivity extends AppCompatActivity {
 		bv.setupWith(root, new RenderScriptBlur(this))
 			.setFrameClearDrawable(getWindow().getDecorView().getBackground())
 			.setBlurRadius(radius);
+		bv.setOverlayColor(Color.parseColor("#66141824"));
 		bv.setOutlineProvider(new ViewOutlineProvider() {
 			@Override public void getOutline(View view, Outline outline) { outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f); }
 		});
