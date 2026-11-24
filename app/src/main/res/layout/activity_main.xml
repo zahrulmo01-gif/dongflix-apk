@@ -1,792 +1,922 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<FrameLayout
 	xmlns:android="http://schemas.android.com/apk/res/android"
 	xmlns:app="http://schemas.android.com/apk/res-auto"
-	xmlns:tools="http://schemas.android.com/tools"
-	android:id="@+id/rootWatchLayout"
+	android:id="@+id/root_main_container"
 	android:layout_width="match_parent"
 	android:layout_height="match_parent"
-	android:background="#000000"
-	android:orientation="vertical">
+	android:background="#000000">
 
-	<FrameLayout
-		android:id="@+id/layoutPlayer"
+	<!-- HALAMAN BERANDA -->
+	<androidx.core.widget.NestedScrollView
+		android:id="@+id/main_scroll_view"
 		android:layout_width="match_parent"
-		android:layout_height="220dp"
+		android:layout_height="match_parent"
 		android:background="#000000"
-		android:clipChildren="false"
-		android:clipToPadding="false">
+		android:clipToPadding="false"
+		android:fillViewport="true"
+		android:overScrollMode="never"
+		android:paddingBottom="120dp">
 
-		<android.view.TextureView
-			android:id="@+id/playerTextureView"
+		<LinearLayout
+			android:id="@+id/home_content_root"
 			android:layout_width="match_parent"
-			android:layout_height="match_parent"
-			android:layout_gravity="center" />
-
-		<LinearLayout
-			android:id="@+id/animSeekLeft"
-			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:layout_gravity="center_vertical|left"
-			android:layout_marginLeft="44dp"
-			android:paddingLeft="14dp"
-			android:paddingTop="8dp"
-			android:paddingRight="14dp"
-			android:paddingBottom="8dp"
-			android:gravity="center"
-			android:orientation="vertical"
-			android:alpha="0"
-			android:visibility="gone">
+			android:orientation="vertical">
 
-			<TextView
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:text="« 10 detik"
-				android:textSize="13sp"
-				android:textColor="#FFFFFF" />
-		</LinearLayout>
-
-		<LinearLayout
-			android:id="@+id/animSeekRight"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:layout_gravity="center_vertical|right"
-			android:layout_marginRight="44dp"
-			android:paddingLeft="14dp"
-			android:paddingTop="8dp"
-			android:paddingRight="14dp"
-			android:paddingBottom="8dp"
-			android:gravity="center"
-			android:orientation="vertical"
-			android:alpha="0"
-			android:visibility="gone">
-
-			<TextView
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:text="10 detik »"
-				android:textSize="13sp"
-				android:textColor="#FFFFFF" />
-		</LinearLayout>
-
-		<LinearLayout
-			android:id="@+id/btnUnlockScreen"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:layout_gravity="top|right"
-			android:layout_marginTop="24dp"
-			android:layout_marginRight="24dp"
-			android:paddingLeft="14dp"
-			android:paddingTop="8dp"
-			android:paddingRight="14dp"
-			android:paddingBottom="8dp"
-			android:gravity="center_vertical"
-			android:orientation="horizontal"
-			android:visibility="gone">
-
-			<ImageView
-				android:layout_width="18dp"
-				android:layout_height="18dp"
-				android:src="@drawable/ic_lock"
-				android:scaleType="fitCenter" />
-
-			<TextView
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:layout_marginLeft="6dp"
-				android:text="Terkunci"
-				android:textSize="12sp"
-				android:textColor="#FFFFFF" />
-		</LinearLayout>
-
-		<LinearLayout
-			android:id="@+id/pillSpeedHold"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:layout_gravity="top|center_horizontal"
-			android:layout_marginTop="16dp"
-			android:paddingLeft="14dp"
-			android:paddingTop="6dp"
-			android:paddingRight="14dp"
-			android:paddingBottom="6dp"
-			android:gravity="center"
-			android:orientation="horizontal"
-			android:visibility="gone">
-
-			<TextView
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:text="2x »"
-				android:textSize="13sp"
-				android:textColor="#FFFFFF" />
-		</LinearLayout>
-
-		<RelativeLayout
-			android:id="@+id/playerControlsOverlay"
-			android:layout_width="match_parent"
-			android:layout_height="match_parent"
-			android:background="@android:color/transparent"
-			android:clipChildren="false"
-			android:clipToPadding="false">
-
-			<View
-				android:id="@+id/gradientTop"
+			<!-- HERO BANNER + HEADER -->
+			<FrameLayout
+				android:id="@+id/hero_frame"
 				android:layout_width="match_parent"
-				android:layout_height="84dp"
-				android:clickable="false"
-				android:focusable="false"
-				android:layout_alignParentTop="true" />
-
-			<View
-				android:id="@+id/gradientBottom"
-				android:layout_width="match_parent"
-				android:layout_height="84dp"
-				android:clickable="false"
-				android:focusable="false"
-				android:layout_alignParentBottom="true" />
-
-			<RelativeLayout
-				android:id="@+id/topBar"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:minHeight="48dp"
-				android:paddingLeft="16dp"
-				android:paddingTop="14dp"
-				android:paddingRight="16dp"
-				android:paddingBottom="6dp"
-				android:clipChildren="false"
-				android:clipToPadding="false"
-				android:layout_alignParentTop="true">
+				android:layout_height="430dp">
 
 				<ImageView
-					android:id="@+id/btnBack"
-					android:layout_width="28dp"
-					android:layout_height="28dp"
-					android:padding="2dp"
-					android:src="@drawable/ic_back_arrow"
-					android:scaleType="fitCenter"
-					android:layout_alignParentLeft="true"
-					android:layout_centerVertical="true" />
+					android:id="@+id/img_hero_banner"
+					android:layout_width="match_parent"
+					android:layout_height="match_parent"
+					android:contentDescription="Hero Banner"
+					android:scaleType="centerCrop"
+					android:src="@drawable/default_image" />
 
-				<TextView
-					android:id="@+id/textPlayerTitle"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:layout_marginLeft="12dp"
-					android:layout_marginRight="12dp"
-					android:paddingTop="2dp"
-					android:paddingBottom="2dp"
-					android:text="Judul Donghua"
-					android:textSize="15sp"
-					android:textColor="#FFFFFF"
-					android:maxLines="1"
-					android:ellipsize="end"
-					android:visibility="gone"
-					android:layout_toLeftOf="@id/topRightControls"
-					android:layout_toRightOf="@id/btnBack"
-					android:layout_centerVertical="true" />
+				<View
+					android:id="@+id/header_shadow"
+					android:layout_width="match_parent"
+					android:layout_height="110dp"
+					android:layout_gravity="top" />
 
-				<LinearLayout
-					android:id="@+id/topRightControls"
-					android:layout_width="wrap_content"
+				<View
+					android:id="@+id/hero_shadow"
+					android:layout_width="match_parent"
+					android:layout_height="220dp"
+					android:layout_gravity="bottom" />
+
+				<RelativeLayout
+					android:id="@+id/relativelayout69"
+					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
-					android:gravity="center_vertical"
-					android:orientation="horizontal"
-					android:clipChildren="false"
-					android:clipToPadding="false"
-					android:layout_alignParentRight="true"
-					android:layout_centerVertical="true">
+					android:layout_gravity="top"
+					android:paddingLeft="16dp"
+					android:paddingTop="8dp"
+					android:paddingRight="16dp"
+					android:paddingBottom="10dp">
 
 					<LinearLayout
-						android:id="@+id/btnFill"
+						android:id="@+id/linear_header_user"
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
-						android:layout_marginRight="14dp"
-						android:paddingTop="2dp"
-						android:paddingBottom="2dp"
+						android:layout_alignParentStart="true"
+						android:layout_centerVertical="true"
 						android:gravity="center_vertical"
 						android:orientation="horizontal">
 
 						<ImageView
-							android:id="@+id/imageview4"
-							android:layout_width="20dp"
-							android:layout_height="20dp"
-							android:src="@drawable/ic_fill"
-							android:scaleType="fitCenter" />
+							android:id="@+id/img_user_avatar"
+							android:layout_width="42dp"
+							android:layout_height="42dp"
+							android:contentDescription="Avatar"
+							android:scaleType="centerCrop"
+							android:src="@drawable/ic_profile" />
 
-						<TextView
-							android:id="@+id/textview4"
+						<LinearLayout
 							android:layout_width="wrap_content"
 							android:layout_height="wrap_content"
-							android:layout_marginLeft="5dp"
-							android:text="Fill"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF" />
+							android:layout_marginStart="10dp"
+							android:orientation="vertical">
+
+							<TextView
+								android:id="@+id/text_welcome"
+								android:layout_width="wrap_content"
+								android:layout_height="wrap_content"
+								android:text="Welcome"
+								android:textColor="#CBD5E1"
+								android:textSize="11.5sp" />
+
+							<TextView
+								android:id="@+id/text_username"
+								android:layout_width="wrap_content"
+								android:layout_height="wrap_content"
+								android:text="R Z"
+								android:textColor="#FFFFFF"
+								android:textSize="15sp" />
+						</LinearLayout>
 					</LinearLayout>
 
-					<ImageView
-						android:id="@+id/btnCast"
-						android:layout_width="24dp"
-						android:layout_height="24dp"
-						android:layout_marginRight="14dp"
-						android:src="@drawable/ic_cast"
-						android:scaleType="fitCenter" />
+					<FrameLayout
+						android:id="@+id/btn_top_search"
+						android:layout_width="42dp"
+						android:layout_height="42dp"
+						android:layout_alignParentEnd="true"
+						android:layout_centerVertical="true"
+						android:clickable="true"
+						android:clipToOutline="true"
+						android:focusable="true">
 
-					<ImageView
-						android:id="@+id/btnLock"
-						android:layout_width="24dp"
-						android:layout_height="24dp"
-						android:layout_marginRight="14dp"
-						android:src="@drawable/ic_lock"
-						android:scaleType="fitCenter"
-						android:visibility="gone" />
+						<eightbitlab.com.blurview.BlurView
+							android:id="@+id/top_notif_blur_bg"
+							android:layout_width="match_parent"
+							android:layout_height="match_parent"
+							app:blurOverlayColor="#66141824" />
 
-					<ImageView
-						android:id="@+id/btnSettings"
-						android:layout_width="24dp"
-						android:layout_height="24dp"
-						android:src="@drawable/ic_settings"
-						android:scaleType="fitCenter" />
-				</LinearLayout>
-			</RelativeLayout>
+						<ImageView
+							android:id="@+id/img_top_search"
+							android:layout_width="20dp"
+							android:layout_height="20dp"
+							android:layout_gravity="center"
+							android:contentDescription="Notifikasi"
+							android:src="@drawable/ic_notifications" />
+					</FrameLayout>
 
-			<ImageView
-				android:id="@+id/btnPrevEpisode"
-				android:layout_width="32dp"
-				android:layout_height="32dp"
-				android:layout_marginLeft="12dp"
-				android:padding="4dp"
-				android:src="@drawable/ic_prev"
-				android:scaleType="fitCenter"
-				android:layout_alignParentLeft="true"
-				android:layout_centerVertical="true" />
+					<FrameLayout
+						android:id="@+id/btn_top_chat"
+						android:layout_width="42dp"
+						android:layout_height="42dp"
+						android:layout_centerVertical="true"
+						android:layout_marginEnd="8dp"
+						android:layout_toStartOf="@id/btn_top_search"
+						android:visibility="gone">
 
-			<LinearLayout
-				android:id="@+id/centerControls"
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:gravity="center"
-				android:orientation="horizontal"
-				android:layout_centerInParent="true">
+						<ImageView
+							android:id="@+id/img_top_chat"
+							android:layout_width="20dp"
+							android:layout_height="20dp"
+							android:layout_gravity="center"
+							android:src="@drawable/ic_notifications" />
+					</FrameLayout>
+				</RelativeLayout>
 
-				<ImageView
-					android:id="@+id/btnRewind"
-					android:layout_width="36dp"
-					android:layout_height="36dp"
-					android:padding="5dp"
-					android:src="@drawable/ic_rewind"
-					android:scaleType="fitCenter" />
-
-				<FrameLayout
-					android:id="@+id/frame_layout5"
-					android:layout_width="64dp"
-					android:layout_height="64dp"
-					android:layout_marginLeft="22dp"
-					android:layout_marginRight="22dp">
-
-					<ProgressBar
-						android:id="@+id/playerLoading"
-						android:layout_width="64dp"
-						android:layout_height="64dp"
-						android:indeterminate="true"
-						android:indeterminateTint="#3B82F6"
-						android:layout_gravity="center"
-						android:visibility="gone" />
-
-					<ImageView
-						android:id="@+id/btnPlay"
-						android:layout_width="54dp"
-						android:layout_height="54dp"
-						android:padding="14dp"
-						android:src="@drawable/ic_play1"
-						android:scaleType="fitCenter"
-						android:layout_gravity="center" />
-				</FrameLayout>
-
-				<ImageView
-					android:id="@+id/btnForward"
-					android:layout_width="36dp"
-					android:layout_height="36dp"
-					android:padding="5dp"
-					android:src="@drawable/ic_forward"
-					android:scaleType="fitCenter" />
-			</LinearLayout>
-
-			<ImageView
-				android:id="@+id/btnNextEpisode"
-				android:layout_width="32dp"
-				android:layout_height="32dp"
-				android:layout_marginRight="12dp"
-				android:padding="4dp"
-				android:src="@drawable/ic_next"
-				android:scaleType="fitCenter"
-				android:layout_alignParentRight="true"
-				android:layout_centerVertical="true" />
-
-			<LinearLayout
-				android:id="@+id/bottomControls"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:paddingBottom="6dp"
-				android:orientation="vertical"
-				android:layout_alignParentBottom="true">
-
-				<RelativeLayout
-					android:id="@+id/relativelayout2"
+				<LinearLayout
+					android:id="@+id/hero_bottom_info"
 					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
-					android:layout_marginBottom="4dp"
+					android:layout_gravity="bottom"
+					android:orientation="vertical"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp"
+					android:paddingBottom="18dp">
+
+					<TextView
+						android:id="@+id/text_hero_title"
+						android:layout_width="match_parent"
+						android:layout_height="wrap_content"
+						android:ellipsize="end"
+						android:maxLines="2"
+						android:textColor="#FFFFFF"
+						android:textSize="24sp" />
+
+					<TextView
+						android:id="@+id/text_hero_desc"
+						android:layout_width="match_parent"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="6dp"
+						android:ellipsize="end"
+						android:maxLines="2"
+						android:textColor="#CBD5E1"
+						android:textSize="12.5sp" />
+
+					<RelativeLayout
+						android:layout_width="match_parent"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="14dp">
+
+						<LinearLayout
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_alignParentStart="true"
+							android:layout_centerVertical="true"
+							android:gravity="center_vertical"
+							android:orientation="horizontal">
+
+							<LinearLayout
+								android:id="@+id/btn_hero_play"
+								android:layout_width="wrap_content"
+								android:layout_height="40dp"
+								android:gravity="center_vertical"
+								android:orientation="horizontal"
+								android:paddingLeft="18dp"
+								android:paddingRight="20dp">
+
+								<ImageView
+									android:id="@+id/img_play_icon"
+									android:layout_width="16dp"
+									android:layout_height="16dp"
+									android:src="@drawable/ic_play1"
+									app:tint="#000000" />
+
+								<TextView
+									android:layout_width="wrap_content"
+									android:layout_height="wrap_content"
+									android:layout_marginStart="8dp"
+									android:text="Tonton"
+									android:textColor="#000000"
+									android:textSize="13.5sp" />
+							</LinearLayout>
+
+							<FrameLayout
+								android:id="@+id/btn_hero_favorite"
+								android:layout_width="40dp"
+								android:layout_height="40dp"
+								android:layout_marginStart="10dp"
+								android:clipToOutline="true">
+
+								<ImageView
+									android:id="@+id/img_hero_favorite"
+									android:layout_width="18dp"
+									android:layout_height="18dp"
+									android:layout_gravity="center"
+									android:src="@drawable/ic_bookmark" />
+							</FrameLayout>
+						</LinearLayout>
+
+						<LinearLayout
+							android:id="@+id/indicator_capsule"
+							android:layout_width="wrap_content"
+							android:layout_height="wrap_content"
+							android:layout_alignParentEnd="true"
+							android:layout_centerVertical="true"
+							android:gravity="center_vertical"
+							android:orientation="horizontal">
+
+							<View
+								android:id="@+id/dot_0"
+								android:layout_width="16dp"
+								android:layout_height="5dp" />
+
+							<View
+								android:id="@+id/dot_1"
+								android:layout_width="5dp"
+								android:layout_height="5dp"
+								android:layout_marginStart="5dp" />
+
+							<View
+								android:id="@+id/dot_2"
+								android:layout_width="5dp"
+								android:layout_height="5dp"
+								android:layout_marginStart="5dp" />
+						</LinearLayout>
+					</RelativeLayout>
+				</LinearLayout>
+			</FrameLayout>
+
+			<!-- LANJUTKAN MENONTON -->
+			<LinearLayout
+				android:id="@+id/layout_section_continue"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="16dp"
+				android:orientation="vertical"
+				android:visibility="gone">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
 					android:paddingLeft="16dp"
 					android:paddingRight="16dp">
 
 					<TextView
-						android:id="@+id/textTime"
+						android:id="@+id/text_title_continue"
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
-						android:text="00:00 / 00:00"
-						android:textSize="13sp"
+						android:layout_alignParentStart="true"
+						android:text="Lanjutkan Menonton"
 						android:textColor="#FFFFFF"
-						android:layout_alignParentLeft="true"
-						android:layout_centerVertical="true" />
+						android:textSize="16sp" />
 
-					<LinearLayout
-						android:id="@+id/linear2"
+					<TextView
+						android:id="@+id/text_continue_see_all"
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
-						android:gravity="center_vertical"
-						android:orientation="horizontal"
-						android:layout_alignParentRight="true"
-						android:layout_centerVertical="true">
-
-						<TextView
-							android:id="@+id/btnFullscreenEpisodes"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginRight="14dp"
-							android:padding="4dp"
-							android:text="Episode"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF"
-							android:visibility="gone" />
-
-						<TextView
-							android:id="@+id/btnQuality"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:padding="4dp"
-							android:text="Auto"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF" />
-
-						<ImageView
-							android:id="@+id/btnFullscreen"
-							android:layout_width="24dp"
-							android:layout_height="24dp"
-							android:layout_marginLeft="10dp"
-							android:padding="2dp"
-							android:src="@drawable/ic_fullscreen"
-							android:scaleType="fitCenter" />
-					</LinearLayout>
+						android:layout_alignParentEnd="true"
+						android:text="Lihat riwayat"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
 				</RelativeLayout>
 
-				<SeekBar
-					android:id="@+id/playerSeekBar"
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerContinue"
 					android:layout_width="match_parent"
-					android:layout_height="22dp"
-					android:paddingLeft="8dp"
-					android:paddingRight="8dp"
-					android:maxHeight="4dp"
-					android:minHeight="4dp"
-					android:splitTrack="false" />
-			</LinearLayout>
-		</RelativeLayout>
-	</FrameLayout>
-
-	<!-- KONTAINER PEMBATAS TINGGI TETAP (BEBAS KEDAT-KEDUT + CACHE LAYER SAMA SEPERTI SEEKBAR VIDEO) -->
-	<FrameLayout
-		android:id="@+id/dividerContainer"
-		android:layout_width="match_parent"
-		android:layout_height="2.5dp"
-		android:background="#0B0D11">
-
-		<ProgressBar
-			android:id="@+id/miniVideoProgressBar"
-			style="?android:attr/progressBarStyleHorizontal"
-			android:layout_width="match_parent"
-			android:layout_height="match_parent"
-			android:max="1000"
-			android:progress="0"
-			android:secondaryProgress="0"
-			android:visibility="invisible" />
-	</FrameLayout>
-
-	<androidx.core.widget.NestedScrollView
-		android:id="@+id/vscroll16"
-		android:layout_width="match_parent"
-		android:layout_height="0dp"
-		android:background="#000000"
-		android:layout_weight="1"
-		android:overScrollMode="never">
-
-		<LinearLayout
-			android:id="@+id/linear140"
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:paddingLeft="16dp"
-			android:paddingTop="18dp"
-			android:paddingRight="16dp"
-			android:paddingBottom="36dp"
-			android:orientation="vertical">
-
-			<LinearLayout
-				android:id="@+id/btnOpenDetail"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:gravity="center_vertical"
-				android:orientation="horizontal">
-
-				<androidx.cardview.widget.CardView
-					android:id="@+id/cardview1"
-					android:layout_width="64dp"
-					android:layout_height="64dp"
-					app:cardBackgroundColor="#0B0D11"
-					app:cardCornerRadius="32dp"
-					app:cardElevation="0dp">
-
-					<ImageView
-						android:id="@+id/imagePoster"
-						android:layout_width="match_parent"
-						android:layout_height="match_parent"
-						android:src="@drawable/default_image"
-						android:scaleType="centerCrop" />
-				</androidx.cardview.widget.CardView>
-
-				<LinearLayout
-					android:id="@+id/linear142"
-					android:layout_width="0dp"
-					android:layout_height="wrap_content"
-					android:layout_weight="1"
-					android:layout_marginLeft="14dp"
-					android:layout_marginRight="8dp"
-					android:orientation="vertical">
-
-					<TextView
-						android:id="@+id/textJudul"
-						android:layout_width="match_parent"
-						android:layout_height="wrap_content"
-						android:text="Memuat Judul..."
-						android:textSize="17sp"
-						android:textColor="#FFFFFF"
-						android:ellipsize="end"
-						android:maxLines="2" />
-
-					<LinearLayout
-						android:id="@+id/linear143"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginTop="6dp"
-						android:gravity="center_vertical"
-						android:orientation="horizontal">
-
-						<TextView
-							android:id="@+id/textRating"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:text="Ongoing"
-							android:textSize="12sp"
-							android:textColor="#9CA3AF" />
-
-						<TextView
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="6dp"
-							android:layout_marginRight="6dp"
-							android:text="•"
-							android:textSize="12sp"
-							android:textColor="#6B7280" />
-
-						<TextView
-							android:id="@+id/textYear"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:text="2026"
-							android:textSize="12sp"
-							android:textColor="#9CA3AF" />
-
-						<TextView
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="6dp"
-							android:layout_marginRight="6dp"
-							android:text="•"
-							android:textSize="12sp"
-							android:textColor="#6B7280" />
-
-						<TextView
-							android:id="@+id/textGenre"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:text="Action"
-							android:textSize="12sp"
-							android:textColor="#9CA3AF" />
-					</LinearLayout>
-				</LinearLayout>
-
-				<ImageView
-					android:id="@+id/iconExpandDetail"
-					android:layout_width="32dp"
-					android:layout_height="32dp"
-					android:padding="5dp"
-					android:src="@drawable/ic_chevron_down"
-					android:scaleType="fitCenter" />
+					android:layout_height="132dp"
+					android:layout_marginTop="10dp"
+					android:clipToPadding="false"
+					android:overScrollMode="never"
+					android:paddingLeft="16dp"
+					android:paddingRight="4dp" />
 			</LinearLayout>
 
-			<HorizontalScrollView
-				android:id="@+id/scrollActionButtons"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:layout_marginTop="16dp"
-				android:scrollbars="none"
-				android:overScrollMode="never">
-
-				<LinearLayout
-					android:id="@+id/linearScrollContainer"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:orientation="horizontal">
-
-					<LinearLayout
-						android:id="@+id/btnActionServer"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
-						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
-						android:gravity="center_vertical"
-						android:orientation="horizontal">
-
-						<ImageView
-							android:id="@+id/imageActionServer"
-							android:layout_width="16dp"
-							android:layout_height="16dp"
-							android:src="@drawable/ic_server" />
-
-						<TextView
-							android:id="@+id/textActionServer"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="8dp"
-							android:text="Server"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF" />
-					</LinearLayout>
-
-					<LinearLayout
-						android:id="@+id/btnActionDownload"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginLeft="10dp"
-						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
-						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
-						android:gravity="center_vertical"
-						android:orientation="horizontal">
-
-						<ImageView
-							android:id="@+id/imageActionDownload"
-							android:layout_width="16dp"
-							android:layout_height="16dp"
-							android:src="@drawable/ic_download" />
-
-						<TextView
-							android:id="@+id/textActionDownload"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="8dp"
-							android:text="Download"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF" />
-					</LinearLayout>
-
-					<LinearLayout
-						android:id="@+id/btnActionShare"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginLeft="10dp"
-						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
-						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
-						android:gravity="center_vertical"
-						android:orientation="horizontal">
-
-						<ImageView
-							android:id="@+id/imageActionShare"
-							android:layout_width="16dp"
-							android:layout_height="16dp"
-							android:src="@drawable/ic_share" />
-
-						<TextView
-							android:id="@+id/textActionShare"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="8dp"
-							android:text="Share"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF" />
-					</LinearLayout>
-
-					<LinearLayout
-						android:id="@+id/btnActionReport"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginLeft="10dp"
-						android:paddingLeft="16dp"
-						android:paddingTop="10dp"
-						android:paddingRight="16dp"
-						android:paddingBottom="10dp"
-						android:gravity="center_vertical"
-						android:orientation="horizontal">
-
-						<ImageView
-							android:id="@+id/imageActionReport"
-							android:layout_width="16dp"
-							android:layout_height="16dp"
-							android:src="@drawable/ic_report" />
-
-						<TextView
-							android:id="@+id/textActionReport"
-							android:layout_width="wrap_content"
-							android:layout_height="wrap_content"
-							android:layout_marginLeft="8dp"
-							android:text="Report"
-							android:textSize="13sp"
-							android:textColor="#FFFFFF" />
-					</LinearLayout>
-				</LinearLayout>
-			</HorizontalScrollView>
-
+			<!-- POPULER HARI INI -->
 			<LinearLayout
-				android:id="@+id/linear144"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:layout_marginTop="20dp"
-				android:gravity="center_vertical"
-				android:orientation="horizontal">
-
-				<TextView
-					android:id="@+id/textview83"
-					android:layout_width="0dp"
-					android:layout_height="wrap_content"
-					android:text="Episode List"
-					android:textSize="16sp"
-					android:textColor="#FFFFFF"
-					android:layout_weight="1" />
-
-				<LinearLayout
-					android:id="@+id/btnSortEpisodes"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:layout_marginRight="14dp"
-					android:paddingLeft="10dp"
-					android:paddingTop="5dp"
-					android:paddingRight="10dp"
-					android:paddingBottom="5dp"
-					android:gravity="center_vertical"
-					android:orientation="horizontal">
-
-					<ImageView
-						android:id="@+id/iconSortEpisodes"
-						android:layout_width="14dp"
-						android:layout_height="14dp"
-						android:src="@drawable/ic_sort" />
-
-					<TextView
-						android:id="@+id/textSortEpisodes"
-						android:layout_width="wrap_content"
-						android:layout_height="wrap_content"
-						android:layout_marginLeft="5dp"
-						android:text="Terbaru"
-						android:textSize="12sp"
-						android:textColor="#CBD5E1" />
-				</LinearLayout>
-
-				<TextView
-					android:id="@+id/textview85"
-					android:layout_width="wrap_content"
-					android:layout_height="wrap_content"
-					android:text="Lihat Semua"
-					android:textSize="14sp"
-					android:textColor="#3B82F6" />
-			</LinearLayout>
-
-			<androidx.recyclerview.widget.RecyclerView
-				android:id="@+id/recyclerEpisode"
-				android:layout_width="match_parent"
-				android:layout_height="wrap_content"
-				android:layout_marginTop="14dp"
-				android:clipToPadding="false"
-				android:overScrollMode="never"
-				tools:listitem="@layout/eps_list" />
-
-			<!-- CONTAINER KOMENTAR BULAT ABU GELAP -->
-			<LinearLayout
-				android:id="@+id/btnCommentSection"
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:layout_marginTop="18dp"
-				android:paddingLeft="16dp"
-				android:paddingTop="13dp"
-				android:paddingRight="16dp"
-				android:paddingBottom="13dp"
-				android:gravity="center_vertical"
-				android:orientation="horizontal">
+				android:orientation="vertical">
 
 				<TextView
-					android:id="@+id/textCommentPreviewLabel"
-					android:layout_width="0dp"
-					android:layout_height="wrap_content"
-					android:layout_weight="1"
-					android:text="Komentar"
-					android:textSize="14sp"
-					android:textColor="#FFFFFF" />
-
-				<TextView
-					android:id="@+id/textCommentCount"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:layout_marginRight="8dp"
-					android:text="0"
-					android:textSize="13sp"
-					android:textColor="#94A3B8" />
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp"
+					android:text="Populer Hari Ini"
+					android:textColor="#FFFFFF"
+					android:textSize="16sp" />
 
-				<ImageView
-					android:id="@+id/iconCommentChevron"
-					android:layout_width="16dp"
-					android:layout_height="16dp"
-					android:rotation="-90"
-					android:src="@drawable/ic_chevron_down"
-					android:scaleType="fitCenter" />
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerPopular"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
 			</LinearLayout>
 
-			<TextView
-				android:id="@+id/textview84"
-				android:layout_width="wrap_content"
-				android:layout_height="wrap_content"
-				android:layout_marginTop="24dp"
-				android:text="Rekomendasi Serupa"
-				android:textSize="16sp"
-				android:textColor="#FFFFFF" />
-
-			<androidx.recyclerview.widget.RecyclerView
-				android:id="@+id/recyclerRekomendasi"
+			<!-- POPULER DI DONGFLIX -->
+			<LinearLayout
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
-				android:layout_marginTop="14dp"
-				android:nestedScrollingEnabled="false"
-				android:overScrollMode="never" />
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Populer di Dongflix"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_popular_dongflix_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerPopularDongflix"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- KULTIVASI & KEABADIAN -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Kultivasi &amp; Keabadian"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_cultivation_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerCultivationDonghua"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- DONGHUA TAMAT -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Donghua Tamat"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_completed_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerCompletedDonghua"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- DONGHUA KOMEDI RINGAN -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Donghua Komedi Ringan"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_comedy_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerComedyDonghua"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- MISTERI & TEKA-TEKI -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Misteri &amp; Teka-Teki"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_mystery_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerMysteryDonghua"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- DONGHUA MOVIE -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Donghua Movie"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_movie_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerMovieDonghua"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- DONGHUA ROMANTIS TIPIS-TIPIS -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Donghua Romantis Tipis-Tipis"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_romance_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<androidx.recyclerview.widget.RecyclerView
+					android:id="@+id/recyclerRomanceDonghua"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="10dp"
+					android:overScrollMode="never" />
+			</LinearLayout>
+
+			<!-- BARU DIUPDATE GRID -->
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="20dp"
+				android:orientation="vertical">
+
+				<RelativeLayout
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp">
+
+					<TextView
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentStart="true"
+						android:text="Baru Diupdate"
+						android:textColor="#FFFFFF"
+						android:textSize="16sp" />
+
+					<TextView
+						android:id="@+id/text_see_all"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_alignParentEnd="true"
+						android:text="Lihat semua"
+						android:textColor="#94A3B8"
+						android:textSize="13sp" />
+				</RelativeLayout>
+
+				<GridView
+					android:id="@+id/gridview1"
+					android:layout_width="match_parent"
+					android:layout_height="wrap_content"
+					android:layout_marginTop="12dp"
+					android:horizontalSpacing="12dp"
+					android:numColumns="3"
+					android:paddingLeft="16dp"
+					android:paddingRight="16dp"
+					android:stretchMode="columnWidth"
+					android:verticalSpacing="16dp" />
+			</LinearLayout>
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
-</LinearLayout>
+
+	<!-- HALAMAN PUSTAKA -->
+	<FrameLayout
+		android:id="@+id/layout_favorite"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="#000000"
+		android:visibility="gone" />
+
+	<!-- HALAMAN AKUN -->
+	<FrameLayout
+		android:id="@+id/layout_profile"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="#000000"
+		android:visibility="gone" />
+
+	<!-- HALAMAN PENCARIAN -->
+	<LinearLayout
+		android:id="@+id/layout_search"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="#000000"
+		android:orientation="vertical"
+		android:visibility="gone">
+
+		<LinearLayout
+			android:id="@+id/search_bar_container"
+			android:layout_width="match_parent"
+			android:layout_height="46dp"
+			android:layout_marginLeft="16dp"
+			android:layout_marginRight="16dp"
+			android:gravity="center_vertical"
+			android:orientation="horizontal"
+			android:paddingLeft="14dp"
+			android:paddingRight="12dp">
+
+			<ImageView
+				android:layout_width="18dp"
+				android:layout_height="18dp"
+				android:src="@drawable/ic_search"
+				app:tint="#94A3B8" />
+
+			<EditText
+				android:id="@+id/input_search"
+				android:layout_width="0dp"
+				android:layout_height="match_parent"
+				android:layout_marginStart="10dp"
+				android:layout_weight="1"
+				android:background="@android:color/transparent"
+				android:hint="Cari judul donghua atau genre..."
+				android:imeOptions="actionSearch"
+				android:singleLine="true"
+				android:textColor="#FFFFFF"
+				android:textColorHint="#64748B"
+				android:textSize="13.5sp" />
+
+			<TextView
+				android:id="@+id/btn_clear_search"
+				android:layout_width="24dp"
+				android:layout_height="24dp"
+				android:gravity="center"
+				android:text="✕"
+				android:textColor="#CBD5E1"
+				android:textSize="11sp"
+				android:visibility="gone" />
+		</LinearLayout>
+
+		<TextView
+			android:id="@+id/text_search_section_label"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_marginLeft="16dp"
+			android:layout_marginTop="14dp"
+			android:layout_marginBottom="8dp"
+			android:text="Populer di Dongflix"
+			android:textColor="#94A3B8"
+			android:textSize="13sp" />
+
+		<androidx.recyclerview.widget.RecyclerView
+			android:id="@+id/recycler_search_list"
+			android:layout_width="match_parent"
+			android:layout_height="0dp"
+			android:layout_weight="1"
+			android:clipToPadding="false"
+			android:paddingBottom="120dp" />
+	</LinearLayout>
+
+	<!-- PULL TO REFRESH INDICATOR -->
+	<FrameLayout
+		android:id="@+id/pull_refresh_indicator"
+		android:layout_width="40dp"
+		android:layout_height="40dp"
+		android:layout_gravity="top|center_horizontal"
+		android:layout_marginTop="74dp"
+		android:visibility="gone">
+
+		<ImageView
+			android:id="@+id/img_pull_refresh_icon"
+			android:layout_width="18dp"
+			android:layout_height="18dp"
+			android:layout_gravity="center"
+			android:src="@drawable/ic_chevron_down" />
+
+		<ProgressBar
+			android:id="@+id/pull_refresh_spinner"
+			android:layout_width="22dp"
+			android:layout_height="22dp"
+			android:layout_gravity="center"
+			android:indeterminate="true"
+			android:visibility="gone" />
+	</FrameLayout>
+
+	<!-- MINI PLAYER INLINE SLOT -->
+	<FrameLayout
+		android:id="@+id/mini_player_inline_slot"
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:layout_gravity="bottom"
+		android:layout_marginBottom="86dp"
+		android:visibility="gone" />
+
+	<!-- COMPACT HOME BUTTON -->
+	<FrameLayout
+		android:id="@+id/btn_compact_home"
+		android:layout_width="54dp"
+		android:layout_height="54dp"
+		android:layout_gravity="bottom|start"
+		android:layout_marginLeft="16dp"
+		android:layout_marginBottom="18dp"
+		android:clipToOutline="true"
+		android:visibility="gone">
+
+		<eightbitlab.com.blurview.BlurView
+			android:id="@+id/compact_home_blur_bg"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			app:blurOverlayColor="#66141824" />
+
+		<ImageView
+			android:layout_width="22dp"
+			android:layout_height="22dp"
+			android:layout_gravity="center"
+			android:src="@drawable/ic_home"
+			app:tint="#FFFFFF" />
+	</FrameLayout>
+
+	<!-- BOTTOM NAVBAR + SEARCH BUTTON -->
+	<RelativeLayout
+		android:layout_width="match_parent"
+		android:layout_height="64dp"
+		android:layout_gravity="bottom"
+		android:layout_marginLeft="16dp"
+		android:layout_marginRight="16dp"
+		android:layout_marginBottom="16dp">
+
+		<FrameLayout
+			android:id="@+id/navbar"
+			android:layout_width="0dp"
+			android:layout_height="64dp"
+			android:layout_alignParentStart="true"
+			android:layout_marginEnd="10dp"
+			android:layout_toStartOf="@id/btn_circle_search"
+			android:clipToOutline="true">
+
+			<eightbitlab.com.blurview.BlurView
+				android:id="@+id/navbar_blur_bg"
+				android:layout_width="match_parent"
+				android:layout_height="match_parent"
+				app:blurOverlayColor="#66141824" />
+
+			<LinearLayout
+				android:layout_width="match_parent"
+				android:layout_height="match_parent"
+				android:orientation="horizontal"
+				android:padding="5dp">
+
+				<LinearLayout
+					android:id="@+id/tab_beranda"
+					android:layout_width="0dp"
+					android:layout_height="match_parent"
+					android:layout_weight="1"
+					android:gravity="center"
+					android:orientation="vertical">
+
+					<ImageView
+						android:id="@+id/img_home"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
+						android:src="@drawable/ic_home" />
+
+					<TextView
+						android:id="@+id/txt_home"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="2dp"
+						android:text="Beranda"
+						android:textColor="#FFFFFF"
+						android:textSize="11sp" />
+				</LinearLayout>
+
+				<LinearLayout
+					android:id="@+id/tab_pustaka"
+					android:layout_width="0dp"
+					android:layout_height="match_parent"
+					android:layout_weight="1"
+					android:gravity="center"
+					android:orientation="vertical">
+
+					<ImageView
+						android:id="@+id/img_favorite"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
+						android:src="@drawable/ic_bookmark" />
+
+					<TextView
+						android:id="@+id/txt_favorite"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="2dp"
+						android:text="Pustaka"
+						android:textColor="#94A3B8"
+						android:textSize="11sp" />
+				</LinearLayout>
+
+				<LinearLayout
+					android:id="@+id/tab_akun"
+					android:layout_width="0dp"
+					android:layout_height="match_parent"
+					android:layout_weight="1"
+					android:gravity="center"
+					android:orientation="vertical">
+
+					<ImageView
+						android:id="@+id/img_profile"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
+						android:src="@drawable/ic_profile" />
+
+					<TextView
+						android:id="@+id/txt_profile"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="2dp"
+						android:text="Akun"
+						android:textColor="#94A3B8"
+						android:textSize="11sp" />
+				</LinearLayout>
+			</LinearLayout>
+		</FrameLayout>
+
+		<FrameLayout
+			android:id="@+id/btn_circle_search"
+			android:layout_width="64dp"
+			android:layout_height="64dp"
+			android:layout_alignParentEnd="true"
+			android:clickable="true"
+			android:clipToOutline="true"
+			android:focusable="true">
+
+			<eightbitlab.com.blurview.BlurView
+				android:id="@+id/search_blur_bg"
+				android:layout_width="match_parent"
+				android:layout_height="match_parent"
+				app:blurOverlayColor="#66141824" />
+
+			<ImageView
+				android:id="@+id/img_search"
+				android:layout_width="22dp"
+				android:layout_height="22dp"
+				android:layout_gravity="center"
+				android:src="@drawable/ic_search" />
+		</FrameLayout>
+	</RelativeLayout>
+
+</FrameLayout>
