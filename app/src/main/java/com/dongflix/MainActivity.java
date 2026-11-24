@@ -234,16 +234,26 @@ public class MainActivity extends AppCompatActivity {
 		return bellId > 0 ? bellId : R.drawable.ic_search;
 	}
 
+	private int resolveMessageDrawableRes(int notifRes) {
+		String[] candidates = {"ic_chat", "ic_message", "ic_forum", "ic_comment", "ic_mail", "ic_send"};
+		for (String name : candidates) {
+			int id = getResources().getIdentifier(name, "drawable", getPackageName());
+			if (id > 0 && id != notifRes) return id;
+		}
+		return android.R.drawable.sym_action_chat;
+	}
+
 	private void mergeTopHeaderButtonsIntoSinglePill() {
 		float d = getResources().getDisplayMetrics().density;
 		int notifRes = resolveNotificationDrawableRes();
+		int chatRes = resolveMessageDrawableRes(notifRes);
 
 		if (imgTopNotif != null) {
 			imgTopNotif.setImageResource(notifRes);
 			imgTopNotif.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		}
 		if (imgTopChat != null) {
-			imgTopChat.setImageResource(notifRes);
+			imgTopChat.setImageResource(chatRes);
 			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		}
 
@@ -281,7 +291,6 @@ public class MainActivity extends AppCompatActivity {
 			blurView.setLayoutParams(new FrameLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 			));
-			blurView.setOverlayColor(Color.parseColor("#66141824"));
 			setupRealTimeBlurView(blurView, rootMain, 20f);
 			topActionPillBlurBg = blurView;
 			pill.addView(blurView);
