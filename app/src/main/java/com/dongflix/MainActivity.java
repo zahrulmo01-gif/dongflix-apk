@@ -647,7 +647,7 @@ public class MainActivity extends AppCompatActivity {
 		LinearLayout root = new LinearLayout(this);
 		root.setOrientation(LinearLayout.VERTICAL);
 		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), 0);
+		root.setPadding((int) (12 * d), statusH + (int) (12 * d), (int) (12 * d), 0);
 
 		LinearLayout headerRow = new LinearLayout(this);
 		headerRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -681,7 +681,7 @@ public class MainActivity extends AppCompatActivity {
 		tabsPillContainer.setOrientation(LinearLayout.HORIZONTAL);
 		tabsPillContainer.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
 		LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (44 * d));
-		tabsLp.topMargin = (int) (16 * d);
+		tabsLp.topMargin = (int) (14 * d);
 		tabsPillContainer.setLayoutParams(tabsLp);
 
 		GradientDrawable containerBg = new GradientDrawable();
@@ -705,8 +705,8 @@ public class MainActivity extends AppCompatActivity {
 		textPustakaSectionLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
 		textPustakaSectionLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		secLp.topMargin = (int) (16 * d);
-		secLp.bottomMargin = (int) (12 * d);
+		secLp.topMargin = (int) (14 * d);
+		secLp.bottomMargin = (int) (10 * d);
 		textPustakaSectionLabel.setLayoutParams(secLp);
 		root.addView(textPustakaSectionLabel);
 
@@ -804,15 +804,55 @@ public class MainActivity extends AppCompatActivity {
 
 		LinearLayout root = new LinearLayout(this);
 		root.setOrientation(LinearLayout.VERTICAL);
-		root.setPadding((int) (16 * d), statusH + (int) (14 * d), (int) (16 * d), (int) (130 * d));
+		root.setPadding((int) (12 * d), statusH + (int) (12 * d), (int) (12 * d), (int) (130 * d));
 		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+		// Top Bar Akun + Tombol Setting di atas kanan
+		LinearLayout topHeaderBar = new LinearLayout(this);
+		topHeaderBar.setOrientation(LinearLayout.HORIZONTAL);
+		topHeaderBar.setGravity(Gravity.CENTER_VERTICAL);
+		LinearLayout.LayoutParams thLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		thLp.bottomMargin = (int) (12 * d);
+		topHeaderBar.setLayoutParams(thLp);
+
+		TextView tvPageTitle = new TextView(this);
+		tvPageTitle.setText("Akun");
+		tvPageTitle.setTextColor(Color.WHITE);
+		tvPageTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
+		tvPageTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvPageTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		ImageView btnAccountSetting = new ImageView(this);
+		LinearLayout.LayoutParams setLp = new LinearLayout.LayoutParams((int) (38 * d), (int) (38 * d));
+		btnAccountSetting.setLayoutParams(setLp);
+		int setPad = (int) (9 * d);
+		btnAccountSetting.setPadding(setPad, setPad, setPad, setPad);
+		int setRes = getResources().getIdentifier("ic_settings", "drawable", getPackageName());
+		btnAccountSetting.setImageResource(setRes > 0 ? setRes : R.drawable.ic_profile);
+		btnAccountSetting.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		GradientDrawable setBg = new GradientDrawable();
+		setBg.setShape(GradientDrawable.OVAL);
+		setBg.setColor(Color.parseColor("#12141A"));
+		setBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
+		btnAccountSetting.setBackground(setBg);
+		btnAccountSetting.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				openAccountSettingsDialog();
+			}
+		});
+
+		topHeaderBar.addView(tvPageTitle);
+		topHeaderBar.addView(btnAccountSetting);
+		root.addView(topHeaderBar);
+
+		// Kartu Identitas Profil + Tombol Ubah Profil (tanpa syarat premium)
 		LinearLayout profileCard = new LinearLayout(this);
 		profileCard.setOrientation(LinearLayout.VERTICAL);
-		profileCard.setPadding((int) (18 * d), (int) (18 * d), (int) (18 * d), (int) (18 * d));
+		profileCard.setPadding((int) (16 * d), (int) (16 * d), (int) (16 * d), (int) (16 * d));
 		GradientDrawable profCardBg = new GradientDrawable();
 		profCardBg.setColor(Color.parseColor("#12141A"));
-		profCardBg.setCornerRadius(20 * d);
+		profCardBg.setCornerRadius(18 * d);
 		profCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
 		profileCard.setBackground(profCardBg);
 
@@ -821,8 +861,8 @@ public class MainActivity extends AppCompatActivity {
 		topRow.setGravity(Gravity.CENTER_VERTICAL);
 
 		FrameLayout avatarHolder = new FrameLayout(this);
-		LinearLayout.LayoutParams avBoxLp = new LinearLayout.LayoutParams((int) (62 * d), (int) (62 * d));
-		avBoxLp.rightMargin = (int) (14 * d);
+		LinearLayout.LayoutParams avBoxLp = new LinearLayout.LayoutParams((int) (58 * d), (int) (58 * d));
+		avBoxLp.rightMargin = (int) (12 * d);
 		avatarHolder.setLayoutParams(avBoxLp);
 
 		imgAccountAvatar = new ImageView(this);
@@ -833,7 +873,7 @@ public class MainActivity extends AppCompatActivity {
 		tvAccountInitial.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 		tvAccountInitial.setGravity(Gravity.CENTER);
 		tvAccountInitial.setTextColor(Color.WHITE);
-		tvAccountInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+		tvAccountInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 21);
 		tvAccountInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 
 		avatarHolder.addView(imgAccountAvatar);
@@ -846,7 +886,7 @@ public class MainActivity extends AppCompatActivity {
 		tvAccountName = new TextView(this);
 		tvAccountName.setText("R Z");
 		tvAccountName.setTextColor(Color.WHITE);
-		tvAccountName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
+		tvAccountName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18.5f);
 		tvAccountName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		tvAccountName.setMaxLines(1);
 		tvAccountName.setEllipsize(TextUtils.TruncateAt.END);
@@ -860,24 +900,8 @@ public class MainActivity extends AppCompatActivity {
 		hLp.topMargin = (int) (2 * d);
 		tvAccountHandle.setLayoutParams(hLp);
 
-		TextView tvLifetimeBadge = new TextView(this);
-		tvLifetimeBadge.setText("✦ Premium Aktif Seumur Hidup");
-		tvLifetimeBadge.setTextColor(Color.parseColor("#38BDF8"));
-		tvLifetimeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-		tvLifetimeBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		tvLifetimeBadge.setPadding((int) (10 * d), (int) (3 * d), (int) (10 * d), (int) (3 * d));
-		LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		bLp.topMargin = (int) (8 * d);
-		tvLifetimeBadge.setLayoutParams(bLp);
-		GradientDrawable lifeBg = new GradientDrawable();
-		lifeBg.setColor(Color.parseColor("#0C2438"));
-		lifeBg.setCornerRadius(100f);
-		lifeBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
-		tvLifetimeBadge.setBackground(lifeBg);
-
 		identityCol.addView(tvAccountName);
 		identityCol.addView(tvAccountHandle);
-		identityCol.addView(tvLifetimeBadge);
 
 		TextView btnEditProfile = new TextView(this);
 		btnEditProfile.setText("Ubah Profil");
@@ -904,8 +928,8 @@ public class MainActivity extends AppCompatActivity {
 
 		View innerDiv = new View(this);
 		LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d)));
-		divLp.topMargin = (int) (16 * d);
-		divLp.bottomMargin = (int) (14 * d);
+		divLp.topMargin = (int) (14 * d);
+		divLp.bottomMargin = (int) (12 * d);
 		innerDiv.setLayoutParams(divLp);
 		innerDiv.setBackgroundColor(Color.parseColor("#1AFFFFFF"));
 		profileCard.addView(innerDiv);
@@ -925,15 +949,47 @@ public class MainActivity extends AppCompatActivity {
 
 		root.addView(profileCard);
 
+		// Banner Premium Aktif Seumur Hidup tepat di atas Level
+		LinearLayout lifetimeBanner = new LinearLayout(this);
+		lifetimeBanner.setOrientation(LinearLayout.HORIZONTAL);
+		lifetimeBanner.setGravity(Gravity.CENTER_VERTICAL);
+		lifetimeBanner.setPadding((int) (16 * d), (int) (12 * d), (int) (16 * d), (int) (12 * d));
+		LinearLayout.LayoutParams lifeBannerLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		lifeBannerLp.topMargin = (int) (12 * d);
+		lifetimeBanner.setLayoutParams(lifeBannerLp);
+		GradientDrawable lifeBannerBg = new GradientDrawable();
+		lifeBannerBg.setColor(Color.parseColor("#0C2438"));
+		lifeBannerBg.setCornerRadius(16 * d);
+		lifeBannerBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
+		lifetimeBanner.setBackground(lifeBannerBg);
+
+		TextView tvLifetimeTitle = new TextView(this);
+		tvLifetimeTitle.setText("✦ Premium Aktif Seumur Hidup");
+		tvLifetimeTitle.setTextColor(Color.WHITE);
+		tvLifetimeTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		tvLifetimeTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvLifetimeTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		TextView tvLifetimeSub = new TextView(this);
+		tvLifetimeSub.setText("Aktif");
+		tvLifetimeSub.setTextColor(Color.parseColor("#38BDF8"));
+		tvLifetimeSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		tvLifetimeSub.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+		lifetimeBanner.addView(tvLifetimeTitle);
+		lifetimeBanner.addView(tvLifetimeSub);
+		root.addView(lifetimeBanner);
+
+		// Kartu Progres Level & XP
 		LinearLayout levelCard = new LinearLayout(this);
 		levelCard.setOrientation(LinearLayout.VERTICAL);
-		levelCard.setPadding((int) (18 * d), (int) (16 * d), (int) (18 * d), (int) (16 * d));
+		levelCard.setPadding((int) (16 * d), (int) (15 * d), (int) (16 * d), (int) (15 * d));
 		LinearLayout.LayoutParams lvlCardLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		lvlCardLp.topMargin = (int) (14 * d);
+		lvlCardLp.topMargin = (int) (12 * d);
 		levelCard.setLayoutParams(lvlCardLp);
 		GradientDrawable lvlCardBg = new GradientDrawable();
 		lvlCardBg.setColor(Color.parseColor("#12141A"));
-		lvlCardBg.setCornerRadius(20 * d);
+		lvlCardBg.setCornerRadius(18 * d);
 		lvlCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
 		levelCard.setBackground(lvlCardBg);
 
@@ -999,18 +1055,28 @@ public class MainActivity extends AppCompatActivity {
 
 		root.addView(levelCard);
 
+		// Kartu Aksi Cepat (termasuk Komentar Saya)
 		LinearLayout menuCard = new LinearLayout(this);
 		menuCard.setOrientation(LinearLayout.VERTICAL);
 		menuCard.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
 		LinearLayout.LayoutParams mCardLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		mCardLp.topMargin = (int) (14 * d);
+		mCardLp.topMargin = (int) (12 * d);
 		menuCard.setLayoutParams(mCardLp);
 		GradientDrawable mCardBg = new GradientDrawable();
 		mCardBg.setColor(Color.parseColor("#12141A"));
-		mCardBg.setCornerRadius(20 * d);
+		mCardBg.setCornerRadius(18 * d);
 		mCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E2433"));
 		menuCard.setBackground(mCardBg);
 
+		menuCard.addView(buildAccountMenuItem(
+			"Komentar Saya",
+			"Lihat semua komentar yang pernah kamu tulis",
+			Color.WHITE,
+			d,
+			new View.OnClickListener() {
+				@Override public void onClick(View v) { openMyCommentsDialog(); }
+			}
+		));
 		menuCard.addView(buildAccountMenuItem(
 			"Pustaka & Riwayat",
 			"Lihat riwayat tontonan dan favorit tersimpan",
@@ -1050,6 +1116,267 @@ public class MainActivity extends AppCompatActivity {
 		scroll.addView(root);
 		profGroup.addView(scroll);
 		refreshAccountUi();
+	}
+
+	private void openAccountSettingsDialog() {
+		float d = getResources().getDisplayMetrics().density;
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout card = new LinearLayout(this);
+		card.setOrientation(LinearLayout.VERTICAL);
+		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
+		GradientDrawable cardBg = new GradientDrawable();
+		cardBg.setColor(Color.parseColor("#12141A"));
+		cardBg.setCornerRadius(20 * d);
+		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
+		card.setBackground(cardBg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Pengaturan Akun");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		card.addView(tvTitle);
+
+		TextView tvInfo = new TextView(this);
+		tvInfo.setText("Email: " + (currentUserEmail.isEmpty() ? "-" : currentUserEmail)
+			+ "\nStatus: Premium Aktif Seumur Hidup"
+			+ "\nSinkronisasi Riwayat & EXP: Aktif");
+		tvInfo.setTextColor(Color.parseColor("#94A3B8"));
+		tvInfo.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvInfo.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvInfo.setLineSpacing(4 * d, 1.05f);
+		LinearLayout.LayoutParams iLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		iLp.topMargin = (int) (10 * d);
+		iLp.bottomMargin = (int) (18 * d);
+		tvInfo.setLayoutParams(iLp);
+		card.addView(tvInfo);
+
+		LinearLayout btnRow = new LinearLayout(this);
+		btnRow.setOrientation(LinearLayout.HORIZONTAL);
+		btnRow.setGravity(Gravity.END);
+
+		TextView btnEdit = new TextView(this);
+		btnEdit.setText("Ubah Profil");
+		btnEdit.setTextColor(Color.parseColor("#38BDF8"));
+		btnEdit.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnEdit.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnEdit.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
+		btnEdit.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				dialog.dismiss();
+				openEditProfileDialog();
+			}
+		});
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("Tutup");
+		btnClose.setTextColor(Color.WHITE);
+		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnClose.setPadding((int) (18 * d), (int) (8 * d), (int) (18 * d), (int) (8 * d));
+		LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		cLp.leftMargin = (int) (8 * d);
+		btnClose.setLayoutParams(cLp);
+		GradientDrawable cBg = new GradientDrawable();
+		cBg.setColor(Color.parseColor("#2563EB"));
+		cBg.setCornerRadius(100f);
+		btnClose.setBackground(cBg);
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { dialog.dismiss(); }
+		});
+
+		btnRow.addView(btnEdit);
+		btnRow.addView(btnClose);
+		card.addView(btnRow);
+
+		dialog.setContentView(card);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			win.setLayout(Math.min((int) (340 * d), screenW - (int) (36 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
+	}
+
+	private void openMyCommentsDialog() {
+		float d = getResources().getDisplayMetrics().density;
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (18 * d), (int) (18 * d), (int) (18 * d), (int) (16 * d));
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#12141A"));
+		bg.setCornerRadius(20 * d);
+		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
+		root.setBackground(bg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Komentar Saya");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		root.addView(tvTitle);
+
+		final TextView tvStatus = new TextView(this);
+		tvStatus.setText("Memuat komentar...");
+		tvStatus.setTextColor(Color.parseColor("#94A3B8"));
+		tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		stLp.topMargin = (int) (10 * d);
+		tvStatus.setLayoutParams(stLp);
+		root.addView(tvStatus);
+
+		ScrollView scroll = new ScrollView(this);
+		LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, Math.min((int) (360 * d), getResources().getDisplayMetrics().heightPixels / 2)
+		);
+		scLp.topMargin = (int) (10 * d);
+		scLp.bottomMargin = (int) (14 * d);
+		scroll.setLayoutParams(scLp);
+
+		final LinearLayout listBox = new LinearLayout(this);
+		listBox.setOrientation(LinearLayout.VERTICAL);
+		scroll.addView(listBox);
+		root.addView(scroll);
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("Tutup");
+		btnClose.setTextColor(Color.WHITE);
+		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setPadding((int) (18 * d), (int) (9 * d), (int) (18 * d), (int) (9 * d));
+		GradientDrawable cBg = new GradientDrawable();
+		cBg.setColor(Color.parseColor("#2563EB"));
+		cBg.setCornerRadius(100f);
+		btnClose.setBackground(cBg);
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { dialog.dismiss(); }
+		});
+		root.addView(btnClose);
+
+		dialog.setContentView(root);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			win.setLayout(Math.min((int) (360 * d), screenW - (int) (28 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
+
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL).getReference("comments")
+			.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snap) {
+					if (isFinishing() || isDestroyed()) return;
+					ArrayList<HashMap<String, String>> mine = new ArrayList<>();
+					FirebaseUser curU = FirebaseAuth.getInstance().getCurrentUser();
+					String myUid = curU != null ? curU.getUid() : "";
+
+					if (snap.exists()) {
+						for (DataSnapshot slugSnap : snap.getChildren()) {
+							String slugKey = slugSnap.getKey() != null ? slugSnap.getKey() : "";
+							for (DataSnapshot itemSnap : slugSnap.getChildren()) {
+								Object v = itemSnap.getValue();
+								if (v instanceof Map) {
+									Map<?, ?> m = (Map<?, ?>) v;
+									String cEmail = m.get("email") != null ? m.get("email").toString().trim() : "";
+									String cUid = m.get("uid") != null ? m.get("uid").toString().trim() : "";
+									boolean match = (!currentUserEmail.isEmpty() && currentUserEmail.equalsIgnoreCase(cEmail))
+										|| (!myUid.isEmpty() && myUid.equals(cUid));
+									if (match) {
+										HashMap<String, String> entry = new HashMap<>();
+										entry.put("slug", slugKey);
+										entry.put("text", m.get("text") != null ? m.get("text").toString().trim() : "");
+										entry.put("stickerUrl", m.get("stickerUrl") != null ? m.get("stickerUrl").toString().trim() : "");
+										entry.put("ts", String.valueOf(parseLongSafe(m.get("timestamp"))));
+										mine.add(entry);
+									}
+								}
+							}
+						}
+					}
+
+					Collections.sort(mine, new Comparator<HashMap<String, String>>() {
+						@Override
+						public int compare(HashMap<String, String> a, HashMap<String, String> b) {
+							return Long.compare(parseLongSafe(b.get("ts")), parseLongSafe(a.get("ts")));
+						}
+					});
+
+					tvStatus.setText(mine.isEmpty()
+						? "Kamu belum menulis komentar apa pun."
+						: "Total " + mine.size() + " komentar");
+
+					float density = getResources().getDisplayMetrics().density;
+					listBox.removeAllViews();
+					for (final HashMap<String, String> item : mine) {
+						LinearLayout row = new LinearLayout(MainActivity.this);
+						row.setOrientation(LinearLayout.VERTICAL);
+						row.setPadding((int) (12 * density), (int) (10 * density), (int) (12 * density), (int) (10 * density));
+						LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(
+							ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+						);
+						rLp.bottomMargin = (int) (8 * density);
+						row.setLayoutParams(rLp);
+						GradientDrawable rBg = new GradientDrawable();
+						rBg.setColor(Color.parseColor("#181C26"));
+						rBg.setCornerRadius(12 * density);
+						row.setBackground(rBg);
+
+						TextView tvSlug = new TextView(MainActivity.this);
+						tvSlug.setText(item.get("slug").replace("_", "-"));
+						tvSlug.setTextColor(Color.parseColor("#38BDF8"));
+						tvSlug.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+						tvSlug.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+						String bodyStr = item.get("text");
+						if (bodyStr == null || bodyStr.isEmpty()) {
+							bodyStr = !(item.get("stickerUrl") == null || item.get("stickerUrl").isEmpty())
+								? "[Stiker]" : "";
+						}
+
+						TextView tvBody = new TextView(MainActivity.this);
+						tvBody.setText(bodyStr);
+						tvBody.setTextColor(Color.WHITE);
+						tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+						tvBody.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+						LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+							ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+						);
+						bLp.topMargin = (int) (3 * density);
+						tvBody.setLayoutParams(bLp);
+
+						row.addView(tvSlug);
+						row.addView(tvBody);
+						row.setOnClickListener(new View.OnClickListener() {
+							@Override
+							public void onClick(View v) {
+								String target = item.get("slug");
+								if (target != null && !target.isEmpty()) {
+									dialog.dismiss();
+									openWatchBySlug(target);
+								}
+							}
+						});
+						listBox.addView(row);
+					}
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError error) {
+					if (!isFinishing() && !isDestroyed()) {
+						tvStatus.setText("Gagal memuat komentar.");
+					}
+				}
+			});
 	}
 
 	private LinearLayout buildStatColumn(TextView valueView, String initVal, String label, float d) {
