@@ -242,6 +242,41 @@ public class MainActivity extends AppCompatActivity {
 		return android.R.drawable.sym_action_chat;
 	}
 
+	private int resolveActionArrowDrawableRes() {
+		String[] candidates = {"ic_chevron_right", "ic_arrow_forward", "ic_arrow_right", "ic_play1"};
+		for (String name : candidates) {
+			int id = getResources().getIdentifier(name, "drawable", getPackageName());
+			if (id > 0) return id;
+		}
+		return 0;
+	}
+
+	private void attachRightIconToActionText(TextView tv) {
+		if (tv == null) return;
+		float d = getResources().getDisplayMetrics().density;
+		tv.setTextColor(Color.parseColor("#94A3B8"));
+		tv.setGravity(Gravity.CENTER_VERTICAL);
+		tv.setCompoundDrawablePadding((int) (4 * d));
+
+		int arrowRes = resolveActionArrowDrawableRes();
+		if (arrowRes > 0) {
+			Drawable icon = getResources().getDrawable(arrowRes);
+			if (icon != null) {
+				icon = icon.mutate();
+				icon.setColorFilter(Color.parseColor("#94A3B8"), PorterDuff.Mode.SRC_IN);
+				int sz = (int) (14 * d);
+				icon.setBounds(0, 0, sz, sz);
+				tv.setCompoundDrawables(null, null, icon, null);
+				return;
+			}
+		}
+
+		String cur = tv.getText() != null ? tv.getText().toString().trim() : "";
+		if (!cur.endsWith("›")) {
+			tv.setText(cur + " ›");
+		}
+	}
+
 	private void applyHeaderActionIcons() {
 		int notifRes = resolveNotificationDrawableRes();
 		int chatRes = resolveMessageDrawableRes(notifRes);
@@ -254,6 +289,23 @@ public class MainActivity extends AppCompatActivity {
 			imgTopChat.setImageResource(chatRes);
 			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		}
+	}
+
+	private String formatRemainingMinutesText(Map<String, Object> item) {
+		long posMs = parseLongSafe(item.get("positionMs"));
+		long durMs = parseLongSafe(item.get("durationMs"));
+		if (durMs > 0L && posMs >= 0L) {
+			long remMs = Math.max(0L, durMs - posMs);
+			long remMin = Math.max(1L, (long) Math.ceil(remMs / 60000.0));
+			if (remMs == 0L) return "Selesai";
+			if (remMin >= 60L) {
+				return (remMin / 60L) + "j " + (remMin % 60L) + "m lagi";
+			}
+			return remMin + " mnt lagi";
+		}
+		String remRaw = safeStr(item, "remainingText", "").trim();
+		if (!remRaw.isEmpty()) return remRaw;
+		return "Lanjutkan";
 	}
 
 	@Override
@@ -647,11 +699,11 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (132 * d)));
+			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (112 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
-			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
+			attachRightIconToActionText(textContinueSeeAll);
 			textContinueSeeAll.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
@@ -2303,7 +2355,7 @@ public class MainActivity extends AppCompatActivity {
 			final String sectionTitle = entry.getValue()[0];
 			final String filterKey = entry.getValue()[1];
 			if (tv != null) {
-				tv.setTextColor(Color.parseColor("#94A3B8"));
+				attachRightIconToActionText(tv);
 				tv.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
@@ -2316,11 +2368,9 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 
-		if (textContinueSeeAll != null) {
-			textContinueSeeAll.setTextColor(Color.parseColor("#94A3B8"));
-		}
-
+		attachRightIconToActionText(textContinueSeeAll);
 		applyHeaderActionIcons();
+
 		if (btnTopNotif != null) {
 			btnTopNotif.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -2782,37 +2832,56 @@ public class MainActivity extends AppCompatActivity {
 		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
 			float d = parent.getResources().getDisplayMetrics().density;
 			FrameLayout card = new FrameLayout(parent.getContext());
-			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams((int) (245 * d), (int) (124 * d));
-			lp.rightMargin = (int) (12 * d);
+			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams((int) (196 * d), (int) (104 * d));
+			lp.rightMargin = (int) (10 * d);
 			card.setLayoutParams(lp);
 
 			GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
 				new int[]{Color.parseColor("#071830"), Color.parseColor("#0C2847")});
-			bg.setCornerRadius(16 * d);
+			bg.setCornerRadius(14 * d);
 			card.setBackground(bg);
 			card.setClipToOutline(true);
 
 			ImageView thumb = new ImageView(parent.getContext());
 			thumb.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 			thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			thumb.setAlpha(0.7f);
+			thumb.setAlpha(0.75f);
 			thumb.setTag("thumb");
 			card.addView(thumb);
 
 			View scrim = new View(parent.getContext());
 			scrim.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 			scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
-				new int[]{Color.parseColor("#E6030A14"), Color.parseColor("#66030A14"), Color.TRANSPARENT}));
+				new int[]{Color.parseColor("#E6030A14"), Color.parseColor("#55030A14"), Color.TRANSPARENT}));
 			card.addView(scrim);
+
+			TextView tvRemaining = new TextView(parent.getContext());
+			FrameLayout.LayoutParams remLp = new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END
+			);
+			remLp.setMargins(0, (int) (7 * d), (int) (7 * d), 0);
+			tvRemaining.setLayoutParams(remLp);
+			tvRemaining.setPadding((int) (7 * d), (int) (2 * d), (int) (7 * d), (int) (2 * d));
+			tvRemaining.setTextColor(Color.WHITE);
+			tvRemaining.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+			tvRemaining.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvRemaining.setMaxLines(1);
+			GradientDrawable remBg = new GradientDrawable();
+			remBg.setColor(Color.parseColor("#B30A0E17"));
+			remBg.setCornerRadius(100f);
+			remBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#33FFFFFF"));
+			tvRemaining.setBackground(remBg);
+			tvRemaining.setTag("remaining");
+			card.addView(tvRemaining);
 
 			LinearLayout col = new LinearLayout(parent.getContext());
 			col.setOrientation(LinearLayout.VERTICAL);
-			col.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+			col.setPadding((int) (11 * d), (int) (8 * d), (int) (11 * d), (int) (8 * d));
 			col.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
 			TextView tvTitle = new TextView(parent.getContext());
 			tvTitle.setTextColor(Color.WHITE);
-			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+			tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
 			tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvTitle.setSingleLine(true);
 			tvTitle.setMaxLines(1);
@@ -2821,7 +2890,7 @@ public class MainActivity extends AppCompatActivity {
 
 			TextView tvEp = new TextView(parent.getContext());
 			tvEp.setTextColor(Color.parseColor("#CBD5E1"));
-			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			tvEp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
 			tvEp.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 			tvEp.setMaxLines(1);
 			tvEp.setEllipsize(TextUtils.TruncateAt.END);
@@ -2853,6 +2922,7 @@ public class MainActivity extends AppCompatActivity {
 			final HashMap<String, Object> item = data.get(pos);
 			if (item == null) return;
 			ImageView thumb = holder.itemView.findViewWithTag("thumb");
+			TextView tvRemaining = holder.itemView.findViewWithTag("remaining");
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			final View barFill = holder.itemView.findViewWithTag("bar_fill");
@@ -2861,6 +2931,7 @@ public class MainActivity extends AppCompatActivity {
 			String cov = normalizeCoverUrl(safeStr(item, "cover", ""));
 			if (cov.isEmpty()) cov = normalizeCoverUrl(safeStr(item, "poster", ""));
 
+			if (tvRemaining != null) tvRemaining.setText(formatRemainingMinutesText(item));
 			if (tvTitle != null) tvTitle.setText(cleanText(safeStr(item, "title", "Donghua")));
 			if (tvEp != null) tvEp.setText(epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw);
 			if (thumb != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
@@ -3207,7 +3278,7 @@ public class MainActivity extends AppCompatActivity {
 			if (mode == 0) {
 				String epRaw = safeStr(item, "episode", "1").trim();
 				if (tvEp != null) tvEp.setText(epRaw.toUpperCase(Locale.US).startsWith("EP") ? epRaw.toUpperCase(Locale.US) : "EP " + epRaw);
-				if (tvSub != null) tvSub.setText(safeStr(item, "remainingText", "Lanjutkan menonton"));
+				if (tvSub != null) tvSub.setText(formatRemainingMinutesText(item));
 			} else if (mode == 1) {
 				String ep = safeStr(item, "episode", "");
 				if (tvEp != null) tvEp.setText(ep.isEmpty() ? "Favorit" : ep);
