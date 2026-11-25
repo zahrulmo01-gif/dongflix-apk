@@ -6,7 +6,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.LinearGradient;
@@ -82,6 +81,8 @@ public class ChatActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 	private static final String ADMIN_EMAIL = "zahrulms01@gmail.com";
+	private static final String PINNED_WARNING_MESSAGE =
+		"hati hati penipuan, jangan bagikan info pribadi disini, kami tidak bertanggung jawab jika data pribadi anda disalah gunakan.";
 
 	private static final String[] DEFAULT_STICKERS = {
 		"https://cdn-icons-png.flaticon.com/128/9408/9408175.png",
@@ -100,7 +101,10 @@ public class ChatActivity extends AppCompatActivity {
 	private ValueEventListener chatListener;
 
 	private FrameLayout chatRoot;
+	private FrameLayout headerOverlayWrapper;
 	private LinearLayout chatHeader;
+	private ImageView headerProfileAvatar;
+	private FrameLayout pinnedMessageCard;
 	private LinearLayout chatBottomBar;
 	private ScrollView chatScrollView;
 	private LinearLayout messagesContainer;
@@ -189,29 +193,36 @@ public class ChatActivity extends AppCompatActivity {
 		}
 	}
 
-	private void setupGlassBlur(BlurView blurView, ViewGroup rootContainer, float radius, int strokeColor) {
+	private void setupGlassBlur(BlurView blurView, ViewGroup rootContainer, float radius, float cornerRadiusPx, int overlayColor, int strokeColor) {
 		if (blurView == null || rootContainer == null) return;
 		float d = getResources().getDisplayMetrics().density;
+		final float rPx = cornerRadiusPx;
 
-		blurView.setOutlineProvider(new ViewOutlineProvider() {
-			@Override
-			public void getOutline(View view, Outline outline) {
-				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f);
-			}
-		});
-		blurView.setClipToOutline(true);
+		if (rPx > 0f) {
+			blurView.setOutlineProvider(new ViewOutlineProvider() {
+				@Override
+				public void getOutline(View view, Outline outline) {
+					outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), rPx);
+				}
+			});
+			blurView.setClipToOutline(true);
+		} else {
+			blurView.setClipToOutline(false);
+		}
 
 		Drawable winBg = getWindow().getDecorView().getBackground();
 		blurView.setupWith(rootContainer, new RenderScriptBlur(this))
 			.setFrameClearDrawable(winBg)
 			.setBlurRadius(radius);
-		blurView.setOverlayColor(Color.parseColor("#66141824"));
+		blurView.setOverlayColor(overlayColor);
 
-		GradientDrawable glassBorder = new GradientDrawable();
-		glassBorder.setColor(Color.TRANSPARENT);
-		glassBorder.setCornerRadius(1000f);
-		glassBorder.setStroke((int) (1 * d), strokeColor);
-		blurView.setForeground(glassBorder);
+		if (strokeColor != Color.TRANSPARENT) {
+			GradientDrawable glassBorder = new GradientDrawable();
+			glassBorder.setColor(Color.TRANSPARENT);
+			glassBorder.setCornerRadius(rPx > 0f ? rPx : 0f);
+			glassBorder.setStroke((int) (1 * d), strokeColor);
+			blurView.setForeground(glassBorder);
+		}
 	}
 
 	private Drawable createChatShimmerDrawable(final float cornerRadiusPx) {
@@ -414,6 +425,24 @@ public class ChatActivity extends AppCompatActivity {
 		return new SimpleDateFormat("dd MMMM yyyy", new Locale("id", "ID")).format(new Date(ts)).toUpperCase(Locale.US);
 	}
 
+	private void updateScrollTopPaddingForHeader() {
+		if (chatScrollView == null || headerOverlayWrapper == null) return;
+		final float d = getResources().getDisplayMetrics().density;
+		headerOverlayWrapper.post(new Runnable() {
+			@Override
+			public void run() {
+				int h = headerOverlayWrapper.getHeight();
+				int topPad = h > 0 ? h + (int) (8 * d) : (int) (136 * d);
+				chatScrollView.setPadding(
+					chatScrollView.getPaddingLeft(),
+					topPad,
+					chatScrollView.getPaddingRight(),
+					chatScrollView.getPaddingBottom()
+				);
+			}
+		});
+	}
+
 	private void setupKeyboardFollowBehavior() {
 		if (chatRoot == null || chatBottomBar == null) return;
 		final float d = getResources().getDisplayMetrics().density;
@@ -538,7 +567,7 @@ public class ChatActivity extends AppCompatActivity {
 		));
 		chatScrollView.setPadding(
 			(int) (14 * d),
-			statusBarHeight + (int) (74 * d),
+			statusBarHeight + (int) (136 * d),
 			(int) (14 * d),
 			(int) (132 * d)
 		);
@@ -553,20 +582,49 @@ public class ChatActivity extends AppCompatActivity {
 		chatScrollView.addView(messagesContainer);
 		chatRoot.addView(chatScrollView);
 
+		// Wrapper header + blur di belakang header + pesan tersemat
+		headerOverlayWrapper = new FrameLayout(this);
+		headerOverlayWrapper.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
+		));
+		headerOverlayWrapper.setClipChildren(false);
+		headerOverlayWrapper.setClipToPadding(false);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			headerOverlayWrapper.setElevation(16f);
+		}
+
+		BlurView headerBackdropBlur = new BlurView(this);
+		headerBackdropBlur.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		setupGlassBlur(headerBackdropBlur, chatRoot, 22f, 0f, Color.parseColor("#99090D16"), Color.TRANSPARENT);
+		headerOverlayWrapper.addView(headerBackdropBlur);
+
+		LinearLayout headerStack = new LinearLayout(this);
+		headerStack.setOrientation(LinearLayout.VERTICAL);
+		headerStack.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		headerStack.setPadding(0, statusBarHeight + (int) (8 * d), 0, (int) (8 * d));
+		headerStack.setClipChildren(false);
+		headerStack.setClipToPadding(false);
+
+		int btnSize = (int) (46 * d);
+		float pillCorner = 23 * d;
+
 		chatHeader = new LinearLayout(this);
 		chatHeader.setOrientation(LinearLayout.HORIZONTAL);
 		chatHeader.setGravity(Gravity.CENTER_VERTICAL);
 		chatHeader.setClipChildren(false);
 		chatHeader.setClipToPadding(false);
-		FrameLayout.LayoutParams headerLp = new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
-		);
-		chatHeader.setLayoutParams(headerLp);
-		chatHeader.setPadding((int) (14 * d), statusBarHeight + (int) (10 * d), (int) (14 * d), (int) (10 * d));
+		chatHeader.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		chatHeader.setPadding((int) (14 * d), (int) (4 * d), (int) (14 * d), (int) (8 * d));
 
+		// Tombol back bulat kiri (ukuran sama dengan tombol profil kanan)
 		FrameLayout backBtn = new FrameLayout(this);
-		int backSize = (int) (42 * d);
-		LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(backSize, backSize);
+		LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(btnSize, btnSize);
 		backLp.rightMargin = (int) (10 * d);
 		backBtn.setLayoutParams(backLp);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) backBtn.setElevation(14f);
@@ -575,7 +633,7 @@ public class ChatActivity extends AppCompatActivity {
 		backBlur.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		setupGlassBlur(backBlur, chatRoot, 20f, Color.parseColor("#33FFFFFF"));
+		setupGlassBlur(backBlur, chatRoot, 20f, btnSize / 2f, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		backBtn.addView(backBlur);
 
 		ImageView backArrow = new ImageView(this);
@@ -593,21 +651,24 @@ public class ChatActivity extends AppCompatActivity {
 			}
 		});
 
+		// Kapsul tengah judul & status online
 		FrameLayout headerCapsule = new FrameLayout(this);
-		headerCapsule.setLayoutParams(new LinearLayout.LayoutParams(0, (int) (46 * d), 1f));
+		LinearLayout.LayoutParams capLp = new LinearLayout.LayoutParams(0, btnSize, 1f);
+		capLp.rightMargin = (int) (10 * d);
+		headerCapsule.setLayoutParams(capLp);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) headerCapsule.setElevation(14f);
 
 		BlurView headerBlur = new BlurView(this);
 		headerBlur.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		setupGlassBlur(headerBlur, chatRoot, 20f, Color.parseColor("#33FFFFFF"));
+		setupGlassBlur(headerBlur, chatRoot, 20f, pillCorner, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		headerCapsule.addView(headerBlur);
 
 		LinearLayout titleCol = new LinearLayout(this);
 		titleCol.setOrientation(LinearLayout.VERTICAL);
 		titleCol.setGravity(Gravity.CENTER);
-		titleCol.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		titleCol.setPadding((int) (14 * d), 0, (int) (14 * d), 0);
 
 		TextView tvTitle = new TextView(this);
 		tvTitle.setText("Live Chat");
@@ -618,7 +679,7 @@ public class ChatActivity extends AppCompatActivity {
 		TextView tvOnline = new TextView(this);
 		tvOnline.setText("online");
 		tvOnline.setTextColor(Color.parseColor("#22C55E"));
-		tvOnline.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+		tvOnline.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
 		tvOnline.setTypeface(null, Typeface.BOLD);
 
 		titleCol.addView(tvTitle);
@@ -627,9 +688,46 @@ public class ChatActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 
+		// Tombol profil bulat kanan (ukuran persis sama dengan tombol back kiri)
+		FrameLayout profileBtn = new FrameLayout(this);
+		profileBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) profileBtn.setElevation(14f);
+
+		BlurView profileBlur = new BlurView(this);
+		profileBlur.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		setupGlassBlur(profileBlur, chatRoot, 20f, btnSize / 2f, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
+		profileBtn.addView(profileBlur);
+
+		headerProfileAvatar = new ImageView(this);
+		headerProfileAvatar.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		headerProfileAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		bindHeaderProfileAvatar();
+		profileBtn.addView(headerProfileAvatar);
+		profileBtn.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				showCurrentUserProfileInfo();
+			}
+		});
+
 		chatHeader.addView(backBtn);
 		chatHeader.addView(headerCapsule);
-		chatRoot.addView(chatHeader);
+		chatHeader.addView(profileBtn);
+		headerStack.addView(chatHeader);
+
+		// Banner Pesan Tersemat tepat di bawah header
+		pinnedMessageCard = buildPinnedMessageBanner(d);
+		headerStack.addView(pinnedMessageCard);
+
+		headerOverlayWrapper.addView(headerStack, new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		chatRoot.addView(headerOverlayWrapper);
+		updateScrollTopPaddingForHeader();
 
 		chatBottomBar = new LinearLayout(this);
 		chatBottomBar.setOrientation(LinearLayout.VERTICAL);
@@ -751,7 +849,7 @@ public class ChatActivity extends AppCompatActivity {
 		inputBlur.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		setupGlassBlur(inputBlur, chatRoot, 20f, Color.parseColor("#33FFFFFF"));
+		setupGlassBlur(inputBlur, chatRoot, 20f, 26 * d, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		inputGlassFrame.addView(inputBlur);
 
 		LinearLayout inputRow = new LinearLayout(this);
@@ -866,6 +964,148 @@ public class ChatActivity extends AppCompatActivity {
 		setContentView(chatRoot);
 	}
 
+	private FrameLayout buildPinnedMessageBanner(float d) {
+		final FrameLayout pinBox = new FrameLayout(this);
+		LinearLayout.LayoutParams pinLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		pinLp.leftMargin = (int) (14 * d);
+		pinLp.rightMargin = (int) (14 * d);
+		pinLp.topMargin = (int) (2 * d);
+		pinLp.bottomMargin = (int) (4 * d);
+		pinBox.setLayoutParams(pinLp);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			pinBox.setElevation(12f);
+		}
+
+		float pinRadius = 18 * d;
+		BlurView pinBlur = new BlurView(this);
+		pinBlur.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		setupGlassBlur(pinBlur, chatRoot, 20f, pinRadius, Color.parseColor("#80161B28"), Color.parseColor("#33FFFFFF"));
+		pinBox.addView(pinBlur);
+
+		LinearLayout row = new LinearLayout(this);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setGravity(Gravity.CENTER_VERTICAL);
+		row.setPadding((int) (12 * d), (int) (9 * d), (int) (12 * d), (int) (9 * d));
+
+		View accentBar = new View(this);
+		LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
+			Math.max(2, (int) (3 * d)), (int) (34 * d)
+		);
+		barLp.rightMargin = (int) (10 * d);
+		accentBar.setLayoutParams(barLp);
+		GradientDrawable barBg = new GradientDrawable();
+		barBg.setColor(Color.WHITE);
+		barBg.setCornerRadius(100f);
+		accentBar.setBackground(barBg);
+
+		LinearLayout textCol = new LinearLayout(this);
+		textCol.setOrientation(LinearLayout.VERTICAL);
+		textCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		TextView tvPinTitle = new TextView(this);
+		tvPinTitle.setText("Pesan Tersemat");
+		tvPinTitle.setTextColor(Color.WHITE);
+		tvPinTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvPinTitle.setTypeface(null, Typeface.BOLD);
+
+		final TextView tvPinBody = new TextView(this);
+		tvPinBody.setText(PINNED_WARNING_MESSAGE);
+		tvPinBody.setTextColor(Color.parseColor("#E2E8F0"));
+		tvPinBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+		tvPinBody.setMaxLines(2);
+		tvPinBody.setEllipsize(TextUtils.TruncateAt.END);
+		LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		bLp.topMargin = (int) (2 * d);
+		tvPinBody.setLayoutParams(bLp);
+
+		textCol.addView(tvPinTitle);
+		textCol.addView(tvPinBody);
+
+		TextView btnDismissPin = new TextView(this);
+		btnDismissPin.setText("✕");
+		btnDismissPin.setTextColor(Color.WHITE);
+		btnDismissPin.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		btnDismissPin.setGravity(Gravity.CENTER);
+		LinearLayout.LayoutParams disLp = new LinearLayout.LayoutParams((int) (28 * d), (int) (28 * d));
+		disLp.leftMargin = (int) (8 * d);
+		btnDismissPin.setLayoutParams(disLp);
+		btnDismissPin.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				pinBox.setVisibility(View.GONE);
+				updateScrollTopPaddingForHeader();
+			}
+		});
+
+		row.addView(accentBar);
+		row.addView(textCol);
+		row.addView(btnDismissPin);
+
+		row.setOnClickListener(new View.OnClickListener() {
+			private boolean expanded = false;
+
+			@Override
+			public void onClick(View v) {
+				expanded = !expanded;
+				tvPinBody.setMaxLines(expanded ? 6 : 2);
+				updateScrollTopPaddingForHeader();
+			}
+		});
+
+		pinBox.addView(row, new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		return pinBox;
+	}
+
+	private void bindHeaderProfileAvatar() {
+		if (headerProfileAvatar == null || currentUser == null) return;
+		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
+		String uKey = !email.isEmpty() ? email.replace(".", ",") : currentUser.getUid();
+		HashMap<String, Object> prof = userProfileCache.get(uKey);
+
+		String photoUrl = "";
+		if (prof != null && prof.get("photoURL") != null && !prof.get("photoURL").toString().trim().isEmpty()) {
+			photoUrl = prof.get("photoURL").toString().trim();
+		} else if (currentUser.getPhotoUrl() != null) {
+			photoUrl = currentUser.getPhotoUrl().toString().trim();
+		}
+
+		bindChatAvatar(headerProfileAvatar, photoUrl);
+	}
+
+	private void showCurrentUserProfileInfo() {
+		if (currentUser == null) return;
+		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "-";
+		String uKey = !email.isEmpty() ? email.replace(".", ",") : currentUser.getUid();
+		HashMap<String, Object> prof = userProfileCache.get(uKey);
+
+		String name = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
+			? prof.get("name").toString().trim()
+			: (email.contains("@") ? email.split("@")[0] : "Member");
+		String uname = (prof != null && prof.get("username") != null && !prof.get("username").toString().trim().isEmpty())
+			? "@" + prof.get("username").toString().trim().replaceFirst("^@", "")
+			: "-";
+		long exp = prof != null ? parseLongVal(prof.get("exp")) : 0L;
+		boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
+
+		new AlertDialog.Builder(this)
+			.setTitle(name)
+			.setMessage(
+				"Username: " + uname
+					+ "\nEmail: " + email
+					+ "\nLevel: " + (isAdm ? "Lv999+ (Admin)" : "Lv" + calculateLevel(exp) + " (" + exp + " XP)")
+			)
+			.setPositiveButton("Tutup", null)
+			.show();
+	}
+
 	private void toggleStickerPanel() {
 		if (stickerPanel == null) return;
 		boolean nextVis = stickerPanel.getVisibility() != View.VISIBLE;
@@ -970,6 +1210,7 @@ public class ChatActivity extends AppCompatActivity {
 						allUsersList.add(uMap);
 					}
 				}
+				bindHeaderProfileAvatar();
 			}
 
 			@Override
@@ -1198,7 +1439,6 @@ public class ChatActivity extends AppCompatActivity {
 				qBg.setStroke((int) (1 * d), Color.parseColor("#2638BDF8"));
 				quoteBox.setBackground(qBg);
 				quoteBox.setPadding((int) (10 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
-				// MATCH_PARENT agar kotak balasan ikut memanjang selebar bubble
 				LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(
 					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 				);
