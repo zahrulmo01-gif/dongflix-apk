@@ -8,7 +8,6 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -70,8 +69,6 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import eightbitlab.com.blurview.BlurView;
 import eightbitlab.com.blurview.RenderScriptBlur;
 import java.text.SimpleDateFormat;
@@ -104,7 +101,6 @@ public class ChatActivity extends AppCompatActivity {
 	private static final int MAX_VISIBLE_MESSAGES = 25;
 	private static final int MAX_PROFILE_FETCH_PER_PASS = 6;
 	private static final long FAST_TIMEOUT_MS = 2500L;
-	private static final long STICKER_CACHE_TTL_MS = 12L * 60L * 60L * 1000L;
 
 	private static final String[] DEFAULT_STICKERS = {
 		"https://cdn-icons-png.flaticon.com/128/9408/9408175.png",
@@ -121,7 +117,6 @@ public class ChatActivity extends AppCompatActivity {
 	private DatabaseReference liveChatRef;
 	private DatabaseReference usersRef;
 	private ValueEventListener chatListener;
-	private SharedPreferences chatCachePrefs;
 
 	private final Handler uiHandler = new Handler(Looper.getMainLooper());
 	private Runnable loadTimeoutRunnable;
@@ -183,7 +178,6 @@ public class ChatActivity extends AppCompatActivity {
 			return;
 		}
 
-		chatCachePrefs = getSharedPreferences("dongflix_chat_cache", Context.MODE_PRIVATE);
 		pauseAndHideMiniPlayerForChat();
 
 		FirebaseDatabase db = FirebaseDatabase.getInstance(FIREBASE_DB_URL);
@@ -195,9 +189,8 @@ public class ChatActivity extends AppCompatActivity {
 		setupKeyboardFollowBehavior();
 		showLoadingPlaceholders();
 		armFastLoadTimeout();
-		loadCachedMessagesIfAny();
 		loadCurrentUserProfileOnce();
-		loadStickersWithCache();
+		loadStickersFromFirebase();
 		startListeningMessages();
 	}
 
@@ -234,30 +227,6 @@ public class ChatActivity extends AppCompatActivity {
 			uiHandler.removeCallbacks(loadTimeoutRunnable);
 			loadTimeoutRunnable = null;
 		}
-	}
-
-	private void loadCachedMessagesIfAny() {
-		if (chatCachePrefs == null) return;
-		String json = chatCachePrefs.getString("last_messages_json", "");
-		if (json == null || json.isEmpty()) return;
-		try {
-			List<HashMap<String, Object>> cached = new Gson().fromJson(
-				json, new TypeToken<List<HashMap<String, Object>>>(){}.getType()
-			);
-			if (cached != null && !cached.isEmpty()) {
-				latestMessages = cached;
-				isChatLoading = false;
-				stopChatShimmerOnly();
-				renderMessages(latestMessages);
-			}
-		} catch (Exception ignored) {}
-	}
-
-	private void saveCachedMessages(List<HashMap<String, Object>> msgList) {
-		if (chatCachePrefs == null || msgList == null) return;
-		try {
-			chatCachePrefs.edit().putString("last_messages_json", new Gson().toJson(msgList)).apply();
-		} catch (Exception ignored) {}
 	}
 
 	private Typeface getAppFont() {
@@ -1328,20 +1297,6 @@ public class ChatActivity extends AppCompatActivity {
 	private void loadCurrentUserProfileOnce() {
 		String myId = getCurrentUserId();
 		if (myId.isEmpty()) return;
-
-		String cachedJson = chatCachePrefs != null ? chatCachePrefs.getString("profile_" + myId, "") : "";
-		if (!cachedJson.isEmpty()) {
-			try {
-				HashMap<String, Object> cachedMap = new Gson().fromJson(
-					cachedJson, new TypeToken<HashMap<String, Object>>(){}.getType()
-				);
-				if (cachedMap != null) {
-					cacheProfileEntry(myId, cachedMap);
-					bindHeaderProfileAvatar();
-				}
-			} catch (Exception ignored) {}
-		}
-
 		fetchUserProfileOnceById(myId);
 	}
 
@@ -1363,7 +1318,6 @@ public class ChatActivity extends AppCompatActivity {
 						if (e.getKey() != null) uMap.put(e.getKey().toString(), e.getValue());
 					}
 					cacheProfileEntry(cleanId, uMap);
-					saveUserProfileToLocalCache(cleanId, uMap);
 
 					if (cleanId.equals(getCurrentUserId())) {
 						bindHeaderProfileAvatar();
@@ -1396,33 +1350,10 @@ public class ChatActivity extends AppCompatActivity {
 			if (userId.isEmpty() || userProfileCache.containsKey(userId) || requestedUserIds.contains(userId)) {
 				continue;
 			}
-
-			String cachedJson = chatCachePrefs != null ? chatCachePrefs.getString("profile_" + userId, "") : "";
-			if (!cachedJson.isEmpty()) {
-				try {
-					HashMap<String, Object> cachedMap = new Gson().fromJson(
-						cachedJson, new TypeToken<HashMap<String, Object>>(){}.getType()
-					);
-					if (cachedMap != null) {
-						cacheProfileEntry(userId, cachedMap);
-						continue;
-					}
-				} catch (Exception ignored) {}
-			}
-
 			fetchedCount++;
 			fetchUserProfileOnceById(userId);
 		}
 		syncProfileShimmerState(false);
-	}
-
-	private void saveUserProfileToLocalCache(String key, HashMap<String, Object> uMap) {
-		if (chatCachePrefs == null || key.isEmpty() || uMap == null) return;
-		try {
-			HashMap<String, Object> slim = new HashMap<>(uMap);
-			slim.put("photoURL", normalizeProfileUrl(slim.get("photoURL") != null ? slim.get("photoURL").toString() : ""));
-			chatCachePrefs.edit().putString("profile_" + key, new Gson().toJson(slim)).apply();
-		} catch (Exception ignored) {}
 	}
 
 	private void bindHeaderProfileAvatar() {
@@ -1825,63 +1756,41 @@ public class ChatActivity extends AppCompatActivity {
 		if (nextVis) renderStickerRow();
 	}
 
-	private void loadStickersWithCache() {
+	private void loadStickersFromFirebase() {
 		stickerUrls.clear();
 		Collections.addAll(stickerUrls, DEFAULT_STICKERS);
 
-		long now = System.currentTimeMillis();
-		long savedAt = chatCachePrefs != null ? chatCachePrefs.getLong("stickers_ts", 0L) : 0L;
-		String cachedJson = chatCachePrefs != null ? chatCachePrefs.getString("stickers_json", "") : "";
-
-		if (!cachedJson.isEmpty()) {
-			try {
-				List<String> cached = new Gson().fromJson(cachedJson, new TypeToken<List<String>>(){}.getType());
-				if (cached != null && !cached.isEmpty()) {
-					stickerUrls.clear();
-					stickerUrls.addAll(cached);
-				}
-			} catch (Exception ignored) {}
-		}
-
-		if (cachedJson.isEmpty() || (now - savedAt) > STICKER_CACHE_TTL_MS) {
-			FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-				.getReference("stickers")
-				.addListenerForSingleValueEvent(new ValueEventListener() {
-					@Override
-					public void onDataChange(@NonNull DataSnapshot snapshot) {
-						if (!snapshot.exists()) return;
-						List<String> fetched = new ArrayList<>();
-						for (DataSnapshot child : snapshot.getChildren()) {
-							Object val = child.getValue();
-							if (val instanceof String && !val.toString().trim().isEmpty()) {
-								fetched.add(val.toString().trim());
-							} else if (val instanceof Map) {
-								Map<?, ?> m = (Map<?, ?>) val;
-								Object u = m.get("url") != null ? m.get("url") : (m.get("link") != null ? m.get("link") : m.get("image"));
-								if (u != null && !u.toString().trim().isEmpty()) {
-									fetched.add(u.toString().trim());
-								}
-							}
-						}
-						if (!fetched.isEmpty()) {
-							stickerUrls.clear();
-							stickerUrls.addAll(fetched);
-							if (chatCachePrefs != null) {
-								chatCachePrefs.edit()
-									.putString("stickers_json", new Gson().toJson(fetched))
-									.putLong("stickers_ts", System.currentTimeMillis())
-									.apply();
-							}
-							if (stickerPanel != null && stickerPanel.getVisibility() == View.VISIBLE) {
-								renderStickerRow();
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("stickers")
+			.addListenerForSingleValueEvent(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snapshot) {
+					if (!snapshot.exists()) return;
+					List<String> fetched = new ArrayList<>();
+					for (DataSnapshot child : snapshot.getChildren()) {
+						Object val = child.getValue();
+						if (val instanceof String && !val.toString().trim().isEmpty()) {
+							fetched.add(val.toString().trim());
+						} else if (val instanceof Map) {
+							Map<?, ?> m = (Map<?, ?>) val;
+							Object u = m.get("url") != null ? m.get("url") : (m.get("link") != null ? m.get("link") : m.get("image"));
+							if (u != null && !u.toString().trim().isEmpty()) {
+								fetched.add(u.toString().trim());
 							}
 						}
 					}
+					if (!fetched.isEmpty()) {
+						stickerUrls.clear();
+						stickerUrls.addAll(fetched);
+						if (stickerPanel != null && stickerPanel.getVisibility() == View.VISIBLE) {
+							renderStickerRow();
+						}
+					}
+				}
 
-					@Override
-					public void onCancelled(@NonNull DatabaseError error) {}
-				});
-		}
+				@Override
+				public void onCancelled(@NonNull DatabaseError error) {}
+			});
 	}
 
 	private void renderStickerRow() {
@@ -2031,7 +1940,6 @@ public class ChatActivity extends AppCompatActivity {
 			msgList = msgList.subList(msgList.size() - MAX_VISIBLE_MESSAGES, msgList.size());
 		}
 		latestMessages = msgList;
-		saveCachedMessages(msgList);
 		prefetchProfilesForMessagesOnce(msgList);
 		renderMessages(msgList);
 	}
