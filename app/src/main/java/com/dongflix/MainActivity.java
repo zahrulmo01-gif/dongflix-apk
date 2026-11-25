@@ -90,6 +90,12 @@ public class MainActivity extends AppCompatActivity {
 	private TextView textTitleContinue, textContinueSeeAll;
 	private RecyclerView recyclerContinue;
 
+	// Jelajahi UI
+	private RecyclerView recyclerJelajahiGrid;
+	private TextView textJelajahiCountBadge;
+	private final ArrayList<TextView> jelajahiChipViews = new ArrayList<>();
+	private String activeJelajahiFilter = "all";
+
 	// Pustaka UI
 	private TextView tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan;
 	private TextView textPustakaCountBadge;
@@ -106,9 +112,9 @@ public class MainActivity extends AppCompatActivity {
 	private View viewAccountExpTrack, viewAccountExpFill;
 
 	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
-	private LinearLayout tabBeranda, tabPustaka, tabAkun;
-	private ImageView imgHome, imgFavorite, imgProfile, imgSearch;
-	private TextView txtHome, txtFavorite, txtProfile;
+	private LinearLayout tabBeranda, tabJelajahi, tabPustaka, tabAkun;
+	private ImageView imgHome, imgJelajahi, imgFavorite, imgProfile, imgSearch;
+	private TextView txtHome, txtJelajahi, txtFavorite, txtProfile;
 	private View liquidDragPill;
 	private int activeNavTabIndex = 0;
 	private boolean isNavbarCompact = false;
@@ -152,6 +158,7 @@ public class MainActivity extends AppCompatActivity {
 		initialize();
 		setupContinueWatchingSection();
 		setupPullToRefresh();
+		setupJelajahiSection();
 		setupPustakaSection();
 		setupAccountSection();
 		initializeLogic();
@@ -349,10 +356,10 @@ public class MainActivity extends AppCompatActivity {
 				case MotionEvent.ACTION_CANCEL:
 					if (navDownRawX > 0f) {
 						liquidDragPill.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
-						float slotW = Math.max(1f, (trackW - (10 * d)) / 3f);
+						float slotW = Math.max(1f, (trackW - (10 * d)) / 4f);
 						int targetIdx = isDraggingNavbarPill
-							? Math.max(0, Math.min(2, Math.round(liquidDragPill.getTranslationX() / slotW)))
-							: Math.max(0, Math.min(2, (int) ((rawX - loc[0]) / Math.max(1f, trackW / 3f))));
+							? Math.max(0, Math.min(3, Math.round(liquidDragPill.getTranslationX() / slotW)))
+							: Math.max(0, Math.min(3, (int) ((rawX - loc[0]) / Math.max(1f, trackW / 4f))));
 						navDownRawX = 0f;
 						isDraggingNavbarPill = false;
 						selectNavTabByIndex(targetIdx, true);
@@ -708,10 +715,185 @@ public class MainActivity extends AppCompatActivity {
 				@Override
 				public void onClick(View v) {
 					activePustakaTab = 0;
-					selectNavTabByIndex(1, true);
+					selectNavTabByIndex(2, true);
 				}
 			});
 		}
+	}
+
+	private void setupJelajahiSection() {
+		View pageJelajahi = findViewById(R.id.layout_jelajahi);
+		if (!(pageJelajahi instanceof ViewGroup)) return;
+
+		ViewGroup jelajahiGroup = (ViewGroup) pageJelajahi;
+		jelajahiGroup.removeAllViews();
+		jelajahiGroup.setBackgroundColor(Color.parseColor("#000000"));
+		jelajahiGroup.setPadding(0, 0, 0, 0);
+
+		float d = getResources().getDisplayMetrics().density;
+		int statusH = 0;
+		int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+		if (resId > 0) statusH = getResources().getDimensionPixelSize(resId);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		root.setPadding((int) (14 * d), statusH + (int) (12 * d), (int) (14 * d), 0);
+
+		LinearLayout headerRow = new LinearLayout(this);
+		headerRow.setOrientation(LinearLayout.HORIZONTAL);
+		headerRow.setGravity(Gravity.CENTER_VERTICAL);
+		headerRow.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Jelajahi");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvTitle.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		textJelajahiCountBadge = new TextView(this);
+		textJelajahiCountBadge.setText("0 judul");
+		textJelajahiCountBadge.setTextColor(Color.parseColor("#94A3B8"));
+		textJelajahiCountBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+		textJelajahiCountBadge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		textJelajahiCountBadge.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
+		GradientDrawable badgeBg = new GradientDrawable();
+		badgeBg.setColor(Color.parseColor("#12141A"));
+		badgeBg.setCornerRadius(100f);
+		badgeBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		textJelajahiCountBadge.setBackground(badgeBg);
+
+		headerRow.addView(tvTitle);
+		headerRow.addView(textJelajahiCountBadge);
+		root.addView(headerRow);
+
+		HorizontalScrollView chipScroll = new HorizontalScrollView(this);
+		chipScroll.setHorizontalScrollBarEnabled(false);
+		LinearLayout.LayoutParams csLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		csLp.topMargin = (int) (12 * d);
+		csLp.bottomMargin = (int) (10 * d);
+		chipScroll.setLayoutParams(csLp);
+
+		LinearLayout chipRow = new LinearLayout(this);
+		chipRow.setOrientation(LinearLayout.HORIZONTAL);
+		chipScroll.addView(chipRow);
+
+		jelajahiChipViews.clear();
+		String[][] filters = {
+			{"Semua", "all"},
+			{"Ongoing", "ongoing"},
+			{"Tamat", "completed"},
+			{"Kultivasi", "cultivation"},
+			{"Romantis", "romance"},
+			{"Komedi", "comedy"},
+			{"Misteri", "mystery"},
+			{"Movie", "movie"}
+		};
+
+		for (String[] f : filters) {
+			final String label = f[0];
+			final String key = f[1];
+			TextView chip = new TextView(this);
+			chip.setText(label);
+			chip.setTag(key);
+			chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			chip.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			chip.setPadding((int) (14 * d), (int) (7 * d), (int) (14 * d), (int) (7 * d));
+			LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			cLp.rightMargin = (int) (8 * d);
+			chip.setLayoutParams(cLp);
+			chip.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					activeJelajahiFilter = key;
+					updateJelajahiChipVisuals();
+					renderJelajahiGrid();
+				}
+			});
+			jelajahiChipViews.add(chip);
+			chipRow.addView(chip);
+		}
+		root.addView(chipScroll);
+
+		recyclerJelajahiGrid = new RecyclerView(this);
+		recyclerJelajahiGrid.setLayoutManager(new GridLayoutManager(this, 3));
+		recyclerJelajahiGrid.setClipToPadding(false);
+		recyclerJelajahiGrid.setPadding(0, (int) (4 * d), 0, (int) (145 * d));
+		recyclerJelajahiGrid.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		root.addView(recyclerJelajahiGrid);
+
+		jelajahiGroup.addView(root);
+		updateJelajahiChipVisuals();
+	}
+
+	private void updateJelajahiChipVisuals() {
+		float d = getResources().getDisplayMetrics().density;
+		for (TextView chip : jelajahiChipViews) {
+			if (chip == null) continue;
+			boolean selected = activeJelajahiFilter.equals(chip.getTag());
+			GradientDrawable bg = new GradientDrawable();
+			bg.setCornerRadius(100f);
+			if (selected) {
+				bg.setColor(Color.parseColor("#2563EB"));
+				chip.setTextColor(Color.WHITE);
+			} else {
+				bg.setColor(Color.parseColor("#12141A"));
+				bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+				chip.setTextColor(Color.parseColor("#94A3B8"));
+			}
+			chip.setBackground(bg);
+		}
+	}
+
+	private void renderJelajahiGrid() {
+		if (recyclerJelajahiGrid == null) return;
+		if (fullCatalogList == null || fullCatalogList.isEmpty()) {
+			if (textJelajahiCountBadge != null) textJelajahiCountBadge.setText("Memuat...");
+			recyclerJelajahiGrid.setAdapter(new JelajahiGridAdapter(buildEmptyDummyList(12)));
+			return;
+		}
+
+		ArrayList<HashMap<String, Object>> filtered = new ArrayList<>();
+		for (HashMap<String, Object> item : fullCatalogList) {
+			String status = safeStr(item, "status", "").toLowerCase(Locale.US);
+			String genres = safeStr(item, "genres", "").toLowerCase(Locale.US);
+			String meta = (genres + " " + safeStr(item, "title", "") + " "
+				+ safeStr(item, "synopsis", "") + " " + safeStr(item, "type", "") + " " + safeStr(item, "episode", ""))
+				.toLowerCase(Locale.US);
+
+			boolean match;
+			switch (activeJelajahiFilter) {
+				case "ongoing":
+					match = status.contains("ongoing") || (!status.contains("completed") && !status.contains("tamat"));
+					break;
+				case "completed":
+					match = status.contains("completed") || status.contains("tamat");
+					break;
+				case "cultivation":
+					match = meta.contains("kultivasi") || meta.contains("cultivation") || meta.contains("abadi") || meta.contains("immortal");
+					break;
+				case "romance":
+					match = genres.contains("romance") || genres.contains("romantis") || genres.contains("romansa") || meta.contains("romance") || meta.contains("romantis");
+					break;
+				case "comedy":
+					match = meta.contains("comedy") || meta.contains("komedi") || meta.contains("slice of life");
+					break;
+				case "mystery":
+					match = meta.contains("mystery") || meta.contains("misteri") || meta.contains("teki") || meta.contains("thriller") || meta.contains("suspense");
+					break;
+				case "movie":
+					match = meta.contains("movie") || meta.contains("film");
+					break;
+				default:
+					match = true;
+					break;
+			}
+			if (match) filtered.add(item);
+		}
+
+		if (textJelajahiCountBadge != null) textJelajahiCountBadge.setText(filtered.size() + " judul");
+		recyclerJelajahiGrid.setAdapter(new JelajahiGridAdapter(filtered));
 	}
 
 	private void setupPustakaSection() {
@@ -1165,7 +1347,7 @@ public class MainActivity extends AppCompatActivity {
 			Color.WHITE,
 			d,
 			new View.OnClickListener() {
-				@Override public void onClick(View v) { selectNavTabByIndex(1, true); }
+				@Override public void onClick(View v) { selectNavTabByIndex(2, true); }
 			}
 		));
 		menuCard.addView(buildAccountMenuItem(
@@ -2044,6 +2226,7 @@ public class MainActivity extends AppCompatActivity {
 			recyclerSearchList.setAdapter(new ListPopularAdapter(dongflixPopularSlice));
 		}
 		populateCategorizedSections();
+		if (activeNavTabIndex == 1) renderJelajahiGrid();
 	}
 
 	private void attachFirebasePopularityListeners() {
@@ -2232,7 +2415,8 @@ public class MainActivity extends AppCompatActivity {
 				RecyclerView[] hRecyclers = {
 					recyclerPopular, recyclerPopularDongflix, recyclerRomanceDonghua,
 					recyclerCultivationDonghua, recyclerCompletedDonghua,
-					recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
+					recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua,
+					recyclerJelajahiGrid
 				};
 				for (RecyclerView rv : hRecyclers) {
 					if (rv != null) for (int i = 0; i < rv.getChildCount(); i++) invalidateRecursive(rv.getChildAt(i));
@@ -2330,23 +2514,26 @@ public class MainActivity extends AppCompatActivity {
 		miniPlayerInlineSlot = findViewById(R.id.mini_player_inline_slot);
 		btnCircleSearch = findViewById(R.id.btn_circle_search);
 		tabBeranda = findViewById(R.id.tab_beranda);
+		tabJelajahi = findViewById(R.id.tab_jelajahi);
 		tabPustaka = findViewById(R.id.tab_pustaka);
 		tabAkun = findViewById(R.id.tab_akun);
 		imgHome = findViewById(R.id.img_home);
+		imgJelajahi = findViewById(R.id.img_jelajahi);
 		imgFavorite = findViewById(R.id.img_favorite);
 		imgProfile = findViewById(R.id.img_profile);
 		imgSearch = findViewById(R.id.img_search);
 		txtHome = findViewById(R.id.txt_home);
+		txtJelajahi = findViewById(R.id.txt_jelajahi);
 		txtFavorite = findViewById(R.id.txt_favorite);
 		txtProfile = findViewById(R.id.txt_profile);
 
 		final Map<TextView, String[]> seeAllConfig = new LinkedHashMap<>();
 		seeAllConfig.put(textSeeAll, new String[]{"Baru Diupdate", "all"});
 		seeAllConfig.put(textPopularDongflixSeeAll, new String[]{"Populer di Dongflix", "popular_dongflix"});
-		seeAllConfig.put(textRomanceSeeAll, new String[]{"Donghua Romantis Tipis-Tipis", "romance"});
+		seeAllConfig.put(textRomanceSeeAll, new String[]{"Romantis Tipis-Tipis", "romance"});
 		seeAllConfig.put(textCultivationSeeAll, new String[]{"Kultivasi & Keabadian", "cultivation"});
 		seeAllConfig.put(textCompletedSeeAll, new String[]{"Donghua Tamat", "completed"});
-		seeAllConfig.put(textComedySeeAll, new String[]{"Donghua Komedi Ringan", "comedy"});
+		seeAllConfig.put(textComedySeeAll, new String[]{"Komedi Ringan", "comedy"});
 		seeAllConfig.put(textMysterySeeAll, new String[]{"Misteri & Teka-Teki", "mystery"});
 		seeAllConfig.put(textMovieSeeAll, new String[]{"Donghua Movie", "movie"});
 
@@ -2490,6 +2677,7 @@ public class MainActivity extends AppCompatActivity {
 				bindSectionLikePopularToday(recyclerPopularDongflix, listMap);
 				populateCategorizedSections();
 				sortAndRenderPopularSections();
+				renderJelajahiGrid();
 				applyOutfitFontsWithoutBold();
 			}
 
@@ -2542,6 +2730,10 @@ public class MainActivity extends AppCompatActivity {
 			recyclerComedyDonghua, recyclerMysteryDonghua, recyclerMovieDonghua
 		};
 		for (RecyclerView rv : standardList) bindSectionLikePopularToday(rv, dummy);
+
+		if (recyclerJelajahiGrid != null) {
+			recyclerJelajahiGrid.setAdapter(new JelajahiGridAdapter(dummy));
+		}
 
 		if (recyclerSearchList != null) {
 			recyclerSearchList.setLayoutManager(new LinearLayoutManager(this));
@@ -2600,7 +2792,7 @@ public class MainActivity extends AppCompatActivity {
 			pillBg.setCornerRadius(100f);
 			liquidDragPill.setBackground(pillBg);
 
-			FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (96 * d), (int) (54 * d), Gravity.CENTER_VERTICAL | Gravity.START);
+			FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (72 * d), (int) (54 * d), Gravity.CENTER_VERTICAL | Gravity.START);
 			lp.leftMargin = (int) (5 * d);
 			liquidDragPill.setLayoutParams(lp);
 			navbarExpanded.addView(liquidDragPill, 1);
@@ -2611,15 +2803,20 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	private void snapPillToTab(int idx, boolean animate) {
-		if (liquidDragPill == null || tabBeranda == null || tabPustaka == null || tabAkun == null) return;
-		View target = (idx == 1) ? tabPustaka : (idx == 2 ? tabAkun : tabBeranda);
+		if (liquidDragPill == null || tabBeranda == null || tabJelajahi == null || tabPustaka == null || tabAkun == null) return;
+		View target;
+		if (idx == 1) target = tabJelajahi;
+		else if (idx == 2) target = tabPustaka;
+		else if (idx == 3) target = tabAkun;
+		else target = tabBeranda;
+
 		float d = getResources().getDisplayMetrics().density;
 
 		int targetW = target.getWidth();
 		if (targetW <= 0 && navbarExpanded != null && navbarExpanded.getWidth() > 0) {
-			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / 3;
+			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / 4;
 		}
-		if (targetW <= 0) targetW = (int) (96 * d);
+		if (targetW <= 0) targetW = (int) (72 * d);
 
 		ViewGroup.LayoutParams lp = liquidDragPill.getLayoutParams();
 		if (lp.width != targetW) {
@@ -2641,6 +2838,7 @@ public class MainActivity extends AppCompatActivity {
 
 		View[] pages = {
 			findViewById(R.id.main_scroll_view),
+			findViewById(R.id.layout_jelajahi),
 			findViewById(R.id.layout_favorite),
 			findViewById(R.id.layout_profile),
 			findViewById(R.id.layout_search)
@@ -2649,13 +2847,15 @@ public class MainActivity extends AppCompatActivity {
 
 		int active = Color.WHITE, inactive = Color.parseColor("#94A3B8");
 		if (imgHome != null) imgHome.setColorFilter(idx == 0 ? active : inactive);
-		if (imgFavorite != null) imgFavorite.setColorFilter(idx == 1 ? active : inactive);
-		if (imgProfile != null) imgProfile.setColorFilter(idx == 2 ? active : inactive);
+		if (imgJelajahi != null) imgJelajahi.setColorFilter(idx == 1 ? active : inactive);
+		if (imgFavorite != null) imgFavorite.setColorFilter(idx == 2 ? active : inactive);
+		if (imgProfile != null) imgProfile.setColorFilter(idx == 3 ? active : inactive);
 		if (imgSearch != null) imgSearch.setColorFilter(inactive);
 
 		if (txtHome != null) txtHome.setTextColor(idx == 0 ? active : inactive);
-		if (txtFavorite != null) txtFavorite.setTextColor(idx == 1 ? active : inactive);
-		if (txtProfile != null) txtProfile.setTextColor(idx == 2 ? active : inactive);
+		if (txtJelajahi != null) txtJelajahi.setTextColor(idx == 1 ? active : inactive);
+		if (txtFavorite != null) txtFavorite.setTextColor(idx == 2 ? active : inactive);
+		if (txtProfile != null) txtProfile.setTextColor(idx == 3 ? active : inactive);
 
 		hideKeyboard();
 		if (idx == 0) {
@@ -2663,9 +2863,12 @@ public class MainActivity extends AppCompatActivity {
 			setNavbarCompactState(false);
 		} else if (idx == 1) {
 			if (pages[1] != null) pages[1].setVisibility(View.VISIBLE);
+			renderJelajahiGrid();
+		} else if (idx == 2) {
+			if (pages[2] != null) pages[2].setVisibility(View.VISIBLE);
 			renderActivePustakaTab();
-		} else if (pages[2] != null) {
-			pages[2].setVisibility(View.VISIBLE);
+		} else if (idx == 3) {
+			if (pages[3] != null) pages[3].setVisibility(View.VISIBLE);
 			refreshAccountUi();
 		}
 	}
@@ -2776,6 +2979,7 @@ public class MainActivity extends AppCompatActivity {
 
 	public void _Nav() {
 		final View pageHome = findViewById(R.id.main_scroll_view);
+		final View pageJelajahi = findViewById(R.id.layout_jelajahi);
 		final View pageSearch = findViewById(R.id.layout_search);
 		final View pageFavorite = findViewById(R.id.layout_favorite);
 		final View pageProfile = findViewById(R.id.layout_profile);
@@ -2790,6 +2994,7 @@ public class MainActivity extends AppCompatActivity {
 				@Override
 				public void onClick(View v) {
 					if (pageHome != null) pageHome.setVisibility(View.GONE);
+					if (pageJelajahi != null) pageJelajahi.setVisibility(View.GONE);
 					if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
 					if (pageProfile != null) pageProfile.setVisibility(View.GONE);
 					if (pageSearch != null) pageSearch.setVisibility(View.VISIBLE);
@@ -2822,6 +3027,78 @@ public class MainActivity extends AppCompatActivity {
 				gv.requestLayout();
 			}
 		});
+	}
+
+	public class JelajahiGridAdapter extends RecyclerView.Adapter<JelajahiGridAdapter.ViewHolder> {
+		private final ArrayList<HashMap<String, Object>> data;
+		public JelajahiGridAdapter(ArrayList<HashMap<String, Object>> arr) { this.data = arr; }
+
+		@NonNull @Override
+		public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+			View v = getLayoutInflater().inflate(R.layout.custom_anime, parent, false);
+			float d = parent.getResources().getDisplayMetrics().density;
+			RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			int halfGap = (int) (4 * d);
+			lp.setMargins(halfGap, 0, halfGap, (int) (14 * d));
+			v.setLayoutParams(lp);
+			return new ViewHolder(v);
+		}
+
+		@Override
+		public void onBindViewHolder(@NonNull ViewHolder holder, int pos) {
+			View v = holder.itemView;
+			float d = v.getResources().getDisplayMetrics().density;
+
+			TextView tvTitle = v.findViewById(R.id.text_title);
+			TextView tvStatus = v.findViewById(R.id.text_status);
+			TextView tvEp = v.findViewById(R.id.text_episode);
+			ImageView imgCover = v.findViewById(R.id.img_cover);
+			View view2 = v.findViewById(R.id.view2);
+
+			final HashMap<String, Object> item = data.get(pos);
+			if (item == null) return;
+
+			if (item.containsKey("is_loading")) {
+				if (tvTitle != null) { tvTitle.setText(""); tvTitle.setBackground(createMainShimmerDrawable(8 * d)); }
+				if (tvStatus != null) { tvStatus.setText(""); tvStatus.setBackground(createMainShimmerDrawable(50f)); }
+				if (tvEp != null) { tvEp.setText(""); tvEp.setBackground(createMainShimmerDrawable(6 * d)); }
+				if (imgCover != null) { imgCover.setImageResource(android.R.color.transparent); imgCover.setBackground(createMainShimmerDrawable(16 * d)); }
+				if (view2 != null) view2.setVisibility(View.GONE);
+				v.setOnClickListener(null);
+			} else {
+				if (imgCover != null) imgCover.setBackgroundColor(Color.TRANSPARENT);
+				if (tvTitle != null) {
+					tvTitle.setBackgroundColor(Color.TRANSPARENT);
+					tvTitle.setIncludeFontPadding(false);
+					tvTitle.setText(cleanText(safeStr(item, "title", "")));
+				}
+				if (tvEp != null) { tvEp.setVisibility(View.VISIBLE); tvEp.setBackgroundColor(Color.TRANSPARENT); tvEp.setText(safeStr(item, "episode", "")); }
+				if (view2 != null) {
+					view2.setVisibility(View.VISIBLE);
+					view2.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
+						new int[]{Color.parseColor("#E6000000"), Color.parseColor("#80000000"), Color.TRANSPARENT}));
+				}
+				if (tvStatus != null) {
+					GradientDrawable badge = new GradientDrawable();
+					badge.setCornerRadius(50f);
+					badge.setColor(0xFF3B82F6);
+					tvStatus.setBackground(badge);
+					tvStatus.setText(safeStr(item, "status", ""));
+				}
+				String cov = normalizeCoverUrl(safeStr(item, "cover", ""));
+				if (imgCover != null && !cov.isEmpty() && !isFinishing() && !isDestroyed()) {
+					Glide.with(MainActivity.this).load(Uri.parse(cov)).into(imgCover);
+				}
+				v.setOnClickListener(new View.OnClickListener() {
+					@Override public void onClick(View view) { openWatchBySlug(safeStr(item, "slug", "")); }
+				});
+			}
+		}
+
+		@Override public int getItemCount() { return data.size(); }
+		class ViewHolder extends RecyclerView.ViewHolder { ViewHolder(@NonNull View v) { super(v); } }
 	}
 
 	public class ContinueWatchingAdapter extends RecyclerView.Adapter<ContinueWatchingAdapter.ViewHolder> {
