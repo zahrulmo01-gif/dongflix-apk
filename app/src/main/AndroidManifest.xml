@@ -46,6 +46,11 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity android:name=".CrashActivity" android:exported="false" />
+        <activity
+	android:name=".CrashLogActivity"
+	android:exported="false"
+	android:process=":crash"
+	android:theme="@style/Theme.AppCompat.NoActionBar" />
 
     </application>
 </manifest>
