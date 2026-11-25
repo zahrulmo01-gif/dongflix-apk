@@ -1,9 +1,19 @@
 package com.dongflix;
 
+import android.animation.ValueAnimator;
 import android.content.Intent;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -17,6 +27,7 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -47,7 +58,6 @@ import java.util.Map;
 public class NotificationActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
-	private static final String ADMIN_EMAIL = "zahrulms01@gmail.com";
 
 	private FirebaseUser currentUser;
 	private String currentUserKey = "";
@@ -58,8 +68,11 @@ public class NotificationActivity extends AppCompatActivity {
 	private ScrollView scrollView;
 	private LinearLayout listContainer;
 	private LinearLayout emptyStateBox;
-	private TextView tvUnreadCount;
 	private Typeface appFont;
+
+	private ValueAnimator shimmerAnimator;
+	private float shimmerPhase = 0f;
+	private boolean isLoading = true;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -77,6 +90,7 @@ public class NotificationActivity extends AppCompatActivity {
 			.child(currentUserKey);
 
 		buildLayout();
+		showLoadingPlaceholders();
 		startListeningNotifications();
 	}
 
@@ -135,6 +149,181 @@ public class NotificationActivity extends AppCompatActivity {
 		}
 	}
 
+	private Drawable createShimmerDrawable(final float cornerRadiusPx) {
+		return new Drawable() {
+			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint shimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Matrix shaderMatrix = new Matrix();
+			private LinearGradient gradient;
+			private int lastWidth = -1;
+
+			{
+				basePaint.setColor(Color.parseColor("#141822"));
+			}
+
+			@Override
+			public void draw(Canvas canvas) {
+				Rect b = getBounds();
+				int w = b.width();
+				int h = b.height();
+				if (w <= 0 || h <= 0) return;
+
+				RectF rect = new RectF(b);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, basePaint);
+
+				if (gradient == null || lastWidth != w) {
+					lastWidth = w;
+					gradient = new LinearGradient(
+						0, 0, w, 0,
+						new int[]{
+							Color.TRANSPARENT,
+							Color.parseColor("#1AFFFFFF"),
+							Color.parseColor("#33FFFFFF"),
+							Color.parseColor("#1AFFFFFF"),
+							Color.TRANSPARENT
+						},
+						new float[]{0f, 0.35f, 0.5f, 0.65f, 1f},
+						Shader.TileMode.CLAMP
+					);
+					shimmerPaint.setShader(gradient);
+				}
+
+				float translateX = -w + (2f * w * shimmerPhase);
+				shaderMatrix.setTranslate(translateX, 0);
+				gradient.setLocalMatrix(shaderMatrix);
+				canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, shimmerPaint);
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+	}
+
+	private void startShimmer() {
+		isLoading = true;
+		stopShimmerOnly();
+		shimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
+		shimmerAnimator.setDuration(1200L);
+		shimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
+		shimmerAnimator.setInterpolator(new LinearInterpolator());
+		shimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+			@Override
+			public void onAnimationUpdate(ValueAnimator animation) {
+				if (!isLoading || listContainer == null) return;
+				shimmerPhase = (float) animation.getAnimatedValue();
+				invalidateShimmerRecursive(listContainer);
+			}
+		});
+		shimmerAnimator.start();
+	}
+
+	private void invalidateShimmerRecursive(View v) {
+		if (v == null) return;
+		v.invalidate();
+		if (v instanceof ViewGroup) {
+			ViewGroup vg = (ViewGroup) v;
+			for (int i = 0; i < vg.getChildCount(); i++) {
+				invalidateShimmerRecursive(vg.getChildAt(i));
+			}
+		}
+	}
+
+	private void stopShimmerOnly() {
+		if (shimmerAnimator != null) {
+			shimmerAnimator.cancel();
+			shimmerAnimator = null;
+		}
+	}
+
+	private void stopShimmer() {
+		isLoading = false;
+		stopShimmerOnly();
+	}
+
+	private void showLoadingPlaceholders() {
+		if (listContainer == null) return;
+		listContainer.removeAllViews();
+		if (emptyStateBox != null) emptyStateBox.setVisibility(View.GONE);
+
+		float d = getResources().getDisplayMetrics().density;
+
+		for (int i = 0; i < 5; i++) {
+			LinearLayout block = new LinearLayout(this);
+			block.setOrientation(LinearLayout.VERTICAL);
+			block.setPadding(0, (int) (12 * d), 0, (int) (14 * d));
+
+			// Tanggal placeholder
+			View datePh = new View(this);
+			LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams((int) (130 * d), (int) (13 * d));
+			dLp.bottomMargin = (int) (14 * d);
+			datePh.setLayoutParams(dLp);
+			datePh.setBackground(createShimmerDrawable(6 * d));
+			block.addView(datePh);
+
+			// Baris icon + label + jam placeholder
+			LinearLayout topRow = new LinearLayout(this);
+			topRow.setOrientation(LinearLayout.HORIZONTAL);
+			topRow.setGravity(Gravity.CENTER_VERTICAL);
+			LinearLayout.LayoutParams trLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			trLp.bottomMargin = (int) (10 * d);
+			topRow.setLayoutParams(trLp);
+
+			View iconPh = new View(this);
+			LinearLayout.LayoutParams icLp = new LinearLayout.LayoutParams((int) (16 * d), (int) (16 * d));
+			icLp.rightMargin = (int) (8 * d);
+			iconPh.setLayoutParams(icLp);
+			iconPh.setBackground(createShimmerDrawable(100f));
+
+			View titlePh = new View(this);
+			titlePh.setLayoutParams(new LinearLayout.LayoutParams((int) (85 * d), (int) (12 * d)));
+			titlePh.setBackground(createShimmerDrawable(6 * d));
+
+			View spacer = new View(this);
+			spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+
+			View timePh = new View(this);
+			timePh.setLayoutParams(new LinearLayout.LayoutParams((int) (38 * d), (int) (11 * d)));
+			timePh.setBackground(createShimmerDrawable(6 * d));
+
+			topRow.addView(iconPh);
+			topRow.addView(titlePh);
+			topRow.addView(spacer);
+			topRow.addView(timePh);
+			block.addView(topRow);
+
+			// 2 baris teks pesan placeholder
+			View bodyLine1 = new View(this);
+			bodyLine1.setLayoutParams(new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, (int) (13 * d)
+			));
+			bodyLine1.setBackground(createShimmerDrawable(6 * d));
+			block.addView(bodyLine1);
+
+			View bodyLine2 = new View(this);
+			LinearLayout.LayoutParams b2Lp = new LinearLayout.LayoutParams((int) (210 * d), (int) (13 * d));
+			b2Lp.topMargin = (int) (6 * d);
+			bodyLine2.setLayoutParams(b2Lp);
+			bodyLine2.setBackground(createShimmerDrawable(6 * d));
+			block.addView(bodyLine2);
+
+			// Garis pemisah tipis
+			View divider = new View(this);
+			LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+			);
+			divLp.topMargin = (int) (16 * d);
+			divider.setLayoutParams(divLp);
+			divider.setBackgroundColor(Color.parseColor("#1E222B"));
+			block.addView(divider);
+
+			listContainer.addView(block);
+		}
+		startShimmer();
+	}
+
 	private void buildLayout() {
 		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -154,16 +343,16 @@ public class NotificationActivity extends AppCompatActivity {
 		rootLayout.setLayoutParams(new ViewGroup.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		rootLayout.setBackgroundColor(Color.parseColor("#000000"));
+		rootLayout.setBackgroundColor(Color.parseColor("#0A0B0E"));
 
 		scrollView = new ScrollView(this);
 		scrollView.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 		scrollView.setPadding(
-			(int) (14 * d),
-			statusBarH + (int) (74 * d),
-			(int) (14 * d),
+			(int) (18 * d),
+			statusBarH + (int) (72 * d),
+			(int) (18 * d),
 			(int) (28 * d)
 		);
 		scrollView.setClipToPadding(false);
@@ -183,7 +372,7 @@ public class NotificationActivity extends AppCompatActivity {
 		emptyStateBox = new LinearLayout(this);
 		emptyStateBox.setOrientation(LinearLayout.VERTICAL);
 		emptyStateBox.setGravity(Gravity.CENTER);
-		emptyStateBox.setPadding((int) (24 * d), (int) (80 * d), (int) (24 * d), (int) (40 * d));
+		emptyStateBox.setPadding((int) (24 * d), (int) (90 * d), (int) (24 * d), (int) (40 * d));
 		emptyStateBox.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		));
@@ -196,8 +385,8 @@ public class NotificationActivity extends AppCompatActivity {
 		styleText(tvEmptyTitle);
 
 		TextView tvEmptyDesc = new TextView(this);
-		tvEmptyDesc.setText("Saat seseorang membalas pesanmu atau menandai kamu dengan @ di live chat, notifikasinya akan muncul di sini.");
-		tvEmptyDesc.setTextColor(Color.parseColor("#64748B"));
+		tvEmptyDesc.setText("Saat seseorang membalas atau menyebut kamu di live chat, notifikasinya akan muncul di sini.");
+		tvEmptyDesc.setTextColor(Color.parseColor("#94A3B8"));
 		tvEmptyDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 		tvEmptyDesc.setGravity(Gravity.CENTER);
 		LinearLayout.LayoutParams edDescLp = new LinearLayout.LayoutParams(
@@ -215,7 +404,7 @@ public class NotificationActivity extends AppCompatActivity {
 		scrollView.addView(contentHolder);
 		rootLayout.addView(scrollView);
 
-		// Header glass selaras aplikasi
+		// Header glass melayang
 		LinearLayout topHeader = new LinearLayout(this);
 		topHeader.setOrientation(LinearLayout.HORIZONTAL);
 		topHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -263,40 +452,16 @@ public class NotificationActivity extends AppCompatActivity {
 		setupGlassBlur(capBlur, rootLayout, 20f, btnSize / 2f, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		titleCapsule.addView(capBlur);
 
-		LinearLayout titleRow = new LinearLayout(this);
-		titleRow.setOrientation(LinearLayout.HORIZONTAL);
-		titleRow.setGravity(Gravity.CENTER);
-		titleRow.setPadding((int) (14 * d), 0, (int) (14 * d), 0);
-
 		TextView tvTitle = new TextView(this);
 		tvTitle.setText("Notifikasi");
 		tvTitle.setTextColor(Color.WHITE);
 		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+		tvTitle.setGravity(Gravity.CENTER);
 		styleText(tvTitle);
-
-		tvUnreadCount = new TextView(this);
-		tvUnreadCount.setTextColor(Color.parseColor("#38BDF8"));
-		tvUnreadCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
-		tvUnreadCount.setPadding((int) (8 * d), (int) (2 * d), (int) (8 * d), (int) (2 * d));
-		LinearLayout.LayoutParams uLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		uLp.leftMargin = (int) (8 * d);
-		tvUnreadCount.setLayoutParams(uLp);
-		GradientDrawable uBg = new GradientDrawable();
-		uBg.setColor(Color.parseColor("#2438BDF8"));
-		uBg.setCornerRadius(100f);
-		tvUnreadCount.setBackground(uBg);
-		tvUnreadCount.setVisibility(View.GONE);
-		styleText(tvUnreadCount);
-
-		titleRow.addView(tvTitle);
-		titleRow.addView(tvUnreadCount);
-		titleCapsule.addView(titleRow, new FrameLayout.LayoutParams(
+		titleCapsule.addView(tvTitle, new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 
-		// Tombol bersihkan semua notifikasi di kanan (ukuran sama dengan tombol back)
 		FrameLayout clearBtn = new FrameLayout(this);
 		clearBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
 
@@ -340,9 +505,9 @@ public class NotificationActivity extends AppCompatActivity {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
 				if (isFinishing() || isDestroyed()) return;
-				List<HashMap<String, Object>> items = new ArrayList<>();
-				int unread = 0;
+				stopShimmer();
 
+				List<HashMap<String, Object>> items = new ArrayList<>();
 				if (snapshot.exists()) {
 					for (DataSnapshot child : snapshot.getChildren()) {
 						Object raw = child.getValue();
@@ -351,11 +516,14 @@ public class NotificationActivity extends AppCompatActivity {
 							for (Map.Entry<?, ?> e : ((Map<?, ?>) raw).entrySet()) {
 								if (e.getKey() != null) map.put(e.getKey().toString(), e.getValue());
 							}
-							map.put("_id", child.getKey());
-							if (!Boolean.TRUE.equals(map.get("read"))) {
-								unread++;
-							}
+							String id = child.getKey() != null ? child.getKey() : "";
+							map.put("_id", id);
 							items.add(map);
+
+							// Tandai sudah dibaca saat halaman notifikasi dibuka agar titik bulat di icon hilang
+							if (!id.isEmpty() && !Boolean.TRUE.equals(map.get("read"))) {
+								notifRef.child(id).child("read").setValue(true);
+							}
 						}
 					}
 				}
@@ -367,22 +535,22 @@ public class NotificationActivity extends AppCompatActivity {
 					}
 				});
 
-				if (tvUnreadCount != null) {
-					if (unread > 0) {
-						tvUnreadCount.setText(unread + " baru");
-						tvUnreadCount.setVisibility(View.VISIBLE);
-					} else {
-						tvUnreadCount.setVisibility(View.GONE);
-					}
-				}
-
 				renderNotifications(items);
 			}
 
 			@Override
-			public void onCancelled(@NonNull DatabaseError error) {}
+			public void onCancelled(@NonNull DatabaseError error) {
+				stopShimmer();
+			}
 		};
 		notifRef.limitToLast(50).addValueEventListener(notifListener);
+	}
+
+	private int resolveBellIconRes() {
+		int id = getResources().getIdentifier("ic_notifications", "drawable", getPackageName());
+		if (id > 0) return id;
+		int id2 = getResources().getIdentifier("ic_notification", "drawable", getPackageName());
+		return id2 > 0 ? id2 : android.R.drawable.ic_popup_reminder;
 	}
 
 	private void renderNotifications(List<HashMap<String, Object>> items) {
@@ -396,123 +564,124 @@ public class NotificationActivity extends AppCompatActivity {
 		emptyStateBox.setVisibility(View.GONE);
 
 		float d = getResources().getDisplayMetrics().density;
+		int bellRes = resolveBellIconRes();
+		String lastDateHeader = "";
 
-		for (final HashMap<String, Object> item : items) {
-			final String notifId = safe(item, "_id", "");
+		for (HashMap<String, Object> item : items) {
 			String type = safe(item, "type", "mention");
 			String actorName = safe(item, "actorName", "Pengguna");
-			String actorEmail = safe(item, "actorEmail", "");
 			String snippet = safe(item, "snippet", "");
-			long exp = parseLong(item.get("actorExp"));
 			long ts = parseLong(item.get("timestamp"));
 			if (ts <= 0L) ts = System.currentTimeMillis();
-			boolean isRead = Boolean.TRUE.equals(item.get("read"));
-			boolean isActorAdmin = ADMIN_EMAIL.equalsIgnoreCase(actorEmail) || Boolean.TRUE.equals(item.get("actorIsAdmin"));
 
-			LinearLayout card = new LinearLayout(this);
-			card.setOrientation(LinearLayout.VERTICAL);
-			card.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (12 * d));
-			LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+			String dateHeader = formatDateHeader(ts);
+			String clockText = formatClock(ts);
+
+			LinearLayout itemWrap = new LinearLayout(this);
+			itemWrap.setOrientation(LinearLayout.VERTICAL);
+			itemWrap.setPadding(0, (int) (10 * d), 0, 0);
+			itemWrap.setLayoutParams(new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			cardLp.bottomMargin = (int) (10 * d);
-			card.setLayoutParams(cardLp);
+			));
 
-			GradientDrawable bg = new GradientDrawable();
-			bg.setColor(isRead ? Color.parseColor("#0F172A") : Color.parseColor("#131D33"));
-			bg.setCornerRadius(16 * d);
-			bg.setStroke(
-				Math.max(1, (int) (1 * d)),
-				isRead ? Color.parseColor("#1E2433") : Color.parseColor("#4438BDF8")
-			);
-			card.setBackground(bg);
-
-			LinearLayout topRow = new LinearLayout(this);
-			topRow.setOrientation(LinearLayout.HORIZONTAL);
-			topRow.setGravity(Gravity.CENTER_VERTICAL);
-
-			TextView tvTagType = new TextView(this);
-			tvTagType.setText("reply".equalsIgnoreCase(type) ? "BALASAN DI CHAT" : "MENANDAI KAMU (@)");
-			tvTagType.setTextColor("reply".equalsIgnoreCase(type) ? Color.parseColor("#38BDF8") : Color.parseColor("#FBBF24"));
-			tvTagType.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
-			tvTagType.setPadding((int) (8 * d), (int) (2 * d), (int) (8 * d), (int) (2 * d));
-			GradientDrawable tagBg = new GradientDrawable();
-			tagBg.setColor("reply".equalsIgnoreCase(type) ? Color.parseColor("#1E38BDF8") : Color.parseColor("#1EFBBF24"));
-			tagBg.setCornerRadius(100f);
-			tvTagType.setBackground(tagBg);
-			styleText(tvTagType);
-
-			TextView tvTime = new TextView(this);
-			tvTime.setText(formatTime(ts));
-			tvTime.setTextColor(Color.parseColor("#94A3B8"));
-			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-			LinearLayout.LayoutParams tmLp = new LinearLayout.LayoutParams(
-				0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
-			);
-			tvTime.setLayoutParams(tmLp);
-			tvTime.setGravity(Gravity.END);
-			styleText(tvTime);
-
-			topRow.addView(tvTagType);
-			topRow.addView(tvTime);
-			card.addView(topRow);
-
-			LinearLayout actorRow = new LinearLayout(this);
-			actorRow.setOrientation(LinearLayout.HORIZONTAL);
-			actorRow.setGravity(Gravity.CENTER_VERTICAL);
-			LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			arLp.topMargin = (int) (8 * d);
-			actorRow.setLayoutParams(arLp);
-
-			TextView tvActor = new TextView(this);
-			tvActor.setText(actorName);
-			tvActor.setTextColor(isActorAdmin ? Color.parseColor("#FBBF24") : Color.WHITE);
-			tvActor.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-			tvActor.setMaxLines(1);
-			styleText(tvActor);
-
-			UserBadgeView badgeView = new UserBadgeView(this);
-			badgeView.bindUserBadges(exp, isActorAdmin);
-			LinearLayout.LayoutParams bvLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			bvLp.leftMargin = (int) (6 * d);
-			badgeView.setLayoutParams(bvLp);
-
-			actorRow.addView(tvActor);
-			actorRow.addView(badgeView);
-			card.addView(actorRow);
-
-			if (!snippet.isEmpty()) {
-				TextView tvBody = new TextView(this);
-				tvBody.setText(snippet);
-				tvBody.setTextColor(Color.parseColor("#CBD5E1"));
-				tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-				tvBody.setMaxLines(3);
-				tvBody.setEllipsize(TextUtils.TruncateAt.END);
-				LinearLayout.LayoutParams bdLp = new LinearLayout.LayoutParams(
-					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			// Header Tanggal: "22, November 2026"
+			if (!dateHeader.equals(lastDateHeader)) {
+				lastDateHeader = dateHeader;
+				TextView tvDate = new TextView(this);
+				tvDate.setText(dateHeader);
+				tvDate.setTextColor(Color.parseColor("#E2E8F0"));
+				tvDate.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+				styleText(tvDate);
+				LinearLayout.LayoutParams dtLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 				);
-				bdLp.topMargin = (int) (4 * d);
-				tvBody.setLayoutParams(bdLp);
-				styleText(tvBody);
-				card.addView(tvBody);
+				dtLp.topMargin = (int) (4 * d);
+				dtLp.bottomMargin = (int) (12 * d);
+				tvDate.setLayoutParams(dtLp);
+				itemWrap.addView(tvDate);
 			}
 
-			card.setOnClickListener(new View.OnClickListener() {
+			// Baris ikon lonceng + "Notifikasi" di kiri dan jam "14.55" di kanan
+			LinearLayout metaRow = new LinearLayout(this);
+			metaRow.setOrientation(LinearLayout.HORIZONTAL);
+			metaRow.setGravity(Gravity.CENTER_VERTICAL);
+			LinearLayout.LayoutParams mrLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			mrLp.bottomMargin = (int) (6 * d);
+			metaRow.setLayoutParams(mrLp);
+
+			ImageView ivBell = new ImageView(this);
+			int bellPx = (int) (16 * d);
+			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(bellPx, bellPx);
+			bLp.rightMargin = (int) (7 * d);
+			ivBell.setLayoutParams(bLp);
+			ivBell.setImageResource(bellRes);
+			ivBell.setColorFilter(Color.parseColor("#E2E8F0"), PorterDuff.Mode.SRC_IN);
+
+			TextView tvLabel = new TextView(this);
+			tvLabel.setText("Notifikasi");
+			tvLabel.setTextColor(Color.parseColor("#CBD5E1"));
+			tvLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			styleText(tvLabel);
+
+			View spacer = new View(this);
+			spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+
+			TextView tvTime = new TextView(this);
+			tvTime.setText(clockText);
+			tvTime.setTextColor(Color.parseColor("#94A3B8"));
+			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+			styleText(tvTime);
+
+			metaRow.addView(ivBell);
+			metaRow.addView(tvLabel);
+			metaRow.addView(spacer);
+			metaRow.addView(tvTime);
+			itemWrap.addView(metaRow);
+
+			// Isi notifikasi bergaya seperti gambar referensi
+			String actionPhrase = "reply".equalsIgnoreCase(type)
+				? actorName + " membalas di #live-chat: " + snippet
+				: actorName + " menyebut di #live-chat: " + snippet;
+
+			TextView tvContent = new TextView(this);
+			tvContent.setText(actionPhrase);
+			tvContent.setTextColor(Color.WHITE);
+			tvContent.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+			tvContent.setLineSpacing(2 * d, 1.08f);
+			tvContent.setMaxLines(4);
+			tvContent.setEllipsize(TextUtils.TruncateAt.END);
+			styleText(tvContent);
+			itemWrap.addView(tvContent);
+
+			// Garis pemisah tipis di bawah setiap notifikasi
+			View divider = new View(this);
+			LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+			);
+			divLp.topMargin = (int) (14 * d);
+			divider.setLayoutParams(divLp);
+			divider.setBackgroundColor(Color.parseColor("#262932"));
+			itemWrap.addView(divider);
+
+			itemWrap.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					if (!notifId.isEmpty() && notifRef != null) {
-						notifRef.child(notifId).child("read").setValue(true);
-					}
 					startActivity(new Intent(NotificationActivity.this, ChatActivity.class));
 				}
 			});
 
-			listContainer.addView(card);
+			listContainer.addView(itemWrap);
 		}
+	}
+
+	private String formatDateHeader(long ts) {
+		return new SimpleDateFormat("dd, MMMM yyyy", new Locale("id", "ID")).format(new Date(ts));
+	}
+
+	private String formatClock(long ts) {
+		return new SimpleDateFormat("HH.mm", Locale.getDefault()).format(new Date(ts));
 	}
 
 	private String safe(Map<String, Object> map, String key, String fallback) {
@@ -531,12 +700,9 @@ public class NotificationActivity extends AppCompatActivity {
 		}
 	}
 
-	private String formatTime(long ts) {
-		return new SimpleDateFormat("dd MMM • HH.mm", new Locale("id", "ID")).format(new Date(ts));
-	}
-
 	@Override
 	protected void onDestroy() {
+		stopShimmer();
 		DongflixToast.dismissCurrent();
 		if (notifRef != null && notifListener != null) {
 			notifRef.removeEventListener(notifListener);
