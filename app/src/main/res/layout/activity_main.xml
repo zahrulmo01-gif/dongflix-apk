@@ -457,7 +457,7 @@
 				android:clipChildren="false"
 				android:nestedScrollingEnabled="false" />
 
-			<!-- DONGHUA ROMANTIS TIPIS-TIPIS -->
+			<!-- ROMANTIS TIPIS-TIPIS -->
 			<RelativeLayout
 				android:id="@+id/layout_section_romance"
 				android:layout_width="match_parent"
@@ -472,7 +472,7 @@
 					android:id="@+id/text_title_romance"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:text="Donghua Romantis Tipis-Tipis"
+					android:text="Romantis Tipis-Tipis"
 					android:textSize="18sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
@@ -577,7 +577,7 @@
 				android:clipChildren="false"
 				android:nestedScrollingEnabled="false" />
 
-			<!-- DONGHUA KOMEDI RINGAN -->
+			<!-- KOMEDI RINGAN -->
 			<RelativeLayout
 				android:id="@+id/layout_section_comedy"
 				android:layout_width="match_parent"
@@ -592,7 +592,7 @@
 					android:id="@+id/text_title_comedy"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
-					android:text="Donghua Komedi Ringan"
+					android:text="Komedi Ringan"
 					android:textSize="18sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
@@ -725,6 +725,15 @@
 			android:contentDescription="Refresh"
 			android:src="@android:drawable/ic_popup_sync" />
 	</FrameLayout>
+
+	<!-- HALAMAN JELAJAHI -->
+	<LinearLayout
+		android:id="@+id/layout_jelajahi"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="#000000"
+		android:orientation="vertical"
+		android:visibility="gone" />
 
 	<LinearLayout
 		android:id="@+id/layout_search"
@@ -932,8 +941,8 @@
 
 					<ImageView
 						android:id="@+id/img_home"
-						android:layout_width="22dp"
-						android:layout_height="22dp"
+						android:layout_width="21dp"
+						android:layout_height="21dp"
 						android:src="@drawable/ic_home"
 						android:scaleType="fitCenter" />
 
@@ -943,8 +952,33 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Beranda"
-						android:textSize="11sp"
+						android:textSize="10.5sp"
 						android:textColor="#FFFFFF" />
+				</LinearLayout>
+
+				<LinearLayout
+					android:id="@+id/tab_jelajahi"
+					android:layout_width="0dp"
+					android:layout_height="match_parent"
+					android:layout_weight="1"
+					android:gravity="center"
+					android:orientation="vertical">
+
+					<ImageView
+						android:id="@+id/img_jelajahi"
+						android:layout_width="21dp"
+						android:layout_height="21dp"
+						android:src="@drawable/ic_jelajahi"
+						android:scaleType="fitCenter" />
+
+					<TextView
+						android:id="@+id/txt_jelajahi"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="2dp"
+						android:text="Jelajahi"
+						android:textSize="10.5sp"
+						android:textColor="#CBD5E1" />
 				</LinearLayout>
 
 				<LinearLayout
@@ -957,8 +991,8 @@
 
 					<ImageView
 						android:id="@+id/img_favorite"
-						android:layout_width="22dp"
-						android:layout_height="22dp"
+						android:layout_width="21dp"
+						android:layout_height="21dp"
 						android:src="@drawable/ic_favorite"
 						android:scaleType="fitCenter" />
 
@@ -968,7 +1002,7 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Pustaka"
-						android:textSize="11sp"
+						android:textSize="10.5sp"
 						android:textColor="#CBD5E1" />
 				</LinearLayout>
 
@@ -982,8 +1016,8 @@
 
 					<ImageView
 						android:id="@+id/img_profile"
-						android:layout_width="22dp"
-						android:layout_height="22dp"
+						android:layout_width="21dp"
+						android:layout_height="21dp"
 						android:src="@drawable/ic_profile"
 						android:scaleType="fitCenter" />
 
@@ -993,7 +1027,7 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Akun"
-						android:textSize="11sp"
+						android:textSize="10.5sp"
 						android:textColor="#CBD5E1" />
 				</LinearLayout>
 			</LinearLayout>
