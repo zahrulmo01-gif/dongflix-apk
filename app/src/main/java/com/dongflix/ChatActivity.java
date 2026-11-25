@@ -400,11 +400,6 @@ public class ChatActivity extends AppCompatActivity {
 		startChatShimmer();
 	}
 
-	private int calculateLevel(long exp) {
-		if (exp <= 0) return 1;
-		return (int) ((exp - 1) / 1000L) + 1;
-	}
-
 	private long parseLongVal(Object o) {
 		if (o == null) return 0L;
 		if (o instanceof Number) return ((Number) o).longValue();
@@ -795,6 +790,9 @@ public class ChatActivity extends AppCompatActivity {
 		cancelEditBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
+				if (chatInput != null) {
+					chatInput.setText("");
+				}
 				cancelEditMode();
 			}
 		});
@@ -900,9 +898,12 @@ public class ChatActivity extends AppCompatActivity {
 		chatBottomBar.addView(mentionMenu);
 
 		FrameLayout inputGlassFrame = new FrameLayout(this);
-		inputGlassFrame.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (52 * d)
-		));
+		FrameLayout.LayoutParams igLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		igLp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
+		inputGlassFrame.setMinimumHeight((int) (52 * d));
+		inputGlassFrame.setLayoutParams(igLp);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			inputGlassFrame.setElevation(18f);
 		}
@@ -911,22 +912,30 @@ public class ChatActivity extends AppCompatActivity {
 		inputBlur.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		setupGlassBlur(inputBlur, chatRoot, 20f, 26 * d, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
+		setupGlassBlur(inputBlur, chatRoot, 20f, 24 * d, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		inputGlassFrame.addView(inputBlur);
 
 		LinearLayout inputRow = new LinearLayout(this);
 		inputRow.setOrientation(LinearLayout.HORIZONTAL);
-		inputRow.setGravity(Gravity.CENTER_VERTICAL);
-		inputRow.setPadding((int) (16 * d), (int) (4 * d), (int) (6 * d), (int) (4 * d));
+		inputRow.setGravity(Gravity.BOTTOM);
+		inputRow.setPadding((int) (16 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
 
 		chatInput = new EditText(this);
-		chatInput.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+		LinearLayout.LayoutParams ciLp = new LinearLayout.LayoutParams(
+			0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+		);
+		ciLp.bottomMargin = (int) (2 * d);
+		chatInput.setLayoutParams(ciLp);
+		chatInput.setMinimumHeight((int) (40 * d));
 		chatInput.setBackground(null);
 		chatInput.setTextColor(Color.WHITE);
 		chatInput.setHint("Kirim pesan...");
 		chatInput.setHintTextColor(Color.parseColor("#94A3B8"));
 		chatInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-		chatInput.setSingleLine(true);
+		chatInput.setSingleLine(false);
+		chatInput.setMinLines(1);
+		chatInput.setMaxLines(3);
+		chatInput.setGravity(Gravity.CENTER_VERTICAL);
 
 		chatInput.addTextChangedListener(new TextWatcher() {
 			@Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -986,7 +995,7 @@ public class ChatActivity extends AppCompatActivity {
 		inputRow.addView(stickerBtn);
 		inputRow.addView(sendBtn);
 		inputGlassFrame.addView(inputRow, new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		));
 		chatBottomBar.addView(inputGlassFrame);
 
@@ -1155,13 +1164,14 @@ public class ChatActivity extends AppCompatActivity {
 			: "-";
 		long exp = prof != null ? parseLongVal(prof.get("exp")) : 0L;
 		boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
+		int level = UserBadgeView.computeLevelFromExp(exp);
 
 		new AlertDialog.Builder(this)
 			.setTitle(name)
 			.setMessage(
 				"Username: " + uname
 					+ "\nEmail: " + email
-					+ "\nLevel: " + (isAdm ? "Lv999+ (Admin)" : "Lv" + calculateLevel(exp) + " (" + exp + " XP)")
+					+ "\nLevel: " + (isAdm ? "Lv999+ (Admin)" : "Lv" + level + " (" + exp + " XP)")
 			)
 			.setPositiveButton("Tutup", null)
 			.show();
@@ -1241,6 +1251,10 @@ public class ChatActivity extends AppCompatActivity {
 		};
 	}
 
+	private boolean isGifOrStickerOnlyMessage(String text, String stickerUrl) {
+		return text.trim().isEmpty() && !stickerUrl.trim().isEmpty();
+	}
+
 	private void showMessageActionsBottomSheet(
 		final String msgId,
 		final String authorName,
@@ -1251,6 +1265,7 @@ public class ChatActivity extends AppCompatActivity {
 	) {
 		if (isFinishing() || isDestroyed()) return;
 		final float d = getResources().getDisplayMetrics().density;
+		final boolean isGifOnly = isGifOrStickerOnlyMessage(text, stickerUrl);
 
 		final Dialog sheet = new Dialog(this);
 		sheet.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -1333,32 +1348,33 @@ public class ChatActivity extends AppCompatActivity {
 			));
 		}
 
-		primaryGroup.addView(buildDarkSheetDivider(d));
-
-		primaryGroup.addView(buildDarkSheetRowWithIcon(
-			"Salin pesan",
-			ICON_COPY,
-			Color.parseColor("#F1F5F9"),
-			Color.parseColor("#38BDF8"),
-			Color.parseColor("#1E293B"),
-			d,
-			new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					sheet.dismiss();
-					String toCopy = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? stickerUrl : "");
-					if (toCopy.isEmpty()) {
-						DongflixToast.show(ChatActivity.this, "Tidak ada teks untuk disalin");
-						return;
-					}
-					ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-					if (cm != null) {
-						cm.setPrimaryClip(ClipData.newPlainText("Pesan Live Chat", toCopy));
-						DongflixToast.show(ChatActivity.this, "Pesan disalin");
+		// Pesan berisi GIF / stiker saja tidak bisa disalin
+		if (!isGifOnly) {
+			primaryGroup.addView(buildDarkSheetDivider(d));
+			primaryGroup.addView(buildDarkSheetRowWithIcon(
+				"Salin pesan",
+				ICON_COPY,
+				Color.parseColor("#F1F5F9"),
+				Color.parseColor("#38BDF8"),
+				Color.parseColor("#1E293B"),
+				d,
+				new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						sheet.dismiss();
+						if (text.trim().isEmpty()) {
+							DongflixToast.show(ChatActivity.this, "Pesan GIF tidak bisa disalin");
+							return;
+						}
+						ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+						if (cm != null) {
+							cm.setPrimaryClip(ClipData.newPlainText("Pesan Live Chat", text));
+							DongflixToast.show(ChatActivity.this, "Pesan disalin");
+						}
 					}
 				}
-			}
-		));
+			));
+		}
 
 		if (!isMine) {
 			primaryGroup.addView(buildDarkSheetDivider(d));
@@ -1800,7 +1816,6 @@ public class ChatActivity extends AppCompatActivity {
 			bubble.setMinimumWidth((int) (185 * d));
 			bubble.setPadding((int) (14 * d), (int) (11 * d), (int) (18 * d), (int) (10 * d));
 
-			// Bubble tanpa stroke: pesan sendiri biru gelap, pesan orang lain abu gelap
 			GradientDrawable bubbleBg = new GradientDrawable();
 			if (isMine) {
 				bubbleBg.setColors(new int[]{Color.parseColor("#13294B"), Color.parseColor("#0B172B")});
@@ -1887,46 +1902,16 @@ public class ChatActivity extends AppCompatActivity {
 			tvSender.setTypeface(null, Typeface.BOLD);
 			tvSender.setMaxLines(1);
 
-			TextView tvLv = new TextView(this);
-			tvLv.setText(isMsgAdmin ? "Lv999+" : "Lv" + calculateLevel(exp));
-			tvLv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
-			tvLv.setTypeface(null, Typeface.BOLD);
-			tvLv.setMaxLines(1);
-			tvLv.setTextColor(isMsgAdmin ? Color.parseColor("#451A03") : Color.parseColor("#38BDF8"));
-			GradientDrawable lvBg = new GradientDrawable();
-			lvBg.setCornerRadius(100f);
-			lvBg.setColor(isMsgAdmin ? Color.parseColor("#FBBF24") : Color.parseColor("#2638BDF8"));
-			tvLv.setBackground(lvBg);
-			tvLv.setPadding((int) (6 * d), (int) (1.5f * d), (int) (6 * d), (int) (1.5f * d));
-			LinearLayout.LayoutParams lvLp = new LinearLayout.LayoutParams(
+			UserBadgeView badgeView = new UserBadgeView(this);
+			badgeView.bindUserBadges(exp, isMsgAdmin);
+			LinearLayout.LayoutParams bvLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			lvLp.leftMargin = (int) (6 * d);
-			tvLv.setLayoutParams(lvLp);
+			bvLp.leftMargin = (int) (6 * d);
+			badgeView.setLayoutParams(bvLp);
 
 			metaRow.addView(tvSender);
-			metaRow.addView(tvLv);
-
-			if (isMsgAdmin) {
-				TextView tvAdm = new TextView(this);
-				tvAdm.setText("★ ADMIN");
-				tvAdm.setTextColor(Color.WHITE);
-				tvAdm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
-				tvAdm.setTypeface(null, Typeface.BOLD);
-				tvAdm.setMaxLines(1);
-				GradientDrawable admBg = new GradientDrawable();
-				admBg.setCornerRadius(100f);
-				admBg.setColor(Color.parseColor("#EA580C"));
-				tvAdm.setBackground(admBg);
-				tvAdm.setPadding((int) (6 * d), (int) (1.5f * d), (int) (6 * d), (int) (1.5f * d));
-				LinearLayout.LayoutParams admLp = new LinearLayout.LayoutParams(
-					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-				);
-				admLp.leftMargin = (int) (5 * d);
-				tvAdm.setLayoutParams(admLp);
-				metaRow.addView(tvAdm);
-			}
-
+			metaRow.addView(badgeView);
 			bubble.addView(metaRow);
 
 			if (!text.isEmpty()) {
@@ -2180,6 +2165,7 @@ public class ChatActivity extends AppCompatActivity {
 
 	@Override
 	public void finish() {
+		DongflixToast.dismissCurrent();
 		restoreMiniPlayerAfterChat();
 		super.finish();
 	}
@@ -2187,6 +2173,7 @@ public class ChatActivity extends AppCompatActivity {
 	@Override
 	protected void onDestroy() {
 		stopChatShimmer();
+		DongflixToast.dismissCurrent();
 		if (liveChatRef != null && chatListener != null) {
 			liveChatRef.removeEventListener(chatListener);
 		}
