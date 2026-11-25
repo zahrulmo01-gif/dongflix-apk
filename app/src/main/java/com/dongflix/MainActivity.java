@@ -227,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
 				scaled.compress(Bitmap.CompressFormat.JPEG, 55, baos);
 				bytes = baos.toByteArray();
 			}
-			return "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP);
+			return "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
 		} catch (Exception e) {
 			return "";
 		}
@@ -404,7 +404,6 @@ public class MainActivity extends AppCompatActivity {
 		cardBg.setStroke(Math.max(1, (int) (1.2f * d)), Color.parseColor("#3838BDF8"));
 		card.setBackground(cardBg);
 
-		// Badge versi atas
 		LinearLayout topBadgeRow = new LinearLayout(this);
 		topBadgeRow.setOrientation(LinearLayout.HORIZONTAL);
 		topBadgeRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -783,7 +782,7 @@ public class MainActivity extends AppCompatActivity {
 			if (cleanUrl.startsWith("data:image")) {
 				try {
 					String base64Part = cleanUrl.substring(cleanUrl.indexOf(",") + 1);
-					byte[] decoded = Base64.decode(base64Part, Base64.DEFAULT);
+					byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
 					Bitmap rawBmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
 					if (rawBmp != null) {
 						int edge = Math.min(rawBmp.getWidth(), rawBmp.getHeight());
@@ -1103,7 +1102,7 @@ public class MainActivity extends AppCompatActivity {
 			float d = getResources().getDisplayMetrics().density;
 			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
-			recyclerContinue.setLayoutParams(new LinearLayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (112 * d)));
+			recyclerContinue.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (112 * d)));
 		}
 		if (textContinueSeeAll != null) {
 			textContinueSeeAll.setText("Lihat riwayat");
@@ -2147,7 +2146,6 @@ public class MainActivity extends AppCompatActivity {
 		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		card.addView(tvTitle);
 
-		// Pemilih foto profil
 		LinearLayout photoRow = new LinearLayout(this);
 		photoRow.setOrientation(LinearLayout.HORIZONTAL);
 		photoRow.setGravity(Gravity.CENTER_VERTICAL);
