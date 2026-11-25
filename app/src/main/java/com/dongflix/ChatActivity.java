@@ -152,6 +152,7 @@ public class ChatActivity extends AppCompatActivity {
 	private ValueAnimator chatShimmerAnimator;
 	private float chatShimmerPhase = 0f;
 	private boolean isChatLoading = true;
+	private Typeface appFont;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -171,11 +172,51 @@ public class ChatActivity extends AppCompatActivity {
 		usersRef = db.getReference("users");
 
 		buildActivityLayout();
+		applyAppFontToHierarchy(chatRoot);
 		setupKeyboardFollowBehavior();
 		showLoadingPlaceholders();
 		loadAllUsersDirectory();
 		loadStickersFromFirebase();
 		startListeningMessages();
+	}
+
+	private Typeface getAppFont() {
+		if (appFont != null) return appFont;
+		String[] candidates = {
+			"fonts/outfit_regular.ttf",
+			"fonts/outfit_medium.ttf",
+			"fonts/outfit.ttf",
+			"fonts/Outfit-Regular.ttf",
+			"fonts/productsans_reg.ttf"
+		};
+		for (String path : candidates) {
+			try {
+				appFont = Typeface.createFromAsset(getAssets(), path);
+				if (appFont != null) return appFont;
+			} catch (Exception ignored) {}
+		}
+		appFont = Typeface.DEFAULT;
+		return appFont;
+	}
+
+	private void styleText(TextView tv) {
+		if (tv == null) return;
+		tv.setTypeface(getAppFont(), Typeface.NORMAL);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			tv.setLetterSpacing(-0.01f);
+		}
+	}
+
+	private void applyAppFontToHierarchy(View root) {
+		if (root == null) return;
+		if (root instanceof TextView) {
+			styleText((TextView) root);
+		} else if (root instanceof ViewGroup) {
+			ViewGroup vg = (ViewGroup) root;
+			for (int i = 0; i < vg.getChildCount(); i++) {
+				applyAppFontToHierarchy(vg.getChildAt(i));
+			}
+		}
 	}
 
 	private void pauseAndHideMiniPlayerForChat() {
@@ -685,13 +726,13 @@ public class ChatActivity extends AppCompatActivity {
 		tvTitle.setText("Live Chat");
 		tvTitle.setTextColor(Color.WHITE);
 		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-		tvTitle.setTypeface(null, Typeface.BOLD);
+		styleText(tvTitle);
 
 		TextView tvOnline = new TextView(this);
 		tvOnline.setText("online");
 		tvOnline.setTextColor(Color.parseColor("#22C55E"));
 		tvOnline.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-		tvOnline.setTypeface(null, Typeface.BOLD);
+		styleText(tvOnline);
 
 		titleCol.addView(tvTitle);
 		titleCol.addView(tvOnline);
@@ -771,13 +812,14 @@ public class ChatActivity extends AppCompatActivity {
 		editLabel.setText("Edit pesan");
 		editLabel.setTextColor(Color.parseColor("#38BDF8"));
 		editLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-		editLabel.setTypeface(null, Typeface.BOLD);
+		styleText(editLabel);
 
 		editTargetPreview = new TextView(this);
 		editTargetPreview.setTextColor(Color.parseColor("#94A3B8"));
 		editTargetPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		editTargetPreview.setMaxLines(1);
 		editTargetPreview.setEllipsize(TextUtils.TruncateAt.END);
+		styleText(editTargetPreview);
 
 		editTextCol.addView(editLabel);
 		editTextCol.addView(editTargetPreview);
@@ -787,6 +829,7 @@ public class ChatActivity extends AppCompatActivity {
 		cancelEditBtn.setTextColor(Color.parseColor("#CBD5E1"));
 		cancelEditBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
 		cancelEditBtn.setPadding((int) (8 * d), 0, (int) (4 * d), 0);
+		styleText(cancelEditBtn);
 		cancelEditBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -823,13 +866,14 @@ public class ChatActivity extends AppCompatActivity {
 		replyTargetAuthor = new TextView(this);
 		replyTargetAuthor.setTextColor(Color.parseColor("#38BDF8"));
 		replyTargetAuthor.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-		replyTargetAuthor.setTypeface(null, Typeface.BOLD);
+		styleText(replyTargetAuthor);
 
 		replyTargetSnippet = new TextView(this);
 		replyTargetSnippet.setTextColor(Color.parseColor("#94A3B8"));
 		replyTargetSnippet.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		replyTargetSnippet.setMaxLines(1);
 		replyTargetSnippet.setEllipsize(TextUtils.TruncateAt.END);
+		styleText(replyTargetSnippet);
 
 		replyTextCol.addView(replyTargetAuthor);
 		replyTextCol.addView(replyTargetSnippet);
@@ -839,6 +883,7 @@ public class ChatActivity extends AppCompatActivity {
 		cancelReplyBtn.setTextColor(Color.parseColor("#CBD5E1"));
 		cancelReplyBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
 		cancelReplyBtn.setPadding((int) (8 * d), 0, (int) (4 * d), 0);
+		styleText(cancelReplyBtn);
 		cancelReplyBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -869,7 +914,7 @@ public class ChatActivity extends AppCompatActivity {
 		removeStickerBtn.setText("  ✕");
 		removeStickerBtn.setTextColor(Color.parseColor("#CBD5E1"));
 		removeStickerBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-		removeStickerBtn.setTypeface(null, Typeface.BOLD);
+		styleText(removeStickerBtn);
 		removeStickerBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -897,12 +942,12 @@ public class ChatActivity extends AppCompatActivity {
 		mentionMenu.setVisibility(View.GONE);
 		chatBottomBar.addView(mentionMenu);
 
+		// Kontainer ketik pesan: rapi saat 1 baris maupun hingga 3 baris
 		FrameLayout inputGlassFrame = new FrameLayout(this);
 		FrameLayout.LayoutParams igLp = new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		igLp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
-		inputGlassFrame.setMinimumHeight((int) (52 * d));
+		inputGlassFrame.setMinimumHeight((int) (50 * d));
 		inputGlassFrame.setLayoutParams(igLp);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			inputGlassFrame.setElevation(18f);
@@ -917,25 +962,28 @@ public class ChatActivity extends AppCompatActivity {
 
 		LinearLayout inputRow = new LinearLayout(this);
 		inputRow.setOrientation(LinearLayout.HORIZONTAL);
-		inputRow.setGravity(Gravity.BOTTOM);
-		inputRow.setPadding((int) (16 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
+		inputRow.setGravity(Gravity.CENTER_VERTICAL);
+		inputRow.setMinimumHeight((int) (50 * d));
+		inputRow.setPadding((int) (14 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
 
 		chatInput = new EditText(this);
 		LinearLayout.LayoutParams ciLp = new LinearLayout.LayoutParams(
 			0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
 		);
-		ciLp.bottomMargin = (int) (2 * d);
+		ciLp.rightMargin = (int) (6 * d);
 		chatInput.setLayoutParams(ciLp);
-		chatInput.setMinimumHeight((int) (40 * d));
 		chatInput.setBackground(null);
+		chatInput.setPadding((int) (2 * d), (int) (6 * d), (int) (2 * d), (int) (6 * d));
 		chatInput.setTextColor(Color.WHITE);
 		chatInput.setHint("Kirim pesan...");
 		chatInput.setHintTextColor(Color.parseColor("#94A3B8"));
 		chatInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+		chatInput.setLineSpacing(2 * d, 1.05f);
 		chatInput.setSingleLine(false);
 		chatInput.setMinLines(1);
 		chatInput.setMaxLines(3);
-		chatInput.setGravity(Gravity.CENTER_VERTICAL);
+		chatInput.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+		styleText(chatInput);
 
 		chatInput.addTextChangedListener(new TextWatcher() {
 			@Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -948,6 +996,7 @@ public class ChatActivity extends AppCompatActivity {
 		FrameLayout stickerBtn = new FrameLayout(this);
 		int stBtnPx = (int) (38 * d);
 		LinearLayout.LayoutParams stBtnLp = new LinearLayout.LayoutParams(stBtnPx, stBtnPx);
+		stBtnLp.gravity = Gravity.CENTER_VERTICAL;
 		stBtnLp.rightMargin = (int) (6 * d);
 		stickerBtn.setLayoutParams(stBtnLp);
 		GradientDrawable stBtnBg = new GradientDrawable();
@@ -970,8 +1019,10 @@ public class ChatActivity extends AppCompatActivity {
 		});
 
 		FrameLayout sendBtn = new FrameLayout(this);
-		int sendPx = (int) (40 * d);
-		sendBtn.setLayoutParams(new LinearLayout.LayoutParams(sendPx, sendPx));
+		int sendPx = (int) (38 * d);
+		LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(sendPx, sendPx);
+		sendLp.gravity = Gravity.CENTER_VERTICAL;
+		sendBtn.setLayoutParams(sendLp);
 		GradientDrawable sendBg = new GradientDrawable();
 		sendBg.setShape(GradientDrawable.OVAL);
 		sendBg.setColor(Color.parseColor("#38BDF8"));
@@ -1017,8 +1068,8 @@ public class ChatActivity extends AppCompatActivity {
 		stTitle.setText("Pilih Stiker & GIF");
 		stTitle.setTextColor(Color.WHITE);
 		stTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-		stTitle.setTypeface(null, Typeface.BOLD);
 		stTitle.setPadding(0, 0, 0, (int) (8 * d));
+		styleText(stTitle);
 
 		HorizontalScrollView stScroll = new HorizontalScrollView(this);
 		stScroll.setHorizontalScrollBarEnabled(false);
@@ -1080,7 +1131,7 @@ public class ChatActivity extends AppCompatActivity {
 		tvPinTitle.setText("Pesan Tersemat");
 		tvPinTitle.setTextColor(Color.WHITE);
 		tvPinTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		tvPinTitle.setTypeface(null, Typeface.BOLD);
+		styleText(tvPinTitle);
 
 		final TextView tvPinBody = new TextView(this);
 		tvPinBody.setText(PINNED_WARNING_MESSAGE);
@@ -1088,6 +1139,7 @@ public class ChatActivity extends AppCompatActivity {
 		tvPinBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		tvPinBody.setMaxLines(2);
 		tvPinBody.setEllipsize(TextUtils.TruncateAt.END);
+		styleText(tvPinBody);
 		LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
@@ -1102,6 +1154,7 @@ public class ChatActivity extends AppCompatActivity {
 		btnDismissPin.setTextColor(Color.WHITE);
 		btnDismissPin.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
 		btnDismissPin.setGravity(Gravity.CENTER);
+		styleText(btnDismissPin);
 		LinearLayout.LayoutParams disLp = new LinearLayout.LayoutParams((int) (28 * d), (int) (28 * d));
 		disLp.leftMargin = (int) (8 * d);
 		btnDismissPin.setLayoutParams(disLp);
@@ -1348,7 +1401,6 @@ public class ChatActivity extends AppCompatActivity {
 			));
 		}
 
-		// Pesan berisi GIF / stiker saja tidak bisa disalin
 		if (!isGifOnly) {
 			primaryGroup.addView(buildDarkSheetDivider(d));
 			primaryGroup.addView(buildDarkSheetRowWithIcon(
@@ -1486,7 +1538,7 @@ public class ChatActivity extends AppCompatActivity {
 		tv.setText(label);
 		tv.setTextColor(textColor);
 		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
-		tv.setTypeface(null, Typeface.BOLD);
+		styleText(tv);
 		tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
 		row.addView(iconBadge);
@@ -1679,6 +1731,7 @@ public class ChatActivity extends AppCompatActivity {
 			itemTv.setTextColor(Color.parseColor("#38BDF8"));
 			itemTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 			itemTv.setPadding((int) (10 * d), (int) (8 * d), (int) (10 * d), (int) (8 * d));
+			styleText(itemTv);
 			itemTv.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
@@ -1867,7 +1920,7 @@ public class ChatActivity extends AppCompatActivity {
 				qAuthor.setText(rAuthor);
 				qAuthor.setTextColor(Color.parseColor("#38BDF8"));
 				qAuthor.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-				qAuthor.setTypeface(null, Typeface.BOLD);
+				styleText(qAuthor);
 
 				TextView qSnip = new TextView(this);
 				qSnip.setText(rSnippet);
@@ -1875,6 +1928,7 @@ public class ChatActivity extends AppCompatActivity {
 				qSnip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 				qSnip.setMaxLines(2);
 				qSnip.setEllipsize(TextUtils.TruncateAt.END);
+				styleText(qSnip);
 
 				quoteBox.addView(qAuthor);
 				quoteBox.addView(qSnip);
@@ -1899,8 +1953,8 @@ public class ChatActivity extends AppCompatActivity {
 			tvSender.setText(authorName);
 			tvSender.setTextColor(isMsgAdmin ? Color.parseColor("#FBBF24") : Color.parseColor("#7DD3FC"));
 			tvSender.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-			tvSender.setTypeface(null, Typeface.BOLD);
 			tvSender.setMaxLines(1);
+			styleText(tvSender);
 
 			UserBadgeView badgeView = new UserBadgeView(this);
 			badgeView.bindUserBadges(exp, isMsgAdmin);
@@ -1919,6 +1973,7 @@ public class ChatActivity extends AppCompatActivity {
 				tvBody.setText(formatMentionsSpannable(text));
 				tvBody.setTextColor(Color.parseColor("#F8FAFC"));
 				tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+				styleText(tvBody);
 				LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
 					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 				);
@@ -1942,6 +1997,7 @@ public class ChatActivity extends AppCompatActivity {
 			tvTime.setText((isEdited ? "diedit • " : "") + formatClock(ts));
 			tvTime.setTextColor(Color.parseColor("#94A3B8"));
 			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+			styleText(tvTime);
 			LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
@@ -1996,11 +2052,12 @@ public class ChatActivity extends AppCompatActivity {
 		badge.setText(label);
 		badge.setTextColor(Color.parseColor("#E2E8F0"));
 		badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-		badge.setTypeface(null, Typeface.BOLD);
+		styleText(badge);
 		badge.setPadding((int) (14 * d), (int) (4 * d), (int) (14 * d), (int) (4 * d));
 		GradientDrawable bg = new GradientDrawable();
 		bg.setColor(Color.parseColor("#181E2B"));
 		bg.setCornerRadius(100f);
+		bg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
 		badge.setBackground(bg);
 
 		FrameLayout.LayoutParams bLp = new FrameLayout.LayoutParams(
