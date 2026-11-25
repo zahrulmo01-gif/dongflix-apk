@@ -1,15 +1,16 @@
 package com.dongflix;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
 import android.animation.ValueAnimator;
 import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.LinearGradient;
@@ -22,6 +23,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -586,7 +588,7 @@ public class ChatActivity extends AppCompatActivity {
 		chatScrollView.addView(messagesContainer);
 		chatRoot.addView(chatScrollView);
 
-		// Wrapper header + blur di belakang header + pesan tersemat
+		// Wrapper header + gradiasi hitam tipis (tanpa blur di belakang header) + pesan tersemat
 		headerOverlayWrapper = new FrameLayout(this);
 		headerOverlayWrapper.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
@@ -597,12 +599,19 @@ public class ChatActivity extends AppCompatActivity {
 			headerOverlayWrapper.setElevation(16f);
 		}
 
-		BlurView headerBackdropBlur = new BlurView(this);
-		headerBackdropBlur.setLayoutParams(new FrameLayout.LayoutParams(
+		View topThinGradient = new View(this);
+		topThinGradient.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		setupGlassBlur(headerBackdropBlur, chatRoot, 22f, 0f, Color.parseColor("#99090D16"), Color.TRANSPARENT);
-		headerOverlayWrapper.addView(headerBackdropBlur);
+		topThinGradient.setBackground(new GradientDrawable(
+			GradientDrawable.Orientation.TOP_BOTTOM,
+			new int[]{
+				Color.parseColor("#B8000000"),
+				Color.parseColor("#66000000"),
+				Color.TRANSPARENT
+			}
+		));
+		headerOverlayWrapper.addView(topThinGradient);
 
 		LinearLayout headerStack = new LinearLayout(this);
 		headerStack.setOrientation(LinearLayout.VERTICAL);
@@ -1110,6 +1119,200 @@ public class ChatActivity extends AppCompatActivity {
 			.show();
 	}
 
+	private void showMessageActionsBottomSheet(
+		final String msgId,
+		final String authorName,
+		final String text,
+		final String stickerUrl,
+		final boolean isMine
+	) {
+		if (isFinishing() || isDestroyed()) return;
+		final float d = getResources().getDisplayMetrics().density;
+
+		final Dialog sheet = new Dialog(this);
+		sheet.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (22 * d));
+		root.setLayoutParams(new ViewGroup.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+
+		GradientDrawable bg = new GradientDrawable(
+			GradientDrawable.Orientation.TOP_BOTTOM,
+			new int[]{Color.parseColor("#141B2B"), Color.parseColor("#090C14")}
+		);
+		float r = 24 * d;
+		bg.setCornerRadii(new float[]{r, r, r, r, 0f, 0f, 0f, 0f});
+		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2EFFFFFF"));
+		root.setBackground(bg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams((int) (38 * d), (int) (4 * d));
+		hLp.gravity = Gravity.CENTER_HORIZONTAL;
+		hLp.bottomMargin = (int) (12 * d);
+		handle.setLayoutParams(hLp);
+		GradientDrawable hBg = new GradientDrawable();
+		hBg.setColor(Color.parseColor("#475569"));
+		hBg.setCornerRadius(100f);
+		handle.setBackground(hBg);
+		root.addView(handle);
+
+		TextView tvHeader = new TextView(this);
+		tvHeader.setText("Opsi Pesan • " + authorName);
+		tvHeader.setTextColor(Color.parseColor("#94A3B8"));
+		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		LinearLayout.LayoutParams hdLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		hdLp.bottomMargin = (int) (10 * d);
+		tvHeader.setLayoutParams(hdLp);
+		root.addView(tvHeader);
+
+		// 1. Balas
+		root.addView(buildSheetActionRow("Balas", Color.WHITE, d, new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+				replyToId = msgId;
+				replyToAuthor = authorName;
+				replyToSnippet = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? "[Stiker/GIF]" : "Pesan");
+				if (replyBanner != null && replyTargetAuthor != null && replyTargetSnippet != null) {
+					replyTargetAuthor.setText(replyToAuthor);
+					replyTargetSnippet.setText(replyToSnippet);
+					replyBanner.setVisibility(View.VISIBLE);
+				}
+				if (chatInput != null) chatInput.requestFocus();
+			}
+		}));
+
+		// 2. Salin Pesan
+		root.addView(buildSheetActionRow("Salin Pesan", Color.WHITE, d, new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+				String toCopy = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? stickerUrl : "");
+				if (toCopy.isEmpty()) {
+					Toast.makeText(ChatActivity.this, "Tidak ada teks untuk disalin", Toast.LENGTH_SHORT).show();
+					return;
+				}
+				ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+				if (cm != null) {
+					cm.setPrimaryClip(ClipData.newPlainText("Pesan Live Chat", toCopy));
+					Toast.makeText(ChatActivity.this, "Pesan disalin", Toast.LENGTH_SHORT).show();
+				}
+			}
+		}));
+
+		if (isMine) {
+			// 3a. Edit Pesan (khusus pesan sendiri)
+			if (!text.isEmpty()) {
+				root.addView(buildSheetActionRow("Edit Pesan", Color.parseColor("#38BDF8"), d, new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						sheet.dismiss();
+						showEditMessageDialog(msgId, text);
+					}
+				}));
+			}
+
+			// 4a. Hapus Pesan (khusus pesan sendiri)
+			root.addView(buildSheetActionRow("Hapus Pesan", Color.parseColor("#F87171"), d, new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheet.dismiss();
+					if (msgId.isEmpty()) return;
+					new AlertDialog.Builder(ChatActivity.this)
+						.setTitle("Hapus Pesan")
+						.setMessage("Hapus pesan ini dari live chat?")
+						.setPositiveButton("Hapus", new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								liveChatRef.child(msgId).removeValue();
+							}
+						})
+						.setNegativeButton("Batal", null)
+						.show();
+				}
+			}));
+		} else {
+			// 3b. Laporkan Pesan (hanya untuk pesan orang lain)
+			root.addView(buildSheetActionRow("Laporkan Pesan", Color.parseColor("#FBBF24"), d, new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheet.dismiss();
+					Toast.makeText(ChatActivity.this, "Pesan dari " + authorName + " telah dilaporkan", Toast.LENGTH_SHORT).show();
+				}
+			}));
+		}
+
+		sheet.setContentView(root);
+		Window win = sheet.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			win.setGravity(Gravity.BOTTOM);
+			win.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			win.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+			win.setDimAmount(0.6f);
+		}
+		sheet.show();
+	}
+
+	private TextView buildSheetActionRow(String label, int textColor, float d, View.OnClickListener listener) {
+		TextView tv = new TextView(this);
+		tv.setText(label);
+		tv.setTextColor(textColor);
+		tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+		tv.setTypeface(null, Typeface.BOLD);
+		tv.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		lp.bottomMargin = (int) (6 * d);
+		tv.setLayoutParams(lp);
+		GradientDrawable rowBg = new GradientDrawable();
+		rowBg.setColor(Color.parseColor("#181F30"));
+		rowBg.setCornerRadius(14 * d);
+		tv.setBackground(rowBg);
+		tv.setOnClickListener(listener);
+		return tv;
+	}
+
+	private void showEditMessageDialog(final String msgId, final String currentText) {
+		if (msgId.isEmpty()) return;
+		float d = getResources().getDisplayMetrics().density;
+
+		final EditText input = new EditText(this);
+		input.setText(currentText);
+		input.setSelection(currentText.length());
+		input.setTextColor(Color.WHITE);
+		input.setHint("Edit isi pesan...");
+		input.setHintTextColor(Color.parseColor("#64748B"));
+		int pad = (int) (12 * d);
+		input.setPadding(pad, pad, pad, pad);
+
+		new AlertDialog.Builder(this)
+			.setTitle("Edit Pesan")
+			.setView(input)
+			.setPositiveButton("Simpan", new DialogInterface.OnClickListener() {
+				@Override
+				public void onClick(DialogInterface dialog, int which) {
+					String updated = input.getText().toString().trim();
+					if (updated.isEmpty()) {
+						Toast.makeText(ChatActivity.this, "Pesan tidak boleh kosong", Toast.LENGTH_SHORT).show();
+						return;
+					}
+					Map<String, Object> updates = new HashMap<>();
+					updates.put("text", updated);
+					updates.put("edited", true);
+					liveChatRef.child(msgId).updateChildren(updates);
+				}
+			})
+			.setNegativeButton("Batal", null)
+			.show();
+	}
+
 	private void toggleStickerPanel() {
 		if (stickerPanel == null) return;
 		boolean nextVis = stickerPanel.getVisibility() != View.VISIBLE;
@@ -1328,7 +1531,6 @@ public class ChatActivity extends AppCompatActivity {
 
 		float d = getResources().getDisplayMetrics().density;
 		String myEmail = currentUser != null && currentUser.getEmail() != null ? currentUser.getEmail().toLowerCase(Locale.US) : "";
-		boolean isCurrentUserAdmin = ADMIN_EMAIL.equalsIgnoreCase(myEmail);
 
 		String lastDateKey = "";
 
@@ -1362,8 +1564,9 @@ public class ChatActivity extends AppCompatActivity {
 				: parseLongVal(item.get("exp"));
 
 			boolean isMsgAdmin = ADMIN_EMAIL.equalsIgnoreCase(email) || Boolean.TRUE.equals(item.get("isAdmin"));
-			boolean isMine = (!myEmail.isEmpty() && myEmail.equalsIgnoreCase(email))
+			final boolean isMine = (!myEmail.isEmpty() && myEmail.equalsIgnoreCase(email))
 				|| (currentUser != null && currentUser.getUid().equals(item.get("uid")));
+			boolean isEdited = Boolean.TRUE.equals(item.get("edited"));
 
 			final String text = item.get("text") != null ? item.get("text").toString() : "";
 			final String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString() : "";
@@ -1555,7 +1758,7 @@ public class ChatActivity extends AppCompatActivity {
 			}
 
 			TextView tvTime = new TextView(this);
-			tvTime.setText(formatClock(ts));
+			tvTime.setText((isEdited ? "diedit • " : "") + formatClock(ts));
 			tvTime.setTextColor(Color.parseColor("#94A3B8"));
 			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
 			LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
@@ -1566,41 +1769,15 @@ public class ChatActivity extends AppCompatActivity {
 			tvTime.setLayoutParams(timeLp);
 			bubble.addView(tvTime);
 
-			bubble.setOnClickListener(new View.OnClickListener() {
+			// Sentuh biasa tidak ada reaksi; harus pendam untuk memunculkan bottomsheet
+			bubble.setOnClickListener(null);
+			bubble.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
-				public void onClick(View v) {
-					replyToId = msgId;
-					replyToAuthor = authorName;
-					replyToSnippet = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? "[Stiker/GIF]" : "Pesan");
-					if (replyBanner != null && replyTargetAuthor != null && replyTargetSnippet != null) {
-						replyTargetAuthor.setText(replyToAuthor);
-						replyTargetSnippet.setText(replyToSnippet);
-						replyBanner.setVisibility(View.VISIBLE);
-					}
-					if (chatInput != null) chatInput.requestFocus();
+				public boolean onLongClick(View v) {
+					showMessageActionsBottomSheet(msgId, authorName, text, stickerUrl, isMine);
+					return true;
 				}
 			});
-
-			if (isMine || isCurrentUserAdmin) {
-				bubble.setOnLongClickListener(new View.OnLongClickListener() {
-					@Override
-					public boolean onLongClick(View v) {
-						if (msgId.isEmpty()) return false;
-						new AlertDialog.Builder(ChatActivity.this)
-							.setTitle("Hapus Pesan")
-							.setMessage("Hapus pesan ini dari live chat?")
-							.setPositiveButton("Hapus", new DialogInterface.OnClickListener() {
-								@Override
-								public void onClick(DialogInterface dialog, int which) {
-									liveChatRef.child(msgId).removeValue();
-								}
-							})
-							.setNegativeButton("Batal", null)
-							.show();
-						return true;
-					}
-				});
-			}
 
 			bubbleCol.addView(bubble);
 
