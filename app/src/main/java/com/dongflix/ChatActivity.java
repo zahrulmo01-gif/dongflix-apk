@@ -163,6 +163,7 @@ public class ChatActivity extends AppCompatActivity {
 	private ValueAnimator chatShimmerAnimator;
 	private float chatShimmerPhase = 0f;
 	private boolean isChatLoading = true;
+	private boolean isProfileShimmerActive = false;
 	private Typeface appFont;
 
 	@Override
@@ -348,7 +349,6 @@ public class ChatActivity extends AppCompatActivity {
 	}
 
 	private void startChatShimmer() {
-		isChatLoading = true;
 		stopChatShimmerOnly();
 		chatShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
 		chatShimmerAnimator.setDuration(1200);
@@ -357,8 +357,11 @@ public class ChatActivity extends AppCompatActivity {
 		chatShimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
 			@Override
 			public void onAnimationUpdate(ValueAnimator animation) {
-				if (!isChatLoading || messagesContainer == null) return;
+				if ((!isChatLoading && !isProfileShimmerActive) || messagesContainer == null) return;
 				chatShimmerPhase = (float) animation.getAnimatedValue();
+				if (headerProfileAvatar != null) {
+					headerProfileAvatar.invalidate();
+				}
 				invalidateShimmerRecursive(messagesContainer);
 			}
 		});
@@ -385,7 +388,18 @@ public class ChatActivity extends AppCompatActivity {
 
 	private void stopChatShimmer() {
 		isChatLoading = false;
-		stopChatShimmerOnly();
+		if (!isProfileShimmerActive) {
+			stopChatShimmerOnly();
+		}
+	}
+
+	private void syncProfileShimmerState(boolean hasPendingProfiles) {
+		isProfileShimmerActive = hasPendingProfiles;
+		if (isProfileShimmerActive && (chatShimmerAnimator == null || !chatShimmerAnimator.isRunning())) {
+			startChatShimmer();
+		} else if (!isProfileShimmerActive && !isChatLoading) {
+			stopChatShimmerOnly();
+		}
 	}
 
 	private void showLoadingPlaceholders() {
@@ -1268,45 +1282,58 @@ public class ChatActivity extends AppCompatActivity {
 			return;
 		}
 		requestedUserIds.add(cleanId);
+		syncProfileShimmerState(true);
 
 		usersRef.child(cleanId).addListenerForSingleValueEvent(new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
-				if (isFinishing() || isDestroyed() || !snapshot.exists()) return;
-				Object raw = snapshot.getValue();
-				if (raw instanceof Map) {
-					HashMap<String, Object> uMap = new HashMap<>();
-					for (Map.Entry<?, ?> e : ((Map<?, ?>) raw).entrySet()) {
-						if (e.getKey() != null) uMap.put(e.getKey().toString(), e.getValue());
-					}
-					cacheProfileEntry(cleanId, uMap);
-					saveUserProfileToLocalCache(cleanId, uMap);
+				if (isFinishing() || isDestroyed()) return;
+				if (snapshot.exists()) {
+					Object raw = snapshot.getValue();
+					if (raw instanceof Map) {
+						HashMap<String, Object> uMap = new HashMap<>();
+						for (Map.Entry<?, ?> e : ((Map<?, ?>) raw).entrySet()) {
+							if (e.getKey() != null) uMap.put(e.getKey().toString(), e.getValue());
+						}
+						cacheProfileEntry(cleanId, uMap);
+						saveUserProfileToLocalCache(cleanId, uMap);
 
-					if (cleanId.equals(getCurrentUserId())) {
-						bindHeaderProfileAvatar();
-					}
-					if (rerenderOnLoad && !isChatLoading && messagesContainer != null) {
-						liveChatRef.limitToLast(MAX_VISIBLE_MESSAGES).addListenerForSingleValueEvent(new ValueEventListener() {
-							@Override
-							public void onDataChange(@NonNull DataSnapshot msgSnap) {
-								if (isFinishing() || isDestroyed()) return;
-								renderSnapshotMessages(msgSnap, false);
-							}
+						if (cleanId.equals(getCurrentUserId())) {
+							bindHeaderProfileAvatar();
+						}
+						if (rerenderOnLoad && !isChatLoading && messagesContainer != null) {
+							liveChatRef.limitToLast(MAX_VISIBLE_MESSAGES).addListenerForSingleValueEvent(new ValueEventListener() {
+								@Override
+								public void onDataChange(@NonNull DataSnapshot msgSnap) {
+									if (isFinishing() || isDestroyed()) return;
+									renderSnapshotMessages(msgSnap, false);
+								}
 
-							@Override
-							public void onCancelled(@NonNull DatabaseError error) {}
-						});
+								@Override
+								public void onCancelled(@NonNull DatabaseError error) {
+									syncProfileShimmerState(false);
+								}
+							});
+							return;
+						}
 					}
 				}
+				syncProfileShimmerState(false);
 			}
 
 			@Override
-			public void onCancelled(@NonNull DatabaseError error) {}
+			public void onCancelled(@NonNull DatabaseError error) {
+				syncProfileShimmerState(false);
+			}
 		});
 	}
 
 	private void prefetchProfilesForMessagesOnce(List<HashMap<String, Object>> msgList) {
-		if (msgList == null || msgList.isEmpty()) return;
+		if (msgList == null || msgList.isEmpty()) {
+			syncProfileShimmerState(false);
+			return;
+		}
+		boolean hasPending = false;
 		for (HashMap<String, Object> item : msgList) {
 			String email = item.get("email") != null ? item.get("email").toString().trim().toLowerCase(Locale.US) : "";
 			String uid = item.get("uid") != null ? item.get("uid").toString().trim() : "";
@@ -1328,8 +1355,10 @@ public class ChatActivity extends AppCompatActivity {
 				} catch (Exception ignored) {}
 			}
 
+			hasPending = true;
 			fetchUserProfileOnceById(userId, true);
 		}
+		syncProfileShimmerState(hasPending);
 	}
 
 	private void saveUserProfileToLocalCache(String key, HashMap<String, Object> uMap) {
@@ -1354,6 +1383,22 @@ public class ChatActivity extends AppCompatActivity {
 			photoUrl = prof.get("photoURL").toString().trim();
 		} else if (currentUser.getPhotoUrl() != null) {
 			photoUrl = currentUser.getPhotoUrl().toString().trim();
+		}
+
+		if (prof == null && photoUrl.isEmpty()) {
+			headerProfileAvatar.setOutlineProvider(new ViewOutlineProvider() {
+				@Override
+				public void getOutline(View view, Outline outline) {
+					outline.setOval(0, 0, view.getWidth(), view.getHeight());
+				}
+			});
+			headerProfileAvatar.setClipToOutline(true);
+			headerProfileAvatar.setPadding(0, 0, 0, 0);
+			headerProfileAvatar.clearColorFilter();
+			headerProfileAvatar.setImageDrawable(null);
+			headerProfileAvatar.setBackground(createChatShimmerDrawable(100f));
+			syncProfileShimmerState(true);
+			return;
 		}
 
 		bindChatAvatar(headerProfileAvatar, photoUrl);
@@ -1960,6 +2005,7 @@ public class ChatActivity extends AppCompatActivity {
 		final boolean isCurrentUserAdmin = ADMIN_EMAIL.equalsIgnoreCase(myEmail);
 
 		String lastDateKey = "";
+		boolean anyProfileLoading = false;
 
 		for (final HashMap<String, Object> item : msgList) {
 			final String msgId = item.get("_id") != null ? item.get("_id").toString() : "";
@@ -1978,6 +2024,11 @@ public class ChatActivity extends AppCompatActivity {
 			final String senderNotifKey = resolveNotifUserKey(uid, email);
 
 			HashMap<String, Object> cachedProf = !userId.isEmpty() ? userProfileCache.get(userId) : null;
+			boolean isProfileLoading = !userId.isEmpty() && cachedProf == null;
+			if (isProfileLoading) {
+				anyProfileLoading = true;
+			}
+
 			final String authorName = (cachedProf != null && cachedProf.get("name") != null && !cachedProf.get("name").toString().trim().isEmpty())
 				? cachedProf.get("name").toString().trim()
 				: (item.get("author") != null ? item.get("author").toString() : (email.contains("@") ? email.split("@")[0] : "User"));
@@ -2015,7 +2066,22 @@ public class ChatActivity extends AppCompatActivity {
 			else avLp.rightMargin = (int) (8 * d);
 			avatar.setLayoutParams(avLp);
 			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			bindChatAvatar(avatar, photoUrl);
+
+			if (isProfileLoading && photoUrl.isEmpty()) {
+				avatar.setOutlineProvider(new ViewOutlineProvider() {
+					@Override
+					public void getOutline(View view, Outline outline) {
+						outline.setOval(0, 0, view.getWidth(), view.getHeight());
+					}
+				});
+				avatar.setClipToOutline(true);
+				avatar.setPadding(0, 0, 0, 0);
+				avatar.clearColorFilter();
+				avatar.setImageDrawable(null);
+				avatar.setBackground(createChatShimmerDrawable(100f));
+			} else {
+				bindChatAvatar(avatar, photoUrl);
+			}
 
 			LinearLayout bubbleCol = new LinearLayout(this);
 			bubbleCol.setOrientation(LinearLayout.VERTICAL);
@@ -2110,23 +2176,38 @@ public class ChatActivity extends AppCompatActivity {
 			metaRow.setGravity(Gravity.CENTER_VERTICAL);
 			metaRow.setPadding(0, 0, (int) (6 * d), 0);
 
-			TextView tvSender = new TextView(this);
-			tvSender.setText(authorName);
-			tvSender.setTextColor(isMsgAdmin ? Color.parseColor("#FBBF24") : Color.parseColor("#7DD3FC"));
-			tvSender.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-			tvSender.setMaxLines(1);
-			styleText(tvSender);
+			if (isProfileLoading) {
+				View namePh = new View(this);
+				namePh.setLayoutParams(new LinearLayout.LayoutParams((int) (84 * d), (int) (12 * d)));
+				namePh.setBackground(createChatShimmerDrawable(6 * d));
 
-			UserBadgeView badgeView = new UserBadgeView(this);
-			badgeView.bindUserBadges(exp, isMsgAdmin);
-			LinearLayout.LayoutParams bvLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			bvLp.leftMargin = (int) (6 * d);
-			badgeView.setLayoutParams(bvLp);
+				View badgePh = new View(this);
+				LinearLayout.LayoutParams bpLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (13 * d));
+				bpLp.leftMargin = (int) (6 * d);
+				badgePh.setLayoutParams(bpLp);
+				badgePh.setBackground(createChatShimmerDrawable(100f));
 
-			metaRow.addView(tvSender);
-			metaRow.addView(badgeView);
+				metaRow.addView(namePh);
+				metaRow.addView(badgePh);
+			} else {
+				TextView tvSender = new TextView(this);
+				tvSender.setText(authorName);
+				tvSender.setTextColor(isMsgAdmin ? Color.parseColor("#FBBF24") : Color.parseColor("#7DD3FC"));
+				tvSender.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+				tvSender.setMaxLines(1);
+				styleText(tvSender);
+
+				UserBadgeView badgeView = new UserBadgeView(this);
+				badgeView.bindUserBadges(exp, isMsgAdmin);
+				LinearLayout.LayoutParams bvLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				bvLp.leftMargin = (int) (6 * d);
+				badgeView.setLayoutParams(bvLp);
+
+				metaRow.addView(tvSender);
+				metaRow.addView(badgeView);
+			}
 			bubble.addView(metaRow);
 
 			if (!text.isEmpty()) {
@@ -2191,6 +2272,8 @@ public class ChatActivity extends AppCompatActivity {
 			}
 			messagesContainer.addView(row);
 		}
+
+		syncProfileShimmerState(anyProfileLoading);
 
 		chatScrollView.post(new Runnable() {
 			@Override
@@ -2478,7 +2561,9 @@ public class ChatActivity extends AppCompatActivity {
 
 	@Override
 	protected void onDestroy() {
-		stopChatShimmer();
+		isChatLoading = false;
+		isProfileShimmerActive = false;
+		stopChatShimmerOnly();
 		DongflixToast.dismissCurrent();
 		if (liveChatRef != null && chatListener != null) {
 			liveChatRef.removeEventListener(chatListener);
