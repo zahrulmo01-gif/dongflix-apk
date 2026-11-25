@@ -53,7 +53,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -608,7 +607,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatScrollView.addView(messagesContainer);
 		chatRoot.addView(chatScrollView);
 
-		// Wrapper header transparan (tanpa gradiasi gelap maupun blur di belakangnya) + pesan tersemat
 		headerOverlayWrapper = new FrameLayout(this);
 		headerOverlayWrapper.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP
@@ -642,7 +640,6 @@ public class ChatActivity extends AppCompatActivity {
 		));
 		chatHeader.setPadding((int) (14 * d), (int) (4 * d), (int) (14 * d), (int) (6 * d));
 
-		// Tombol back bulat kiri
 		FrameLayout backBtn = new FrameLayout(this);
 		LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(btnSize, btnSize);
 		backLp.rightMargin = (int) (10 * d);
@@ -671,7 +668,6 @@ public class ChatActivity extends AppCompatActivity {
 			}
 		});
 
-		// Kapsul tengah judul & status online
 		FrameLayout headerCapsule = new FrameLayout(this);
 		LinearLayout.LayoutParams capLp = new LinearLayout.LayoutParams(0, btnSize, 1f);
 		capLp.rightMargin = (int) (10 * d);
@@ -708,7 +704,6 @@ public class ChatActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 
-		// Tombol profil bulat kanan (ukuran persis sama dengan tombol back kiri)
 		FrameLayout profileBtn = new FrameLayout(this);
 		profileBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) profileBtn.setElevation(14f);
@@ -739,7 +734,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatHeader.addView(profileBtn);
 		headerStack.addView(chatHeader);
 
-		// Banner Pesan Tersemat tepat di bawah header
 		pinnedMessageCard = buildPinnedMessageBanner(d);
 		headerStack.addView(pinnedMessageCard);
 
@@ -759,7 +753,6 @@ public class ChatActivity extends AppCompatActivity {
 		chatBottomBar.setClipChildren(false);
 		chatBottomBar.setClipToPadding(false);
 
-		// Banner mode edit langsung di atas kontainer ketik pesan
 		editBanner = new LinearLayout(this);
 		editBanner.setOrientation(LinearLayout.HORIZONTAL);
 		editBanner.setGravity(Gravity.CENTER_VERTICAL);
@@ -810,7 +803,6 @@ public class ChatActivity extends AppCompatActivity {
 		editBanner.addView(cancelEditBtn);
 		chatBottomBar.addView(editBanner);
 
-		// Banner mode balas
 		replyBanner = new LinearLayout(this);
 		replyBanner.setOrientation(LinearLayout.HORIZONTAL);
 		replyBanner.setGravity(Gravity.CENTER_VERTICAL);
@@ -1197,7 +1189,6 @@ public class ChatActivity extends AppCompatActivity {
 				Path p = new Path();
 
 				if (iconType == ICON_REPLY) {
-					// Panah balas melengkung ke kiri
 					p.moveTo(w * 0.42f, h * 0.25f);
 					p.lineTo(w * 0.18f, h * 0.46f);
 					p.lineTo(w * 0.42f, h * 0.67f);
@@ -1205,7 +1196,6 @@ public class ChatActivity extends AppCompatActivity {
 					p.quadTo(w * 0.78f, h * 0.44f, w * 0.80f, h * 0.76f);
 					canvas.drawPath(p, paint);
 				} else if (iconType == ICON_EDIT) {
-					// Pensil edit
 					p.moveTo(w * 0.64f, h * 0.20f);
 					p.lineTo(w * 0.80f, h * 0.36f);
 					p.lineTo(w * 0.36f, h * 0.80f);
@@ -1214,7 +1204,6 @@ public class ChatActivity extends AppCompatActivity {
 					p.close();
 					canvas.drawPath(p, paint);
 				} else if (iconType == ICON_COPY) {
-					// Dua lembaran salin
 					canvas.drawRoundRect(new RectF(w * 0.34f, h * 0.34f, w * 0.80f, h * 0.82f), w * 0.10f, h * 0.10f, paint);
 					p.moveTo(w * 0.66f, h * 0.26f);
 					p.lineTo(w * 0.66f, h * 0.20f);
@@ -1223,7 +1212,6 @@ public class ChatActivity extends AppCompatActivity {
 					p.lineTo(w * 0.26f, h * 0.66f);
 					canvas.drawPath(p, paint);
 				} else if (iconType == ICON_REPORT) {
-					// Segitiga peringatan / laporkan
 					p.moveTo(w * 0.50f, h * 0.18f);
 					p.lineTo(w * 0.84f, h * 0.80f);
 					p.lineTo(w * 0.16f, h * 0.80f);
@@ -1232,7 +1220,6 @@ public class ChatActivity extends AppCompatActivity {
 					canvas.drawLine(w * 0.50f, h * 0.42f, w * 0.50f, h * 0.58f, paint);
 					canvas.drawPoint(w * 0.50f, h * 0.69f, paint);
 				} else if (iconType == ICON_DELETE) {
-					// Tempat sampah hapus
 					canvas.drawLine(w * 0.20f, h * 0.28f, w * 0.80f, h * 0.28f, paint);
 					p.moveTo(w * 0.38f, h * 0.28f);
 					p.lineTo(w * 0.38f, h * 0.18f);
@@ -1275,7 +1262,6 @@ public class ChatActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		));
 
-		// Latar bottomsheet lebih gelap tanpa stroke
 		GradientDrawable bg = new GradientDrawable();
 		bg.setColor(Color.parseColor("#0D0F14"));
 		float r = 24 * d;
@@ -1293,7 +1279,6 @@ public class ChatActivity extends AppCompatActivity {
 		handle.setBackground(hBg);
 		root.addView(handle);
 
-		// Grup menu utama gelap tanpa stroke
 		LinearLayout primaryGroup = new LinearLayout(this);
 		primaryGroup.setOrientation(LinearLayout.VERTICAL);
 		primaryGroup.setLayoutParams(new LinearLayout.LayoutParams(
@@ -1304,7 +1289,6 @@ public class ChatActivity extends AppCompatActivity {
 		grpBg.setCornerRadius(18 * d);
 		primaryGroup.setBackground(grpBg);
 
-		// 1. Balas
 		primaryGroup.addView(buildDarkSheetRowWithIcon(
 			"Balas",
 			ICON_REPLY,
@@ -1332,7 +1316,6 @@ public class ChatActivity extends AppCompatActivity {
 
 		if (isMine && !text.isEmpty()) {
 			primaryGroup.addView(buildDarkSheetDivider(d));
-			// 2. Edit pesan langsung di kontainer ketik pesan
 			primaryGroup.addView(buildDarkSheetRowWithIcon(
 				"Edit pesan",
 				ICON_EDIT,
@@ -1352,7 +1335,6 @@ public class ChatActivity extends AppCompatActivity {
 
 		primaryGroup.addView(buildDarkSheetDivider(d));
 
-		// 3. Salin pesan
 		primaryGroup.addView(buildDarkSheetRowWithIcon(
 			"Salin pesan",
 			ICON_COPY,
@@ -1366,13 +1348,13 @@ public class ChatActivity extends AppCompatActivity {
 					sheet.dismiss();
 					String toCopy = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? stickerUrl : "");
 					if (toCopy.isEmpty()) {
-						Toast.makeText(ChatActivity.this, "Tidak ada teks untuk disalin", Toast.LENGTH_SHORT).show();
+						DongflixToast.show(ChatActivity.this, "Tidak ada teks untuk disalin");
 						return;
 					}
 					ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
 					if (cm != null) {
 						cm.setPrimaryClip(ClipData.newPlainText("Pesan Live Chat", toCopy));
-						Toast.makeText(ChatActivity.this, "Pesan disalin", Toast.LENGTH_SHORT).show();
+						DongflixToast.show(ChatActivity.this, "Pesan disalin");
 					}
 				}
 			}
@@ -1380,7 +1362,6 @@ public class ChatActivity extends AppCompatActivity {
 
 		if (!isMine) {
 			primaryGroup.addView(buildDarkSheetDivider(d));
-			// 4. Laporkan pesan (hanya untuk pesan orang lain)
 			primaryGroup.addView(buildDarkSheetRowWithIcon(
 				"Laporkan pesan",
 				ICON_REPORT,
@@ -1392,7 +1373,7 @@ public class ChatActivity extends AppCompatActivity {
 					@Override
 					public void onClick(View v) {
 						sheet.dismiss();
-						Toast.makeText(ChatActivity.this, "Pesan dari " + authorName + " telah dilaporkan", Toast.LENGTH_SHORT).show();
+						DongflixToast.show(ChatActivity.this, "Pesan dari " + authorName + " telah dilaporkan");
 					}
 				}
 			));
@@ -1400,7 +1381,6 @@ public class ChatActivity extends AppCompatActivity {
 
 		root.addView(primaryGroup);
 
-		// Pemilik pesan ATAU Admin bisa menghapus pesan
 		if (isMine || isCurrentUserAdmin) {
 			LinearLayout deleteCard = buildDarkSheetRowWithIcon(
 				"Hapus",
@@ -1588,7 +1568,6 @@ public class ChatActivity extends AppCompatActivity {
 			GradientDrawable bg = new GradientDrawable();
 			bg.setColor(Color.parseColor("#141A29"));
 			bg.setCornerRadius(14 * d);
-			bg.setStroke((int) (1 * d), Color.parseColor("#22FFFFFF"));
 			box.setBackground(bg);
 
 			ImageView img = new ImageView(this);
@@ -1820,9 +1799,11 @@ public class ChatActivity extends AppCompatActivity {
 			bubble.setOrientation(LinearLayout.VERTICAL);
 			bubble.setMinimumWidth((int) (185 * d));
 			bubble.setPadding((int) (14 * d), (int) (11 * d), (int) (18 * d), (int) (10 * d));
+
+			// Bubble tanpa stroke: pesan sendiri biru gelap, pesan orang lain abu gelap
 			GradientDrawable bubbleBg = new GradientDrawable();
 			if (isMine) {
-				bubbleBg.setColors(new int[]{Color.parseColor("#1D3358"), Color.parseColor("#13213B")});
+				bubbleBg.setColors(new int[]{Color.parseColor("#13294B"), Color.parseColor("#0B172B")});
 				bubbleBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
 				bubbleBg.setCornerRadii(new float[]{
 					18 * d, 18 * d,
@@ -1830,9 +1811,8 @@ public class ChatActivity extends AppCompatActivity {
 					18 * d, 18 * d,
 					18 * d, 18 * d
 				});
-				bubbleBg.setStroke((int) (1 * d), Color.parseColor("#5538BDF8"));
 			} else {
-				bubbleBg.setColors(new int[]{Color.parseColor("#181C26"), Color.parseColor("#11141C")});
+				bubbleBg.setColors(new int[]{Color.parseColor("#1E2028"), Color.parseColor("#14161C")});
 				bubbleBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
 				bubbleBg.setCornerRadii(new float[]{
 					6 * d, 6 * d,
@@ -1840,7 +1820,6 @@ public class ChatActivity extends AppCompatActivity {
 					18 * d, 18 * d,
 					18 * d, 18 * d
 				});
-				bubbleBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
 			}
 			bubble.setBackground(bubbleBg);
 			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
@@ -1861,7 +1840,6 @@ public class ChatActivity extends AppCompatActivity {
 				GradientDrawable qBg = new GradientDrawable();
 				qBg.setColor(Color.parseColor("#66070B14"));
 				qBg.setCornerRadius(12 * d);
-				qBg.setStroke((int) (1 * d), Color.parseColor("#2638BDF8"));
 				quoteBox.setBackground(qBg);
 				quoteBox.setPadding((int) (10 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
 				LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(
@@ -2038,7 +2016,6 @@ public class ChatActivity extends AppCompatActivity {
 		GradientDrawable bg = new GradientDrawable();
 		bg.setColor(Color.parseColor("#181E2B"));
 		bg.setCornerRadius(100f);
-		bg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
 		badge.setBackground(bg);
 
 		FrameLayout.LayoutParams bLp = new FrameLayout.LayoutParams(
@@ -2103,7 +2080,6 @@ public class ChatActivity extends AppCompatActivity {
 		GradientDrawable fallbackBg = new GradientDrawable();
 		fallbackBg.setShape(GradientDrawable.OVAL);
 		fallbackBg.setColor(Color.parseColor("#1D2436"));
-		fallbackBg.setStroke((int) (1 * getResources().getDisplayMetrics().density), Color.parseColor("#2AFFFFFF"));
 		target.setBackground(fallbackBg);
 		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
 		target.setPadding(pad, pad, pad, pad);
@@ -2122,10 +2098,9 @@ public class ChatActivity extends AppCompatActivity {
 		if (currentUser == null || chatInput == null) return;
 		String text = chatInput.getText().toString().trim();
 
-		// Jika sedang mode edit pesan, update langsung pesan yang dipilih di kontainer ketik pesan
 		if (!editingMessageId.isEmpty()) {
 			if (text.isEmpty()) {
-				Toast.makeText(this, "Pesan tidak boleh kosong", Toast.LENGTH_SHORT).show();
+				DongflixToast.show(this, "Pesan tidak boleh kosong");
 				return;
 			}
 			final String targetId = editingMessageId;
@@ -2139,7 +2114,7 @@ public class ChatActivity extends AppCompatActivity {
 						chatInput.setText("");
 						cancelEditMode();
 					} else {
-						Toast.makeText(ChatActivity.this, "Gagal menyimpan perubahan pesan", Toast.LENGTH_SHORT).show();
+						DongflixToast.show(ChatActivity.this, "Gagal menyimpan perubahan pesan");
 					}
 				}
 			});
@@ -2197,7 +2172,7 @@ public class ChatActivity extends AppCompatActivity {
 					if (stickerPreviewBox != null) stickerPreviewBox.setVisibility(View.GONE);
 					clearReplyTarget();
 				} else {
-					Toast.makeText(ChatActivity.this, "Gagal mengirim pesan", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(ChatActivity.this, "Gagal mengirim pesan");
 				}
 			}
 		});
