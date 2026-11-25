@@ -169,6 +169,7 @@ public class MainActivity extends AppCompatActivity {
 		loadLoggedInUserProfile(currentUser);
 		loadUserHistoryAndFavoritesFromFirebase(currentUser);
 		attachFirebasePopularityListeners();
+		DongflixNotificationHelper.attachUnreadBadgeAndSystemPush(this, btnTopNotif);
 		loadLocalDownloads();
 		UpdateCheckerDialog.checkForUpdate(this);
 	}
@@ -2734,6 +2735,7 @@ public class MainActivity extends AppCompatActivity {
 		stopHeroAutoSlider();
 		DongflixToast.dismissCurrent();
 		detachFirebasePopularityListeners();
+		DongflixNotificationHelper.detachListener();
 		if (userProfileRef != null && userProfileListener != null) {
 			userProfileRef.removeEventListener(userProfileListener);
 		}
