@@ -9,8 +9,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -201,6 +199,15 @@ public class ChatActivity extends AppCompatActivity {
 		loadCurrentUserProfileOnce();
 		loadStickersWithCache();
 		startListeningMessages();
+	}
+
+	private String normalizeProfileUrl(String rawUrl) {
+		if (rawUrl == null) return "";
+		String trimmed = rawUrl.trim();
+		if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
+			return trimmed;
+		}
+		return "";
 	}
 
 	private void armFastLoadTimeout() {
@@ -1300,7 +1307,10 @@ public class ChatActivity extends AppCompatActivity {
 
 	private void cacheProfileEntry(String userId, HashMap<String, Object> profile) {
 		if (userId == null || userId.isEmpty() || profile == null) return;
-		userProfileCache.put(userId, profile);
+		HashMap<String, Object> cleanMap = new HashMap<>(profile);
+		cleanMap.put("photoURL", normalizeProfileUrl(cleanMap.get("photoURL") != null ? cleanMap.get("photoURL").toString() : ""));
+		userProfileCache.put(userId, cleanMap);
+
 		boolean existsInList = false;
 		for (HashMap<String, Object> item : allUsersList) {
 			if (userId.equals(item.get("_userId"))) {
@@ -1309,7 +1319,7 @@ public class ChatActivity extends AppCompatActivity {
 			}
 		}
 		if (!existsInList) {
-			HashMap<String, Object> copy = new HashMap<>(profile);
+			HashMap<String, Object> copy = new HashMap<>(cleanMap);
 			copy.put("_userId", userId);
 			allUsersList.add(copy);
 		}
@@ -1410,10 +1420,7 @@ public class ChatActivity extends AppCompatActivity {
 		if (chatCachePrefs == null || key.isEmpty() || uMap == null) return;
 		try {
 			HashMap<String, Object> slim = new HashMap<>(uMap);
-			Object photo = slim.get("photoURL");
-			if (photo != null && photo.toString().startsWith("data:image")) {
-				slim.put("photoURL", "");
-			}
+			slim.put("photoURL", normalizeProfileUrl(slim.get("photoURL") != null ? slim.get("photoURL").toString() : ""));
 			chatCachePrefs.edit().putString("profile_" + key, new Gson().toJson(slim)).apply();
 		} catch (Exception ignored) {}
 	}
@@ -1424,10 +1431,11 @@ public class ChatActivity extends AppCompatActivity {
 		HashMap<String, Object> prof = userProfileCache.get(myId);
 
 		String photoUrl = "";
-		if (prof != null && prof.get("photoURL") != null && !prof.get("photoURL").toString().trim().isEmpty()) {
-			photoUrl = prof.get("photoURL").toString().trim();
-		} else if (currentUser.getPhotoUrl() != null) {
-			photoUrl = currentUser.getPhotoUrl().toString().trim();
+		if (prof != null && prof.get("photoURL") != null) {
+			photoUrl = normalizeProfileUrl(prof.get("photoURL").toString());
+		}
+		if (photoUrl.isEmpty() && currentUser.getPhotoUrl() != null) {
+			photoUrl = normalizeProfileUrl(currentUser.getPhotoUrl().toString());
 		}
 
 		bindChatAvatar(headerProfileAvatar, photoUrl);
@@ -2063,9 +2071,13 @@ public class ChatActivity extends AppCompatActivity {
 					? item.get("author").toString().trim()
 					: (email.contains("@") ? email.split("@")[0] : "User"));
 
-			String photoUrl = (cachedProf != null && cachedProf.get("photoURL") != null && !cachedProf.get("photoURL").toString().trim().isEmpty())
-				? cachedProf.get("photoURL").toString().trim()
-				: (item.get("photoURL") != null ? item.get("photoURL").toString().trim() : "");
+			String photoUrl = "";
+			if (cachedProf != null && cachedProf.get("photoURL") != null) {
+				photoUrl = normalizeProfileUrl(cachedProf.get("photoURL").toString());
+			}
+			if (photoUrl.isEmpty() && item.get("photoURL") != null) {
+				photoUrl = normalizeProfileUrl(item.get("photoURL").toString());
+			}
 
 			long exp = cachedProf != null && cachedProf.get("exp") != null
 				? parseLongVal(cachedProf.get("exp"))
@@ -2339,27 +2351,16 @@ public class ChatActivity extends AppCompatActivity {
 		});
 		target.setClipToOutline(true);
 
-		if (photoUrl != null && !photoUrl.isEmpty()) {
+		String validUrl = normalizeProfileUrl(photoUrl);
+		if (!validUrl.isEmpty()) {
 			target.setPadding(0, 0, 0, 0);
 			target.clearColorFilter();
 			target.setBackgroundColor(Color.parseColor("#161A24"));
-			if (photoUrl.startsWith("data:image")) {
-				try {
-					String b64 = photoUrl.substring(photoUrl.indexOf(",") + 1);
-					byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
-					Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-					if (bmp != null) {
-						target.setImageBitmap(bmp);
-						return;
-					}
-				} catch (Exception ignored) {}
-			} else {
-				Glide.with(getApplicationContext())
-					.load(Uri.parse(photoUrl))
-					.circleCrop()
-					.into(target);
-				return;
-			}
+			Glide.with(getApplicationContext())
+				.load(Uri.parse(validUrl))
+				.circleCrop()
+				.into(target);
+			return;
 		}
 
 		int pad = (int) (5 * getResources().getDisplayMetrics().density);
@@ -2504,8 +2505,8 @@ public class ChatActivity extends AppCompatActivity {
 			? prof.get("username").toString()
 			: (email.contains("@") ? email.split("@")[0] : "");
 
-		String photo = (prof != null && prof.get("photoURL") != null)
-			? prof.get("photoURL").toString()
+		String photo = prof != null && prof.get("photoURL") != null
+			? normalizeProfileUrl(prof.get("photoURL").toString())
 			: "";
 
 		final long exp = prof != null && prof.get("exp") != null ? parseLongVal(prof.get("exp")) : 0L;
