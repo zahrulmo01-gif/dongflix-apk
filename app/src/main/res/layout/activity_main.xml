@@ -24,7 +24,7 @@
 			<RelativeLayout
 				android:id="@+id/hero_container"
 				android:layout_width="match_parent"
-				android:layout_height="420dp">
+				android:layout_height="345dp">
 
 				<ImageView
 					android:id="@+id/img_hero_banner"
@@ -36,13 +36,13 @@
 				<View
 					android:id="@+id/hero_shadow"
 					android:layout_width="match_parent"
-					android:layout_height="260dp"
+					android:layout_height="220dp"
 					android:layout_alignParentBottom="true" />
 
 				<View
 					android:id="@+id/header_shadow"
 					android:layout_width="match_parent"
-					android:layout_height="135dp"
+					android:layout_height="120dp"
 					android:layout_alignParentTop="true" />
 
 				<RelativeLayout
@@ -166,7 +166,7 @@
 					android:layout_height="wrap_content"
 					android:paddingLeft="16dp"
 					android:paddingRight="16dp"
-					android:paddingBottom="16dp"
+					android:paddingBottom="14dp"
 					android:layout_alignParentBottom="true">
 
 					<LinearLayout
@@ -180,7 +180,7 @@
 							android:layout_width="match_parent"
 							android:layout_height="wrap_content"
 							android:text="Loading..."
-							android:textSize="22sp"
+							android:textSize="21sp"
 							android:textColor="#FFFFFF"
 							android:maxLines="1"
 							android:singleLine="true"
@@ -202,7 +202,7 @@
 						android:id="@+id/relativelayout71"
 						android:layout_width="match_parent"
 						android:layout_height="wrap_content"
-						android:layout_marginTop="14dp"
+						android:layout_marginTop="12dp"
 						android:layout_below="@id/layout_hero_text">
 
 						<LinearLayout
@@ -217,9 +217,9 @@
 							<LinearLayout
 								android:id="@+id/btn_hero_play"
 								android:layout_width="wrap_content"
-								android:layout_height="42dp"
-								android:paddingLeft="22dp"
-								android:paddingRight="22dp"
+								android:layout_height="40dp"
+								android:paddingLeft="20dp"
+								android:paddingRight="20dp"
 								android:gravity="center_horizontal|center_vertical"
 								android:orientation="horizontal"
 								android:visibility="gone">
@@ -237,14 +237,14 @@
 									android:layout_height="wrap_content"
 									android:layout_marginLeft="8dp"
 									android:text="Tonton"
-									android:textSize="14sp"
+									android:textSize="13.5sp"
 									android:textColor="#0F172A" />
 							</LinearLayout>
 
 							<FrameLayout
 								android:id="@+id/btn_hero_favorite"
-								android:layout_width="42dp"
-								android:layout_height="42dp"
+								android:layout_width="40dp"
+								android:layout_height="40dp"
 								android:layout_marginLeft="10dp"
 								android:visibility="gone">
 
@@ -299,14 +299,14 @@
 				android:layout_width="match_parent"
 				android:layout_height="wrap_content"
 				android:orientation="vertical"
-				android:layout_marginTop="8dp"
+				android:layout_marginTop="6dp"
 				android:visibility="gone">
 
 				<RelativeLayout
 					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
 					android:paddingLeft="16dp"
-					android:paddingTop="14dp"
+					android:paddingTop="12dp"
 					android:paddingRight="16dp"
 					android:paddingBottom="8dp">
 
@@ -334,7 +334,7 @@
 				<androidx.recyclerview.widget.RecyclerView
 					android:id="@+id/recyclerContinue"
 					android:layout_width="match_parent"
-					android:layout_height="wrap_content"
+					android:layout_height="112dp"
 					android:paddingLeft="16dp"
 					android:paddingRight="16dp"
 					android:clipToPadding="false"
