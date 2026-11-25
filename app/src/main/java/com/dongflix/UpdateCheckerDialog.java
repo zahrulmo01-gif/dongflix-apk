@@ -17,6 +17,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -31,18 +33,12 @@ import org.json.JSONObject;
 public class UpdateCheckerDialog {
 
 	public static final String UPDATE_JSON_URL = "https://raw.githubusercontent.com/zahrulmo01-gif/dongflixapk/refs/heads/main/update-apk.json";
-	private static boolean isDialogShowing = false;
+	private static boolean isSheetShowing = false;
 
-	/**
-	 * Panggil otomatis saat Activity dibuka (hanya muncul jika versi GitHub > versi aplikasi).
-	 */
 	public static void checkForUpdate(final Activity activity) {
 		checkForUpdate(activity, false);
 	}
 
-	/**
-	 * @param notifyIfUpToDate true jika dipanggil manual dari tombol menu (tampilkan Toast jika sudah versi terbaru)
-	 */
 	public static void checkForUpdate(final Activity activity, final boolean notifyIfUpToDate) {
 		if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
@@ -96,8 +92,8 @@ public class UpdateCheckerDialog {
 						new Handler(Looper.getMainLooper()).post(new Runnable() {
 							@Override
 							public void run() {
-								if (!activity.isFinishing() && !activity.isDestroyed() && !isDialogShowing) {
-									showDialog(activity, localVersion, remoteVersion, updateNotes, closedl, linkup);
+								if (!activity.isFinishing() && !activity.isDestroyed() && !isSheetShowing) {
+									showBottomSheet(activity, localVersion, remoteVersion, updateNotes, closedl, linkup);
 								}
 							}
 						});
@@ -170,7 +166,7 @@ public class UpdateCheckerDialog {
 		return Typeface.DEFAULT;
 	}
 
-	public static void showDialog(
+	public static void showBottomSheet(
 		final Activity activity,
 		String currentVer,
 		String remoteVer,
@@ -180,78 +176,141 @@ public class UpdateCheckerDialog {
 	) {
 		if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
-		isDialogShowing = true;
+		isSheetShowing = true;
 		final boolean forceUpdate = "true".equalsIgnoreCase(closedl) || "1".equals(closedl);
 		final float d = activity.getResources().getDisplayMetrics().density;
 		final Typeface tf = loadFont(activity);
 
-		final Dialog dialog = new Dialog(activity);
-		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-		dialog.setCancelable(!forceUpdate);
-		dialog.setCanceledOnTouchOutside(!forceUpdate);
-		dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+		final Dialog sheetDialog = new Dialog(activity);
+		sheetDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+		sheetDialog.setCancelable(!forceUpdate);
+		sheetDialog.setCanceledOnTouchOutside(!forceUpdate);
+		sheetDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
 			@Override
 			public void onDismiss(DialogInterface dInt) {
-				isDialogShowing = false;
+				isSheetShowing = false;
 			}
 		});
 
-		LinearLayout card = new LinearLayout(activity);
-		card.setOrientation(LinearLayout.VERTICAL);
-		card.setPadding((int) (22 * d), (int) (22 * d), (int) (22 * d), (int) (20 * d));
-		GradientDrawable cardBg = new GradientDrawable(
-			GradientDrawable.Orientation.TL_BR,
-			new int[]{Color.parseColor("#151B28"), Color.parseColor("#0B0E15")}
-		);
-		cardBg.setCornerRadius(24 * d);
-		cardBg.setStroke(Math.max(1, (int) (1.2f * d)), Color.parseColor("#4038BDF8"));
-		card.setBackground(cardBg);
+		FrameLayout backdrop = new FrameLayout(activity);
+		backdrop.setLayoutParams(new ViewGroup.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		if (!forceUpdate) {
+			backdrop.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheetDialog.dismiss();
+				}
+			});
+		}
 
-		// Badge status
+		LinearLayout sheet = new LinearLayout(activity);
+		sheet.setOrientation(LinearLayout.VERTICAL);
+		sheet.setClickable(true);
+		sheet.setFocusable(true);
+		sheet.setPadding((int) (20 * d), (int) (10 * d), (int) (20 * d), (int) (24 * d));
+		FrameLayout.LayoutParams sheetLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
+		);
+		sheet.setLayoutParams(sheetLp);
+
+		GradientDrawable sheetBg = new GradientDrawable(
+			GradientDrawable.Orientation.TOP_BOTTOM,
+			new int[]{Color.parseColor("#131A29"), Color.parseColor("#080B12")}
+		);
+		float topRadius = 28 * d;
+		sheetBg.setCornerRadii(new float[]{
+			topRadius, topRadius,
+			topRadius, topRadius,
+			0f, 0f,
+			0f, 0f
+		});
+		sheetBg.setStroke(Math.max(1, (int) (1.2f * d)), Color.parseColor("#3838BDF8"));
+		sheet.setBackground(sheetBg);
+
+		// Drag handle pill di tengah atas
+		View handle = new View(activity);
+		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams((int) (40 * d), (int) (4 * d));
+		hLp.gravity = Gravity.CENTER_HORIZONTAL;
+		hLp.topMargin = (int) (2 * d);
+		hLp.bottomMargin = (int) (14 * d);
+		handle.setLayoutParams(hLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#475569"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		sheet.addView(handle);
+
+		// Baris badge versi + status wajib/opsional
+		LinearLayout badgeRow = new LinearLayout(activity);
+		badgeRow.setOrientation(LinearLayout.HORIZONTAL);
+		badgeRow.setGravity(Gravity.CENTER_VERTICAL);
+		badgeRow.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+
 		TextView tvPill = new TextView(activity);
 		tvPill.setText(forceUpdate ? "✦ PEMBARUAN WAJIB" : "✦ PEMBARUAN TERSEDIA");
 		tvPill.setTextColor(Color.parseColor("#38BDF8"));
 		tvPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
 		tvPill.setTypeface(tf, Typeface.NORMAL);
 		tvPill.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
-		LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		tvPill.setLayoutParams(pillLp);
 		GradientDrawable pillBg = new GradientDrawable();
 		pillBg.setColor(Color.parseColor("#1A38BDF8"));
 		pillBg.setCornerRadius(100f);
 		pillBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#4438BDF8"));
 		tvPill.setBackground(pillBg);
-		card.addView(tvPill);
 
-		// Judul versi
+		TextView tvVersionChip = new TextView(activity);
+		tvVersionChip.setText("v" + currentVer + " → v" + remoteVer);
+		tvVersionChip.setTextColor(Color.parseColor("#CBD5E1"));
+		tvVersionChip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+		tvVersionChip.setTypeface(tf, Typeface.NORMAL);
+		tvVersionChip.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
+		LinearLayout.LayoutParams vcChipLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		vcChipLp.leftMargin = (int) (8 * d);
+		tvVersionChip.setLayoutParams(vcChipLp);
+		GradientDrawable chipBg = new GradientDrawable();
+		chipBg.setColor(Color.parseColor("#161D2E"));
+		chipBg.setCornerRadius(100f);
+		chipBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#22FFFFFF"));
+		tvVersionChip.setBackground(chipBg);
+
+		badgeRow.addView(tvPill);
+		badgeRow.addView(tvVersionChip);
+		sheet.addView(badgeRow);
+
+		// Judul utama
 		TextView tvTitle = new TextView(activity);
-		tvTitle.setText("Dongflix v" + remoteVer);
+		tvTitle.setText("Dongflix v" + remoteVer + " Telah Hadir");
 		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 21f);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20.5f);
 		tvTitle.setTypeface(tf, Typeface.NORMAL);
 		LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
 		titleLp.topMargin = (int) (12 * d);
 		tvTitle.setLayoutParams(titleLp);
-		card.addView(tvTitle);
+		sheet.addView(tvTitle);
 
-		// Subjudul perbandingan versi
-		TextView tvSub = new TextView(activity);
-		tvSub.setText("Versi saat ini: v" + currentVer + "  →  Terbaru: v" + remoteVer);
-		tvSub.setTextColor(Color.parseColor("#94A3B8"));
-		tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-		tvSub.setTypeface(tf, Typeface.NORMAL);
-		LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+		TextView tvDesc = new TextView(activity);
+		tvDesc.setText(forceUpdate
+			? "Pembaruan ini diperlukan agar seluruh fitur pemutar dan katalog berjalan optimal."
+			: "Nikmati peningkatan performa, stabilitas pemutar, dan fitur terbaru di versi ini.");
+		tvDesc.setTextColor(Color.parseColor("#94A3B8"));
+		tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvDesc.setTypeface(tf, Typeface.NORMAL);
+		LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		subLp.topMargin = (int) (3 * d);
-		tvSub.setLayoutParams(subLp);
-		card.addView(tvSub);
+		descLp.topMargin = (int) (4 * d);
+		tvDesc.setLayoutParams(descLp);
+		sheet.addView(tvDesc);
 
-		// Box daftar fitur baru
+		// Kartu catatan pembaruan
 		LinearLayout notesBox = new LinearLayout(activity);
 		notesBox.setOrientation(LinearLayout.VERTICAL);
 		notesBox.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (12 * d));
@@ -262,24 +321,26 @@ public class UpdateCheckerDialog {
 		boxLp.bottomMargin = (int) (18 * d);
 		notesBox.setLayoutParams(boxLp);
 		GradientDrawable boxBg = new GradientDrawable();
-		boxBg.setColor(Color.parseColor("#111622"));
-		boxBg.setCornerRadius(16 * d);
-		boxBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#22FFFFFF"));
+		boxBg.setColor(Color.parseColor("#101522"));
+		boxBg.setCornerRadius(18 * d);
+		boxBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
 		notesBox.setBackground(boxBg);
 
-		TextView tvHeader = new TextView(activity);
-		tvHeader.setText("Pembaruan & Peningkatan");
-		tvHeader.setTextColor(Color.parseColor("#E2E8F0"));
-		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		tvHeader.setTypeface(tf, Typeface.NORMAL);
-		notesBox.addView(tvHeader);
+		TextView tvNotesTitle = new TextView(activity);
+		tvNotesTitle.setText("Catatan Pembaruan");
+		tvNotesTitle.setTextColor(Color.parseColor("#E2E8F0"));
+		tvNotesTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvNotesTitle.setTypeface(tf, Typeface.NORMAL);
+		notesBox.addView(tvNotesTitle);
 
 		ScrollView notesScroll = new ScrollView(activity);
+		int maxNotesH = (int) (180 * d);
 		LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		scLp.topMargin = (int) (4 * d);
+		scLp.topMargin = (int) (6 * d);
 		notesScroll.setLayoutParams(scLp);
+		notesScroll.setVerticalScrollBarEnabled(false);
 
 		LinearLayout listCol = new LinearLayout(activity);
 		listCol.setOrientation(LinearLayout.VERTICAL);
@@ -290,21 +351,32 @@ public class UpdateCheckerDialog {
 			if (clean.isEmpty()) continue;
 			TextView tvItem = new TextView(activity);
 			tvItem.setText("•  " + clean);
-			tvItem.setTextColor(Color.parseColor("#94A3B8"));
+			tvItem.setTextColor(Color.parseColor("#CBD5E1"));
 			tvItem.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 			tvItem.setTypeface(tf, Typeface.NORMAL);
+			tvItem.setLineSpacing(2 * d, 1.05f);
 			LinearLayout.LayoutParams iLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
-			iLp.topMargin = (int) (5 * d);
+			iLp.topMargin = (int) (6 * d);
 			tvItem.setLayoutParams(iLp);
 			listCol.addView(tvItem);
 		}
 		notesScroll.addView(listCol);
+		notesScroll.post(new Runnable() {
+			@Override
+			public void run() {
+				if (notesScroll.getHeight() > maxNotesH) {
+					ViewGroup.LayoutParams lp = notesScroll.getLayoutParams();
+					lp.height = maxNotesH;
+					notesScroll.setLayoutParams(lp);
+				}
+			}
+		});
 		notesBox.addView(notesScroll);
-		card.addView(notesBox);
+		sheet.addView(notesBox);
 
-		// Baris tombol bawah
+		// Baris tombol aksi
 		LinearLayout btnRow = new LinearLayout(activity);
 		btnRow.setOrientation(LinearLayout.HORIZONTAL);
 		btnRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -319,30 +391,30 @@ public class UpdateCheckerDialog {
 			btnLater.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 			btnLater.setTypeface(tf, Typeface.NORMAL);
 			btnLater.setGravity(Gravity.CENTER);
-			LinearLayout.LayoutParams laterLp = new LinearLayout.LayoutParams(0, (int) (44 * d), 0.85f);
-			laterLp.rightMargin = (int) (8 * d);
+			LinearLayout.LayoutParams laterLp = new LinearLayout.LayoutParams(0, (int) (46 * d), 0.85f);
+			laterLp.rightMargin = (int) (10 * d);
 			btnLater.setLayoutParams(laterLp);
 			GradientDrawable laterBg = new GradientDrawable();
-			laterBg.setColor(Color.parseColor("#161C28"));
+			laterBg.setColor(Color.parseColor("#141A26"));
 			laterBg.setCornerRadius(100f);
 			laterBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
 			btnLater.setBackground(laterBg);
 			btnLater.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					dialog.dismiss();
+					sheetDialog.dismiss();
 				}
 			});
 			btnRow.addView(btnLater);
 		}
 
 		TextView btnUpdate = new TextView(activity);
-		btnUpdate.setText("Perbarui Sekarang");
+		btnUpdate.setText("Unduh Pembaruan");
 		btnUpdate.setTextColor(Color.WHITE);
 		btnUpdate.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 		btnUpdate.setTypeface(tf, Typeface.NORMAL);
 		btnUpdate.setGravity(Gravity.CENTER);
-		btnUpdate.setLayoutParams(new LinearLayout.LayoutParams(0, (int) (44 * d), 1.15f));
+		btnUpdate.setLayoutParams(new LinearLayout.LayoutParams(0, (int) (46 * d), 1.15f));
 		GradientDrawable updBg = new GradientDrawable(
 			GradientDrawable.Orientation.LEFT_RIGHT,
 			new int[]{Color.parseColor("#2563EB"), Color.parseColor("#0284C7")}
@@ -362,21 +434,25 @@ public class UpdateCheckerDialog {
 					Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
 					activity.startActivity(intent);
 				} catch (Exception e) {
-					Toast.makeText(activity, "Gagal membuka browser", Toast.LENGTH_SHORT).show();
+					Toast.makeText(activity, "Gagal membuka tautan", Toast.LENGTH_SHORT).show();
 				}
 			}
 		});
 		btnRow.addView(btnUpdate);
 
-		card.addView(btnRow);
-		dialog.setContentView(card);
+		sheet.addView(btnRow);
+		backdrop.addView(sheet);
+		sheetDialog.setContentView(backdrop);
 
-		Window win = dialog.getWindow();
+		Window win = sheetDialog.getWindow();
 		if (win != null) {
 			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-			int screenW = activity.getResources().getDisplayMetrics().widthPixels;
-			win.setLayout(Math.min((int) (360 * d), screenW - (int) (28 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
+			win.setDimAmount(0.65f);
+			win.setGravity(Gravity.BOTTOM);
+			win.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+			win.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+			win.setWindowAnimations(android.R.style.Animation_InputMethod);
 		}
-		dialog.show();
+		sheetDialog.show();
 	}
 }
