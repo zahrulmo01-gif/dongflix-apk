@@ -83,7 +83,7 @@
 								android:layout_width="wrap_content"
 								android:layout_height="wrap_content"
 								android:text="Welcome"
-								android:textSize="12sp"
+								android:textSize="11.5sp"
 								android:textColor="#94A3B8" />
 
 							<TextView
@@ -91,7 +91,7 @@
 								android:layout_width="wrap_content"
 								android:layout_height="wrap_content"
 								android:text="R Z"
-								android:textSize="15sp"
+								android:textSize="14.5sp"
 								android:textColor="#FFFFFF" />
 						</LinearLayout>
 					</LinearLayout>
@@ -315,7 +315,7 @@
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
 						android:text="Lanjutkan Menonton"
-						android:textSize="18sp"
+						android:textSize="16.5sp"
 						android:textColor="#FFFFFF"
 						android:layout_alignParentLeft="true"
 						android:layout_centerVertical="true" />
@@ -325,7 +325,7 @@
 						android:layout_width="wrap_content"
 						android:layout_height="wrap_content"
 						android:text="Lihat riwayat"
-						android:textSize="14sp"
+						android:textSize="12.5sp"
 						android:textColor="#94A3B8"
 						android:layout_alignParentRight="true"
 						android:layout_centerVertical="true" />
@@ -357,7 +357,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Populer Hari Ini"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -387,7 +387,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Baru Diupdate"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -397,7 +397,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -433,7 +433,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Populer di Dongflix"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -443,7 +443,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -473,7 +473,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Romantis Tipis-Tipis"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -483,7 +483,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -513,7 +513,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Kultivasi &amp; Keabadian"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -523,7 +523,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -553,7 +553,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Donghua Tamat"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -563,7 +563,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -593,7 +593,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Komedi Ringan"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -603,7 +603,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -633,7 +633,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Misteri &amp; Teka-Teki"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -643,7 +643,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -673,7 +673,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Donghua Movie"
-					android:textSize="18sp"
+					android:textSize="16.5sp"
 					android:textColor="#FFFFFF"
 					android:layout_alignParentLeft="true"
 					android:layout_centerVertical="true" />
@@ -683,7 +683,7 @@
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"
 					android:text="Lihat semua"
-					android:textSize="14sp"
+					android:textSize="12.5sp"
 					android:textColor="#94A3B8"
 					android:layout_alignParentRight="true"
 					android:layout_centerVertical="true" />
@@ -795,7 +795,7 @@
 			android:layout_marginLeft="16dp"
 			android:layout_marginBottom="8dp"
 			android:text="Populer di Dongflix"
-			android:textSize="15sp"
+			android:textSize="14sp"
 			android:textColor="#94A3B8" />
 
 		<androidx.recyclerview.widget.RecyclerView
