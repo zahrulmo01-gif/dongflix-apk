@@ -1708,4 +1708,781 @@ public class ChatActivity extends AppCompatActivity {
 	private View buildDarkSheetDivider(float d) {
 		View div = new View(this);
 		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH
+			ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+		);
+		lp.leftMargin = (int) (16 * d);
+		lp.rightMargin = (int) (16 * d);
+		div.setLayoutParams(lp);
+		div.setBackgroundColor(Color.parseColor("#232836"));
+		return div;
+	}
+
+	private void startInlineEditMessage(String msgId, String originalText) {
+		if (msgId.isEmpty() || chatInput == null) return;
+		clearReplyTarget();
+		editingMessageId = msgId;
+		if (editBanner != null) {
+			if (editTargetPreview != null) editTargetPreview.setText(originalText);
+			editBanner.setVisibility(View.VISIBLE);
+		}
+		chatInput.setText(originalText);
+		chatInput.setSelection(originalText.length());
+		chatInput.requestFocus();
+	}
+
+	private void cancelEditMode() {
+		editingMessageId = "";
+		if (editBanner != null) editBanner.setVisibility(View.GONE);
+		if (editTargetPreview != null) editTargetPreview.setText("");
+	}
+
+	private void toggleStickerPanel() {
+		if (stickerPanel == null) return;
+		boolean nextVis = stickerPanel.getVisibility() != View.VISIBLE;
+		stickerPanel.setVisibility(nextVis ? View.VISIBLE : View.GONE);
+		if (nextVis) renderStickerRow();
+	}
+
+	private void loadStickersWithCache() {
+		stickerUrls.clear();
+		Collections.addAll(stickerUrls, DEFAULT_STICKERS);
+
+		long now = System.currentTimeMillis();
+		long savedAt = chatCachePrefs != null ? chatCachePrefs.getLong("stickers_ts", 0L) : 0L;
+		String cachedJson = chatCachePrefs != null ? chatCachePrefs.getString("stickers_json", "") : "";
+
+		if (!cachedJson.isEmpty()) {
+			try {
+				List<String> cached = new Gson().fromJson(cachedJson, new TypeToken<List<String>>(){}.getType());
+				if (cached != null && !cached.isEmpty()) {
+					stickerUrls.clear();
+					stickerUrls.addAll(cached);
+				}
+			} catch (Exception ignored) {}
+		}
+
+		if (cachedJson.isEmpty() || (now - savedAt) > STICKER_CACHE_TTL_MS) {
+			FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+				.getReference("stickers")
+				.addListenerForSingleValueEvent(new ValueEventListener() {
+					@Override
+					public void onDataChange(@NonNull DataSnapshot snapshot) {
+						if (!snapshot.exists()) return;
+						List<String> fetched = new ArrayList<>();
+						for (DataSnapshot child : snapshot.getChildren()) {
+							Object val = child.getValue();
+							if (val instanceof String && !val.toString().trim().isEmpty()) {
+								fetched.add(val.toString().trim());
+							} else if (val instanceof Map) {
+								Map<?, ?> m = (Map<?, ?>) val;
+								Object u = m.get("url") != null ? m.get("url") : (m.get("link") != null ? m.get("link") : m.get("image"));
+								if (u != null && !u.toString().trim().isEmpty()) {
+									fetched.add(u.toString().trim());
+								}
+							}
+						}
+						if (!fetched.isEmpty()) {
+							stickerUrls.clear();
+							stickerUrls.addAll(fetched);
+							if (chatCachePrefs != null) {
+								chatCachePrefs.edit()
+									.putString("stickers_json", new Gson().toJson(fetched))
+									.putLong("stickers_ts", System.currentTimeMillis())
+									.apply();
+							}
+							if (stickerPanel != null && stickerPanel.getVisibility() == View.VISIBLE) {
+								renderStickerRow();
+							}
+						}
+					}
+
+					@Override
+					public void onCancelled(@NonNull DatabaseError error) {}
+				});
+		}
+	}
+
+	private void renderStickerRow() {
+		if (stickerGridContainer == null) return;
+		stickerGridContainer.removeAllViews();
+		float d = getResources().getDisplayMetrics().density;
+
+		for (final String url : stickerUrls) {
+			FrameLayout box = new FrameLayout(this);
+			int boxSize = (int) (68 * d);
+			LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(boxSize, boxSize);
+			lp.rightMargin = (int) (8 * d);
+			box.setLayoutParams(lp);
+			GradientDrawable bg = new GradientDrawable();
+			bg.setColor(Color.parseColor("#141A29"));
+			bg.setCornerRadius(14 * d);
+			box.setBackground(bg);
+
+			ImageView img = new ImageView(this);
+			int pad = (int) (6 * d);
+			img.setPadding(pad, pad, pad, pad);
+			img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+			Glide.with(getApplicationContext()).load(Uri.parse(url)).into(img);
+
+			box.addView(img, new FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+			));
+			box.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					selectedStickerUrl = url;
+					if (stickerPreviewImg != null && stickerPreviewBox != null) {
+						Glide.with(getApplicationContext()).load(Uri.parse(url)).into(stickerPreviewImg);
+						stickerPreviewBox.setVisibility(View.VISIBLE);
+					}
+					stickerPanel.setVisibility(View.GONE);
+				}
+			});
+			stickerGridContainer.addView(box);
+		}
+	}
+
+	private void updateMentionDropdown(String fullText) {
+		if (mentionMenu == null) return;
+		int cursor = chatInput != null ? chatInput.getSelectionStart() : fullText.length();
+		String before = fullText.substring(0, Math.max(0, Math.min(cursor, fullText.length())));
+		int atIdx = before.lastIndexOf('@');
+
+		if (atIdx == -1 || (atIdx > 0 && !Character.isWhitespace(before.charAt(atIdx - 1)))) {
+			mentionMenu.setVisibility(View.GONE);
+			return;
+		}
+
+		String query = before.substring(atIdx + 1).toLowerCase(Locale.US);
+		List<HashMap<String, Object>> matches = new ArrayList<>();
+		for (HashMap<String, Object> u : allUsersList) {
+			String uname = u.get("username") != null ? u.get("username").toString().toLowerCase(Locale.US) : "";
+			String dname = u.get("name") != null ? u.get("name").toString().toLowerCase(Locale.US) : "";
+			if (uname.contains(query) || dname.contains(query)) {
+				matches.add(u);
+			}
+			if (matches.size() >= 6) break;
+		}
+
+		if (matches.isEmpty()) {
+			mentionMenu.setVisibility(View.GONE);
+			return;
+		}
+
+		mentionMenu.removeAllViews();
+		mentionMenu.setVisibility(View.VISIBLE);
+		float d = getResources().getDisplayMetrics().density;
+
+		for (HashMap<String, Object> u : matches) {
+			String name = u.get("name") != null ? u.get("name").toString() : "User";
+			final String tagHandle = u.get("username") != null && !u.get("username").toString().trim().isEmpty()
+				? u.get("username").toString().trim()
+				: name;
+
+			TextView itemTv = new TextView(this);
+			itemTv.setText(name + " (@" + tagHandle + ")");
+			itemTv.setTextColor(Color.parseColor("#38BDF8"));
+			itemTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			itemTv.setPadding((int) (10 * d), (int) (8 * d), (int) (10 * d), (int) (8 * d));
+			styleText(itemTv);
+			itemTv.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					String currentVal = chatInput.getText().toString();
+					int pos = chatInput.getSelectionStart();
+					String pre = currentVal.substring(0, Math.max(0, Math.min(pos, currentVal.length())));
+					int lastAt = pre.lastIndexOf('@');
+					String post = currentVal.substring(Math.max(0, Math.min(pos, currentVal.length())));
+					String updated = (lastAt >= 0 ? pre.substring(0, lastAt) : pre) + "@" + tagHandle + " " + post;
+					chatInput.setText(updated);
+					chatInput.setSelection(Math.min(updated.length(), (lastAt >= 0 ? lastAt : pre.length()) + tagHandle.length() + 2));
+					mentionMenu.setVisibility(View.GONE);
+				}
+			});
+			mentionMenu.addView(itemTv);
+		}
+	}
+
+	private void startListeningMessages() {
+		chatListener = new ValueEventListener() {
+			@Override
+			public void onDataChange(@NonNull DataSnapshot snapshot) {
+				if (isFinishing() || isDestroyed()) return;
+				stopChatShimmer();
+				renderSnapshotMessages(snapshot, true);
+			}
+
+			@Override
+			public void onCancelled(@NonNull DatabaseError error) {
+				stopChatShimmer();
+			}
+		};
+		liveChatRef.limitToLast(MAX_VISIBLE_MESSAGES).addValueEventListener(chatListener);
+	}
+
+	private void renderSnapshotMessages(@NonNull DataSnapshot snapshot, boolean allowPrefetch) {
+		List<HashMap<String, Object>> msgList = new ArrayList<>();
+		if (snapshot.exists()) {
+			for (DataSnapshot child : snapshot.getChildren()) {
+				Object raw = child.getValue();
+				if (raw instanceof Map) {
+					HashMap<String, Object> m = new HashMap<>();
+					for (Map.Entry<?, ?> e : ((Map<?, ?>) raw).entrySet()) {
+						if (e.getKey() != null) m.put(e.getKey().toString(), e.getValue());
+					}
+					m.put("_id", child.getKey());
+					msgList.add(m);
+				}
+			}
+		}
+		Collections.sort(msgList, new Comparator<HashMap<String, Object>>() {
+			@Override
+			public int compare(HashMap<String, Object> a, HashMap<String, Object> b) {
+				return Long.compare(parseLongVal(a.get("timestamp")), parseLongVal(b.get("timestamp")));
+			}
+		});
+		if (msgList.size() > MAX_VISIBLE_MESSAGES) {
+			msgList = msgList.subList(msgList.size() - MAX_VISIBLE_MESSAGES, msgList.size());
+		}
+		if (allowPrefetch) {
+			prefetchProfilesForMessagesOnce(msgList);
+		}
+		renderMessages(msgList);
+	}
+
+	private void renderMessages(List<HashMap<String, Object>> msgList) {
+		if (messagesContainer == null) return;
+		messagesContainer.removeAllViews();
+		messageRowMap.clear();
+
+		float d = getResources().getDisplayMetrics().density;
+		String myEmail = currentUser != null && currentUser.getEmail() != null ? currentUser.getEmail().toLowerCase(Locale.US) : "";
+		final boolean isCurrentUserAdmin = ADMIN_EMAIL.equalsIgnoreCase(myEmail);
+
+		String lastDateKey = "";
+
+		for (final HashMap<String, Object> item : msgList) {
+			final String msgId = item.get("_id") != null ? item.get("_id").toString() : "";
+			long ts = parseLongVal(item.get("timestamp"));
+			if (ts <= 0L) ts = System.currentTimeMillis();
+
+			String dateKey = getDateKey(ts);
+			if (!dateKey.equals(lastDateKey)) {
+				lastDateKey = dateKey;
+				messagesContainer.addView(buildDateDivider(getDateDividerLabel(ts), d));
+			}
+
+			String email = item.get("email") != null ? item.get("email").toString() : "";
+			String uid = item.get("uid") != null ? item.get("uid").toString() : "";
+			String userId = resolveUserId(uid, email);
+			final String senderNotifKey = resolveNotifUserKey(uid, email);
+
+			HashMap<String, Object> cachedProf = !userId.isEmpty() ? userProfileCache.get(userId) : null;
+			final String authorName = (cachedProf != null && cachedProf.get("name") != null && !cachedProf.get("name").toString().trim().isEmpty())
+				? cachedProf.get("name").toString().trim()
+				: (item.get("author") != null ? item.get("author").toString() : (email.contains("@") ? email.split("@")[0] : "User"));
+
+			String photoUrl = (cachedProf != null && cachedProf.get("photoURL") != null && !cachedProf.get("photoURL").toString().trim().isEmpty())
+				? cachedProf.get("photoURL").toString().trim()
+				: (item.get("photoURL") != null ? item.get("photoURL").toString().trim() : "");
+
+			long exp = cachedProf != null && cachedProf.get("exp") != null
+				? parseLongVal(cachedProf.get("exp"))
+				: parseLongVal(item.get("exp"));
+
+			boolean isMsgAdmin = ADMIN_EMAIL.equalsIgnoreCase(email) || Boolean.TRUE.equals(item.get("isAdmin"));
+			final boolean isMine = (!myEmail.isEmpty() && myEmail.equalsIgnoreCase(email))
+				|| (currentUser != null && currentUser.getUid().equals(uid));
+			boolean isEdited = Boolean.TRUE.equals(item.get("edited"));
+
+			final String text = item.get("text") != null ? item.get("text").toString() : "";
+			final String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString() : "";
+
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(isMine ? Gravity.END : Gravity.START);
+			row.setClipChildren(false);
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int) (12 * d);
+			row.setLayoutParams(rowLp);
+
+			ImageView avatar = new ImageView(this);
+			int avSize = (int) (36 * d);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(avSize, avSize);
+			if (isMine) avLp.leftMargin = (int) (8 * d);
+			else avLp.rightMargin = (int) (8 * d);
+			avatar.setLayoutParams(avLp);
+			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+			bindChatAvatar(avatar, photoUrl);
+
+			LinearLayout bubbleCol = new LinearLayout(this);
+			bubbleCol.setOrientation(LinearLayout.VERTICAL);
+			bubbleCol.setClipChildren(false);
+			LinearLayout.LayoutParams bColLp = new LinearLayout.LayoutParams(
+				0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+			);
+			bubbleCol.setLayoutParams(bColLp);
+
+			LinearLayout bubble = new LinearLayout(this);
+			bubble.setOrientation(LinearLayout.VERTICAL);
+			bubble.setMinimumWidth((int) (185 * d));
+			bubble.setPadding((int) (14 * d), (int) (11 * d), (int) (18 * d), (int) (10 * d));
+
+			GradientDrawable bubbleBg = new GradientDrawable();
+			if (isMine) {
+				bubbleBg.setColors(new int[]{Color.parseColor("#13294B"), Color.parseColor("#0B172B")});
+				bubbleBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+				bubbleBg.setCornerRadii(new float[]{
+					18 * d, 18 * d,
+					6 * d, 6 * d,
+					18 * d, 18 * d,
+					18 * d, 18 * d
+				});
+			} else {
+				bubbleBg.setColors(new int[]{Color.parseColor("#1E2028"), Color.parseColor("#14161C")});
+				bubbleBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+				bubbleBg.setCornerRadii(new float[]{
+					6 * d, 6 * d,
+					18 * d, 18 * d,
+					18 * d, 18 * d,
+					18 * d, 18 * d
+				});
+			}
+			bubble.setBackground(bubbleBg);
+			LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			bLp.gravity = isMine ? Gravity.END : Gravity.START;
+			bubble.setLayoutParams(bLp);
+
+			Object replyObj = item.get("replyTo");
+			if (replyObj instanceof Map) {
+				Map<?, ?> rMap = (Map<?, ?>) replyObj;
+				final String targetId = rMap.get("id") != null ? rMap.get("id").toString() : "";
+				String rAuthor = rMap.get("author") != null ? rMap.get("author").toString() : "";
+				String rSnippet = rMap.get("snippet") != null ? rMap.get("snippet").toString() : "";
+
+				LinearLayout quoteBox = new LinearLayout(this);
+				quoteBox.setOrientation(LinearLayout.VERTICAL);
+				GradientDrawable qBg = new GradientDrawable();
+				qBg.setColor(Color.parseColor("#66070B14"));
+				qBg.setCornerRadius(12 * d);
+				quoteBox.setBackground(qBg);
+				quoteBox.setPadding((int) (10 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
+				LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				qLp.bottomMargin = (int) (7 * d);
+				quoteBox.setLayoutParams(qLp);
+
+				TextView qAuthor = new TextView(this);
+				qAuthor.setText(rAuthor);
+				qAuthor.setTextColor(Color.parseColor("#38BDF8"));
+				qAuthor.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+				styleText(qAuthor);
+
+				TextView qSnip = new TextView(this);
+				qSnip.setText(rSnippet);
+				qSnip.setTextColor(Color.parseColor("#CBD5E1"));
+				qSnip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+				qSnip.setMaxLines(2);
+				qSnip.setEllipsize(TextUtils.TruncateAt.END);
+				styleText(qSnip);
+
+				quoteBox.addView(qAuthor);
+				quoteBox.addView(qSnip);
+				quoteBox.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						View targetRow = messageRowMap.get(targetId);
+						if (targetRow != null && chatScrollView != null) {
+							chatScrollView.smoothScrollTo(0, targetRow.getTop());
+						}
+					}
+				});
+				bubble.addView(quoteBox);
+			}
+
+			LinearLayout metaRow = new LinearLayout(this);
+			metaRow.setOrientation(LinearLayout.HORIZONTAL);
+			metaRow.setGravity(Gravity.CENTER_VERTICAL);
+			metaRow.setPadding(0, 0, (int) (6 * d), 0);
+
+			TextView tvSender = new TextView(this);
+			tvSender.setText(authorName);
+			tvSender.setTextColor(isMsgAdmin ? Color.parseColor("#FBBF24") : Color.parseColor("#7DD3FC"));
+			tvSender.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+			tvSender.setMaxLines(1);
+			styleText(tvSender);
+
+			UserBadgeView badgeView = new UserBadgeView(this);
+			badgeView.bindUserBadges(exp, isMsgAdmin);
+			LinearLayout.LayoutParams bvLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			bvLp.leftMargin = (int) (6 * d);
+			badgeView.setLayoutParams(bvLp);
+
+			metaRow.addView(tvSender);
+			metaRow.addView(badgeView);
+			bubble.addView(metaRow);
+
+			if (!text.isEmpty()) {
+				TextView tvBody = new TextView(this);
+				tvBody.setText(formatMentionsSpannable(text));
+				tvBody.setTextColor(Color.parseColor("#F8FAFC"));
+				tvBody.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+				styleText(tvBody);
+				LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				bodyLp.topMargin = (int) (5 * d);
+				tvBody.setLayoutParams(bodyLp);
+				bubble.addView(tvBody);
+			}
+
+			if (!stickerUrl.isEmpty()) {
+				ImageView stImg = new ImageView(this);
+				int stSize = (int) (124 * d);
+				LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(stSize, stSize);
+				stLp.topMargin = (int) (6 * d);
+				stImg.setLayoutParams(stLp);
+				stImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+				Glide.with(getApplicationContext()).load(Uri.parse(stickerUrl)).into(stImg);
+				bubble.addView(stImg);
+			}
+
+			TextView tvTime = new TextView(this);
+			tvTime.setText((isEdited ? "diedit • " : "") + formatClock(ts));
+			tvTime.setTextColor(Color.parseColor("#94A3B8"));
+			tvTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+			styleText(tvTime);
+			LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			timeLp.gravity = Gravity.END;
+			timeLp.topMargin = (int) (3 * d);
+			tvTime.setLayoutParams(timeLp);
+			bubble.addView(tvTime);
+
+			bubble.setOnClickListener(null);
+			bubble.setOnLongClickListener(new View.OnLongClickListener() {
+				@Override
+				public boolean onLongClick(View v) {
+					showMessageActionsBottomSheet(msgId, senderNotifKey, authorName, text, stickerUrl, isMine, isCurrentUserAdmin);
+					return true;
+				}
+			});
+
+			bubbleCol.addView(bubble);
+
+			if (isMine) {
+				row.addView(bubbleCol);
+				row.addView(avatar);
+			} else {
+				row.addView(avatar);
+				row.addView(bubbleCol);
+			}
+
+			if (!msgId.isEmpty()) {
+				messageRowMap.put(msgId, row);
+			}
+			messagesContainer.addView(row);
+		}
+
+		chatScrollView.post(new Runnable() {
+			@Override
+			public void run() {
+				chatScrollView.fullScroll(View.FOCUS_DOWN);
+			}
+		});
+	}
+
+	private View buildDateDivider(String label, float d) {
+		FrameLayout wrap = new FrameLayout(this);
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		lp.topMargin = (int) (6 * d);
+		lp.bottomMargin = (int) (10 * d);
+		wrap.setLayoutParams(lp);
+
+		TextView badge = new TextView(this);
+		badge.setText(label);
+		badge.setTextColor(Color.parseColor("#E2E8F0"));
+		badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+		styleText(badge);
+		badge.setPadding((int) (14 * d), (int) (4 * d), (int) (14 * d), (int) (4 * d));
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#181E2B"));
+		bg.setCornerRadius(100f);
+		bg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
+		badge.setBackground(bg);
+
+		FrameLayout.LayoutParams bLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER
+		);
+		wrap.addView(badge, bLp);
+		return wrap;
+	}
+
+	private SpannableString formatMentionsSpannable(String raw) {
+		SpannableString ss = new SpannableString(raw);
+		int idx = 0;
+		while (idx < raw.length()) {
+			int at = raw.indexOf('@', idx);
+			if (at < 0) break;
+			int end = at + 1;
+			while (end < raw.length() && !Character.isWhitespace(raw.charAt(end))) {
+				end++;
+			}
+			if (end > at + 1) {
+				ss.setSpan(new ForegroundColorSpan(Color.parseColor("#38BDF8")), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+				ss.setSpan(new StyleSpan(Typeface.NORMAL), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+			}
+			idx = end;
+		}
+		return ss;
+	}
+
+	private void bindChatAvatar(ImageView target, String photoUrl) {
+		target.setOutlineProvider(new ViewOutlineProvider() {
+			@Override
+			public void getOutline(View view, Outline outline) {
+				outline.setOval(0, 0, view.getWidth(), view.getHeight());
+			}
+		});
+		target.setClipToOutline(true);
+
+		if (photoUrl != null && !photoUrl.isEmpty()) {
+			target.setPadding(0, 0, 0, 0);
+			target.clearColorFilter();
+			target.setBackgroundColor(Color.parseColor("#161A24"));
+			if (photoUrl.startsWith("data:image")) {
+				try {
+					String b64 = photoUrl.substring(photoUrl.indexOf(",") + 1);
+					byte[] bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+					Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+					if (bmp != null) {
+						target.setImageBitmap(bmp);
+						return;
+					}
+				} catch (Exception ignored) {}
+			} else {
+				Glide.with(getApplicationContext())
+					.load(Uri.parse(photoUrl))
+					.circleCrop()
+					.into(target);
+				return;
+			}
+		}
+
+		int pad = (int) (5 * getResources().getDisplayMetrics().density);
+		GradientDrawable fallbackBg = new GradientDrawable();
+		fallbackBg.setShape(GradientDrawable.OVAL);
+		fallbackBg.setColor(Color.parseColor("#1D2436"));
+		target.setBackground(fallbackBg);
+		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		target.setPadding(pad, pad, pad, pad);
+		target.setImageResource(R.drawable.ic_profile);
+		target.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+	}
+
+	private void clearReplyTarget() {
+		replyToId = "";
+		replyToUserKey = "";
+		replyToAuthor = "";
+		replyToSnippet = "";
+		if (replyBanner != null) replyBanner.setVisibility(View.GONE);
+	}
+
+	private void dispatchChatNotifications(
+		String text,
+		String stickerUrl,
+		String senderAuthor,
+		String senderUsername,
+		String senderEmail,
+		long senderExp,
+		boolean senderIsAdmin,
+		long timestamp
+	) {
+		FirebaseDatabase db = FirebaseDatabase.getInstance(FIREBASE_DB_URL);
+		String snippet = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? "[Stiker/GIF]" : "Pesan");
+		String myNotifKey = resolveNotifUserKey(currentUser != null ? currentUser.getUid() : "", senderEmail);
+		Set<String> notifiedKeys = new HashSet<>();
+
+		if (!replyToId.isEmpty() && !replyToUserKey.isEmpty()) {
+			String normTarget = replyToUserKey.trim().toLowerCase(Locale.US);
+			if (!normTarget.equals(myNotifKey) && notifiedKeys.add(normTarget)) {
+				pushNotificationToUser(
+					db, replyToUserKey.trim(), "reply",
+					senderAuthor, senderUsername, senderEmail, senderExp, senderIsAdmin,
+					snippet, timestamp
+				);
+			}
+		}
+
+		if (!text.isEmpty()) {
+			String lowerText = text.toLowerCase(Locale.US);
+			for (HashMap<String, Object> prof : allUsersList) {
+				if (prof == null) continue;
+				String uId = prof.get("_userId") != null ? prof.get("_userId").toString() : "";
+				String uEmail = prof.get("email") != null ? prof.get("email").toString().trim().toLowerCase(Locale.US) : "";
+				String targetKey = resolveNotifUserKey(uId, uEmail);
+				if (targetKey.isEmpty() || targetKey.equalsIgnoreCase(myNotifKey)) continue;
+
+				String uname = prof.get("username") != null ? prof.get("username").toString().trim().replaceFirst("^@", "").toLowerCase(Locale.US) : "";
+				String dname = prof.get("name") != null ? prof.get("name").toString().trim().toLowerCase(Locale.US) : "";
+
+				boolean tagged = (!uname.isEmpty() && lowerText.contains("@" + uname))
+					|| (!dname.isEmpty() && lowerText.contains("@" + dname));
+
+				if (tagged && notifiedKeys.add(targetKey.toLowerCase(Locale.US))) {
+					pushNotificationToUser(
+						db, targetKey, "mention",
+						senderAuthor, senderUsername, senderEmail, senderExp, senderIsAdmin,
+						text, timestamp
+					);
+				}
+			}
+		}
+	}
+
+	private void pushNotificationToUser(
+		FirebaseDatabase db,
+		String targetUserKey,
+		String type,
+		String actorName,
+		String actorUsername,
+		String actorEmail,
+		long actorExp,
+		boolean actorIsAdmin,
+		String snippet,
+		long timestamp
+	) {
+		if (targetUserKey == null || targetUserKey.trim().isEmpty()) return;
+		Map<String, Object> notifPayload = new HashMap<>();
+		notifPayload.put("type", type);
+		notifPayload.put("actorName", actorName);
+		notifPayload.put("actorUsername", actorUsername);
+		notifPayload.put("actorEmail", actorEmail);
+		notifPayload.put("actorExp", actorExp);
+		notifPayload.put("actorIsAdmin", actorIsAdmin);
+		notifPayload.put("snippet", snippet);
+		notifPayload.put("timestamp", timestamp);
+		notifPayload.put("read", false);
+
+		String notifId = db.getReference("notifications").child(targetUserKey).push().getKey();
+		if (notifId != null) {
+			db.getReference("notifications").child(targetUserKey).child(notifId).setValue(notifPayload);
+		}
+	}
+
+	private void sendMessage() {
+		if (currentUser == null || chatInput == null) return;
+		String text = chatInput.getText().toString().trim();
+
+		if (!editingMessageId.isEmpty()) {
+			if (text.isEmpty()) {
+				DongflixToast.show(this, "Pesan tidak boleh kosong");
+				return;
+			}
+			final String targetId = editingMessageId;
+			Map<String, Object> updates = new HashMap<>();
+			updates.put("text", text);
+			updates.put("edited", true);
+			liveChatRef.child(targetId).updateChildren(updates).addOnCompleteListener(new OnCompleteListener<Void>() {
+				@Override
+				public void onComplete(@NonNull Task<Void> task) {
+					if (task.isSuccessful()) {
+						chatInput.setText("");
+						cancelEditMode();
+					} else {
+						DongflixToast.show(ChatActivity.this, "Gagal menyimpan perubahan pesan");
+					}
+				}
+			});
+			return;
+		}
+
+		if (text.isEmpty() && selectedStickerUrl.isEmpty()) return;
+
+		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
+		String myId = getCurrentUserId();
+		HashMap<String, Object> prof = userProfileCache.get(myId);
+
+		final String author = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
+			? prof.get("name").toString().trim()
+			: (email.contains("@") ? email.split("@")[0] : "User");
+
+		final String username = (prof != null && prof.get("username") != null)
+			? prof.get("username").toString()
+			: (email.contains("@") ? email.split("@")[0] : "");
+
+		String photo = (prof != null && prof.get("photoURL") != null)
+			? prof.get("photoURL").toString()
+			: "";
+
+		final long exp = prof != null && prof.get("exp") != null ? parseLongVal(prof.get("exp")) : 0L;
+		final boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
+		final long nowTs = System.currentTimeMillis();
+		final String sentText = text;
+		final String sentSticker = selectedStickerUrl;
+
+		HashMap<String, Object> payload = new HashMap<>();
+		payload.put("uid", currentUser.getUid());
+		payload.put("email", email);
+		payload.put("author", author);
+		payload.put("username", username);
+		payload.put("photoURL", photo);
+		payload.put("exp", exp);
+		payload.put("text", sentText);
+		payload.put("stickerUrl", sentSticker);
+		payload.put("timestamp", nowTs);
+		payload.put("isAdmin", isAdm);
+
+		if (!replyToId.isEmpty()) {
+			HashMap<String, Object> repMap = new HashMap<>();
+			repMap.put("id", replyToId);
+			repMap.put("userKey", replyToUserKey);
+			repMap.put("author", replyToAuthor);
+			repMap.put("snippet", replyToSnippet);
+			payload.put("replyTo", repMap);
+		}
+
+		String key = String.valueOf(nowTs);
+		liveChatRef.child(key).setValue(payload).addOnCompleteListener(new OnCompleteListener<Void>() {
+			@Override
+			public void onComplete(@NonNull Task<Void> task) {
+				if (task.isSuccessful()) {
+					dispatchChatNotifications(sentText, sentSticker, author, username, email, exp, isAdm, nowTs);
+					chatInput.setText("");
+					selectedStickerUrl = "";
+					if (stickerPreviewBox != null) stickerPreviewBox.setVisibility(View.GONE);
+					clearReplyTarget();
+				} else {
+					DongflixToast.show(ChatActivity.this, "Gagal mengirim pesan");
+				}
+			}
+		});
+	}
+
+	@Override
+	public void finish() {
+		DongflixToast.dismissCurrent();
+		restoreMiniPlayerAfterChat();
+		super.finish();
+	}
+
+	@Override
+	protected void onDestroy() {
+		stopChatShimmer();
+		DongflixToast.dismissCurrent();
+		if (liveChatRef != null && chatListener != null) {
+			liveChatRef.removeEventListener(chatListener);
+		}
+		super.onDestroy();
+	}
+}
