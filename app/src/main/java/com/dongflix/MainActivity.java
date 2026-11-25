@@ -182,7 +182,7 @@ public class MainActivity extends AppCompatActivity {
 				pendingEditPhotoUrl = encoded;
 				bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
 			} else {
-				Toast.makeText(this, "Gagal memproses foto", Toast.LENGTH_SHORT).show();
+				DongflixToast.show(this, "Gagal memproses foto");
 			}
 		}
 	}
@@ -1440,7 +1440,7 @@ public class MainActivity extends AppCompatActivity {
 			new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					Toast.makeText(MainActivity.this, "Memeriksa pembaruan...", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(MainActivity.this, "Memeriksa pembaruan...");
 					UpdateCheckerDialog.checkForUpdate(MainActivity.this, true);
 				}
 			}
@@ -1871,7 +1871,7 @@ public class MainActivity extends AppCompatActivity {
 					intent.setType("image/*");
 					startActivityForResult(Intent.createChooser(intent, "Pilih Foto Profil"), REQ_PICK_AVATAR);
 				} catch (Exception e) {
-					Toast.makeText(MainActivity.this, "Tidak dapat membuka galeri", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(MainActivity.this, "Tidak dapat membuka galeri");
 				}
 			}
 		});
@@ -2012,7 +2012,7 @@ public class MainActivity extends AppCompatActivity {
 				final String newName = etName.getText().toString().trim();
 				String rawUser = etUsername.getText().toString().trim().replaceFirst("^@", "").replaceAll("\\s+", "_").toLowerCase(Locale.US);
 				if (newName.isEmpty()) {
-					Toast.makeText(MainActivity.this, "Nama tidak boleh kosong", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(MainActivity.this, "Nama tidak boleh kosong");
 					return;
 				}
 				if (rawUser.isEmpty()) {
@@ -2020,7 +2020,7 @@ public class MainActivity extends AppCompatActivity {
 					if (rawUser.isEmpty()) rawUser = "user";
 				}
 				if (rawUser.length() < 3) {
-					Toast.makeText(MainActivity.this, "Username minimal 3 karakter", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(MainActivity.this, "Username minimal 3 karakter");
 					return;
 				}
 
@@ -2036,7 +2036,7 @@ public class MainActivity extends AppCompatActivity {
 						if (!available) {
 							tvUsernameStatus.setText(message);
 							tvUsernameStatus.setTextColor(Color.parseColor("#F87171"));
-							Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+							DongflixToast.show(MainActivity.this, message);
 							return;
 						}
 
@@ -2062,7 +2062,7 @@ public class MainActivity extends AppCompatActivity {
 								.updateChildren(updates);
 						}
 
-						Toast.makeText(MainActivity.this, "Profil diperbarui", Toast.LENGTH_SHORT).show();
+						DongflixToast.show(MainActivity.this, "Profil diperbarui");
 						dialog.dismiss();
 					}
 				});
@@ -2387,12 +2387,12 @@ public class MainActivity extends AppCompatActivity {
 
 	private void openDownloadedVideoSafely(String filePath, String title) {
 		if (filePath == null || filePath.trim().isEmpty()) {
-			Toast.makeText(this, "File video tidak ditemukan", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(this, "File video tidak ditemukan");
 			return;
 		}
 		File videoFile = new File(filePath);
 		if (!videoFile.exists() || !videoFile.canRead() || videoFile.length() <= 0L) {
-			Toast.makeText(this, "File video rusak atau sudah dihapus", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(this, "File video rusak atau sudah dihapus");
 			renderActivePustakaTab();
 			return;
 		}
@@ -2412,7 +2412,7 @@ public class MainActivity extends AppCompatActivity {
 			intent.setDataAndType(uri, "video/*");
 			startActivity(Intent.createChooser(intent, "Putar " + title));
 		} catch (Exception e) {
-			Toast.makeText(this, "Tidak ada pemutar video yang mendukung file ini", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(this, "Tidak ada pemutar video yang mendukung file ini");
 		}
 	}
 
@@ -2593,11 +2593,11 @@ public class MainActivity extends AppCompatActivity {
 		if (isFavoriteSlug(slug)) {
 			favPrefs.edit().remove("fav_" + slug).apply();
 			if (favNode != null) favNode.removeValue();
-			Toast.makeText(this, "Dihapus dari Daftarku", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(this, "Dihapus dari Daftarku");
 		} else {
 			favPrefs.edit().putString("fav_" + slug, new Gson().toJson(item)).apply();
 			if (favNode != null) favNode.setValue(item);
-			Toast.makeText(this, "Disimpan ke Daftarku: " + title, Toast.LENGTH_SHORT).show();
+			DongflixToast.show(this, "Disimpan ke Daftarku: " + title);
 		}
 		updateHeroFavoriteIcon(slug);
 		if (activePustakaTab == 1) renderActivePustakaTab();
@@ -2624,12 +2624,7 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	private void openNotificationsSheet() {
-		String latestTitle = currentHeroItem != null ? safeStr(currentHeroItem, "title", "Episode terbaru Dongflix telah tersedia.") : "Episode terbaru Dongflix telah tersedia.";
-		new AlertDialog.Builder(this)
-			.setTitle("Notifikasi")
-			.setMessage("• Update katalog harian aktif\n• " + latestTitle)
-			.setPositiveButton("Tutup", null)
-			.show();
+		startActivity(new Intent(this, NotificationActivity.class));
 	}
 
 	private void showKeyboardOnSearch() {
@@ -2737,6 +2732,7 @@ public class MainActivity extends AppCompatActivity {
 	protected void onDestroy() {
 		stopMainShimmer();
 		stopHeroAutoSlider();
+		DongflixToast.dismissCurrent();
 		detachFirebasePopularityListeners();
 		if (userProfileRef != null && userProfileListener != null) {
 			userProfileRef.removeEventListener(userProfileListener);
