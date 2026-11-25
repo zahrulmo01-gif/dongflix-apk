@@ -150,7 +150,6 @@ public class MainActivity extends AppCompatActivity {
 		}
 
 		setContentView(R.layout.activity_main);
-		CrashLogDialog.showIfAvailable(this);
 
 		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
 		favPrefs = getSharedPreferences("dongflix_favorites", Context.MODE_PRIVATE);
