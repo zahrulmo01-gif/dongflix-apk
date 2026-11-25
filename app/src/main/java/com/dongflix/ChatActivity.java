@@ -942,7 +942,6 @@ public class ChatActivity extends AppCompatActivity {
 		mentionMenu.setVisibility(View.GONE);
 		chatBottomBar.addView(mentionMenu);
 
-		// Kontainer ketik pesan: rapi saat 1 baris maupun hingga 3 baris
 		FrameLayout inputGlassFrame = new FrameLayout(this);
 		FrameLayout.LayoutParams igLp = new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
@@ -2079,7 +2078,7 @@ public class ChatActivity extends AppCompatActivity {
 			}
 			if (end > at + 1) {
 				ss.setSpan(new ForegroundColorSpan(Color.parseColor("#38BDF8")), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-				ss.setSpan(new StyleSpan(Typeface.BOLD), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+				ss.setSpan(new StyleSpan(Typeface.NORMAL), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 			}
 			idx = end;
 		}
@@ -2136,6 +2135,97 @@ public class ChatActivity extends AppCompatActivity {
 		if (replyBanner != null) replyBanner.setVisibility(View.GONE);
 	}
 
+	private void dispatchChatNotifications(
+		String text,
+		String stickerUrl,
+		String senderAuthor,
+		String senderUsername,
+		String senderEmail,
+		long senderExp,
+		boolean senderIsAdmin,
+		long timestamp
+	) {
+		FirebaseDatabase db = FirebaseDatabase.getInstance(FIREBASE_DB_URL);
+		String snippet = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? "[Stiker/GIF]" : "Pesan");
+		String myEmail = senderEmail != null ? senderEmail.trim().toLowerCase(Locale.US) : "";
+
+		if (!replyToId.isEmpty() && !replyToAuthor.isEmpty()) {
+			for (Map.Entry<String, HashMap<String, Object>> entry : userProfileCache.entrySet()) {
+				HashMap<String, Object> prof = entry.getValue();
+				if (prof == null) continue;
+				String uName = prof.get("name") != null ? prof.get("name").toString().trim() : "";
+				String uHandle = prof.get("username") != null ? prof.get("username").toString().trim() : "";
+				String uEmail = prof.get("email") != null ? prof.get("email").toString().trim().toLowerCase(Locale.US) : "";
+				if (!uEmail.isEmpty() && uEmail.equalsIgnoreCase(myEmail)) continue;
+
+				if ((!uName.isEmpty() && uName.equalsIgnoreCase(replyToAuthor))
+					|| (!uHandle.isEmpty() && uHandle.equalsIgnoreCase(replyToAuthor))) {
+					String targetKey = !uEmail.isEmpty() ? uEmail.replace(".", ",") : entry.getKey();
+					pushNotificationToUser(
+						db, targetKey, "reply",
+						senderAuthor, senderUsername, senderEmail, senderExp, senderIsAdmin,
+						snippet, timestamp
+					);
+				}
+			}
+		}
+
+		if (!text.isEmpty()) {
+			String lowerText = text.toLowerCase(Locale.US);
+			for (Map.Entry<String, HashMap<String, Object>> entry : userProfileCache.entrySet()) {
+				HashMap<String, Object> prof = entry.getValue();
+				if (prof == null) continue;
+				String uEmail = prof.get("email") != null ? prof.get("email").toString().trim().toLowerCase(Locale.US) : "";
+				if (!uEmail.isEmpty() && uEmail.equalsIgnoreCase(myEmail)) continue;
+
+				String uname = prof.get("username") != null ? prof.get("username").toString().trim().replaceFirst("^@", "").toLowerCase(Locale.US) : "";
+				String dname = prof.get("name") != null ? prof.get("name").toString().trim().toLowerCase(Locale.US) : "";
+
+				boolean tagged = (!uname.isEmpty() && lowerText.contains("@" + uname))
+					|| (!dname.isEmpty() && lowerText.contains("@" + dname));
+
+				if (tagged) {
+					String targetKey = !uEmail.isEmpty() ? uEmail.replace(".", ",") : entry.getKey();
+					pushNotificationToUser(
+						db, targetKey, "mention",
+						senderAuthor, senderUsername, senderEmail, senderExp, senderIsAdmin,
+						text, timestamp
+					);
+				}
+			}
+		}
+	}
+
+	private void pushNotificationToUser(
+		FirebaseDatabase db,
+		String targetUserKey,
+		String type,
+		String actorName,
+		String actorUsername,
+		String actorEmail,
+		long actorExp,
+		boolean actorIsAdmin,
+		String snippet,
+		long timestamp
+	) {
+		if (targetUserKey == null || targetUserKey.trim().isEmpty()) return;
+		Map<String, Object> notifPayload = new HashMap<>();
+		notifPayload.put("type", type);
+		notifPayload.put("actorName", actorName);
+		notifPayload.put("actorUsername", actorUsername);
+		notifPayload.put("actorEmail", actorEmail);
+		notifPayload.put("actorExp", actorExp);
+		notifPayload.put("actorIsAdmin", actorIsAdmin);
+		notifPayload.put("snippet", snippet);
+		notifPayload.put("timestamp", timestamp);
+		notifPayload.put("read", false);
+
+		String notifId = db.getReference("notifications").child(targetUserKey).push().getKey();
+		if (notifId != null) {
+			db.getReference("notifications").child(targetUserKey).child(notifId).setValue(notifPayload);
+		}
+	}
+
 	private void sendMessage() {
 		if (currentUser == null || chatInput == null) return;
 		String text = chatInput.getText().toString().trim();
@@ -2169,11 +2259,11 @@ public class ChatActivity extends AppCompatActivity {
 		String uKey = !email.isEmpty() ? email.replace(".", ",") : currentUser.getUid();
 		HashMap<String, Object> prof = userProfileCache.get(uKey);
 
-		String author = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
+		final String author = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
 			? prof.get("name").toString().trim()
 			: (email.contains("@") ? email.split("@")[0] : "User");
 
-		String username = (prof != null && prof.get("username") != null)
+		final String username = (prof != null && prof.get("username") != null)
 			? prof.get("username").toString()
 			: (email.contains("@") ? email.split("@")[0] : "");
 
@@ -2181,8 +2271,11 @@ public class ChatActivity extends AppCompatActivity {
 			? prof.get("photoURL").toString()
 			: "";
 
-		long exp = prof != null && prof.get("exp") != null ? parseLongVal(prof.get("exp")) : 0L;
-		boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
+		final long exp = prof != null && prof.get("exp") != null ? parseLongVal(prof.get("exp")) : 0L;
+		final boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
+		final long nowTs = System.currentTimeMillis();
+		final String sentText = text;
+		final String sentSticker = selectedStickerUrl;
 
 		HashMap<String, Object> payload = new HashMap<>();
 		payload.put("uid", currentUser.getUid());
@@ -2191,9 +2284,9 @@ public class ChatActivity extends AppCompatActivity {
 		payload.put("username", username);
 		payload.put("photoURL", photo);
 		payload.put("exp", exp);
-		payload.put("text", text);
-		payload.put("stickerUrl", selectedStickerUrl);
-		payload.put("timestamp", System.currentTimeMillis());
+		payload.put("text", sentText);
+		payload.put("stickerUrl", sentSticker);
+		payload.put("timestamp", nowTs);
 		payload.put("isAdmin", isAdm);
 
 		if (!replyToId.isEmpty()) {
@@ -2204,11 +2297,12 @@ public class ChatActivity extends AppCompatActivity {
 			payload.put("replyTo", repMap);
 		}
 
-		String key = String.valueOf(System.currentTimeMillis());
+		String key = String.valueOf(nowTs);
 		liveChatRef.child(key).setValue(payload).addOnCompleteListener(new OnCompleteListener<Void>() {
 			@Override
 			public void onComplete(@NonNull Task<Void> task) {
 				if (task.isSuccessful()) {
+					dispatchChatNotifications(sentText, sentSticker, author, username, email, exp, isAdm, nowTs);
 					chatInput.setText("");
 					selectedStickerUrl = "";
 					if (stickerPreviewBox != null) stickerPreviewBox.setVisibility(View.GONE);
