@@ -7,27 +7,33 @@ import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 public class DongflixToast {
 
 	private static final Handler mainHandler = new Handler(Looper.getMainLooper());
-	private static Toast activeToast;
+	private static android.app.Dialog activeDialog;
+	private static Runnable dismissRunnable;
 
 	public static void show(Context context, String message) {
-		show(context, message, Toast.LENGTH_SHORT);
+		show(context, message, 2200L);
 	}
 
-	public static void show(final Context context, final String message, final int duration) {
+	public static void show(final Context context, final String message, final long durationMs) {
 		if (context == null || message == null || message.trim().isEmpty()) return;
 
 		mainHandler.post(new Runnable() {
@@ -39,21 +45,25 @@ public class DongflixToast {
 				}
 
 				try {
-					Context appCtx = context.getApplicationContext();
+					dismissCurrent();
 					float d = context.getResources().getDisplayMetrics().density;
 
-					if (activeToast != null) {
-						try {
-							activeToast.cancel();
-						} catch (Throwable ignored) {}
-					}
+					final android.app.Dialog dialog = new android.app.Dialog(context);
+					dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+					dialog.setCancelable(true);
+					dialog.setCanceledOnTouchOutside(false);
 
 					LinearLayout pill = new LinearLayout(context);
 					pill.setOrientation(LinearLayout.HORIZONTAL);
 					pill.setGravity(Gravity.CENTER_VERTICAL);
-					pill.setPadding((int) (16 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+					pill.setPadding((int) (16 * d), (int) (10 * d), (int) (12 * d), (int) (10 * d));
+					LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(
+						ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+					);
+					pillLp.leftMargin = (int) (16 * d);
+					pillLp.rightMargin = (int) (16 * d);
+					pill.setLayoutParams(pillLp);
 
-					// Kapsul abu gelap bulat tanpa stroke
 					GradientDrawable bg = new GradientDrawable();
 					bg.setColor(Color.parseColor("#24262E"));
 					bg.setCornerRadius(100f);
@@ -63,30 +73,86 @@ public class DongflixToast {
 					tv.setText(message.trim());
 					tv.setTextColor(Color.parseColor("#F1F5F9"));
 					tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+					tv.setMaxLines(3);
 					LinearLayout.LayoutParams tvLp = new LinearLayout.LayoutParams(
-						LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+						ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 					);
 					tvLp.rightMargin = (int) (10 * d);
 					tv.setLayoutParams(tvLp);
 
+					FrameLayout closeBtn = new FrameLayout(context);
+					int btnPx = (int) (24 * d);
+					closeBtn.setLayoutParams(new LinearLayout.LayoutParams(btnPx, btnPx));
+					GradientDrawable btnBg = new GradientDrawable();
+					btnBg.setShape(GradientDrawable.OVAL);
+					btnBg.setColor(Color.parseColor("#343742"));
+					closeBtn.setBackground(btnBg);
+
 					ImageView closeIcon = new ImageView(context);
-					int iconSize = (int) (18 * d);
-					closeIcon.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-					closeIcon.setImageDrawable(createCloseCrossDrawable(Color.parseColor("#CBD5E1")));
+					int iconSize = (int) (14 * d);
+					closeIcon.setLayoutParams(new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER));
+					closeIcon.setImageDrawable(createCloseCrossDrawable(Color.parseColor("#E2E8F0")));
+					closeBtn.addView(closeIcon);
+
+					closeBtn.setOnClickListener(new View.OnClickListener() {
+						@Override
+						public void onClick(View v) {
+							dismissCurrent();
+						}
+					});
 
 					pill.addView(tv);
-					pill.addView(closeIcon);
+					pill.addView(closeBtn);
+					dialog.setContentView(pill);
 
-					Toast toast = new Toast(appCtx != null ? appCtx : context);
-					toast.setDuration(duration == Toast.LENGTH_LONG ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT);
-					toast.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, (int) (84 * d));
-					toast.setView(pill);
+					Window win = dialog.getWindow();
+					if (win != null) {
+						win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+						win.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+						win.addFlags(
+							WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+								| WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+								| WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+						);
+						win.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+						WindowManager.LayoutParams wlp = win.getAttributes();
+						wlp.y = (int) (84 * d);
+						wlp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+						wlp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+						win.setAttributes(wlp);
+					}
 
-					activeToast = toast;
-					toast.show();
+					activeDialog = dialog;
+					dialog.show();
+
+					long delay = durationMs > 0L ? durationMs : 2200L;
+					dismissRunnable = new Runnable() {
+						@Override
+						public void run() {
+							if (activeDialog == dialog) {
+								dismissCurrent();
+							}
+						}
+					};
+					mainHandler.postDelayed(dismissRunnable, delay);
 				} catch (Throwable ignored) {}
 			}
 		});
+	}
+
+	public static void dismissCurrent() {
+		if (dismissRunnable != null) {
+			mainHandler.removeCallbacks(dismissRunnable);
+			dismissRunnable = null;
+		}
+		if (activeDialog != null) {
+			try {
+				if (activeDialog.isShowing()) {
+					activeDialog.dismiss();
+				}
+			} catch (Throwable ignored) {}
+			activeDialog = null;
+		}
 	}
 
 	private static Drawable createCloseCrossDrawable(final int color) {
@@ -106,8 +172,8 @@ public class DongflixToast {
 				float h = b.height();
 				if (w <= 0 || h <= 0) return;
 
-				paint.setStrokeWidth(Math.max(2f, w * 0.11f));
-				float pad = w * 0.25f;
+				paint.setStrokeWidth(Math.max(2f, w * 0.12f));
+				float pad = w * 0.24f;
 				canvas.drawLine(pad, pad, w - pad, h - pad, paint);
 				canvas.drawLine(w - pad, pad, pad, h - pad, paint);
 			}
