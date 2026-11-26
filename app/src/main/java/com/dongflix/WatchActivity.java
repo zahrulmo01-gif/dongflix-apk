@@ -39,7 +39,6 @@ import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.text.format.DateFormat;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -69,11 +68,13 @@ import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -101,7 +102,6 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -137,7 +137,7 @@ public class WatchActivity extends AppCompatActivity {
 	private RequestNetwork.RequestListener _req_watch_request_listener;
 
 	private TextureView playerTextureView;
-	private WebView fallbackWebView;
+	private WebView hiddenSnifferWebView;
 	private FrameLayout layoutPlayer;
 	private View playerControlsOverlay, gradientTop, gradientBottom, topBar, bottomControls, dividerLineView;
 	private ImageView btnBack, btnCast, btnLock, btnSettings, btnPrevEpisode, btnRewind, btnPlay, btnForward, btnNextEpisode, btnFullscreen, imagePoster, iconExpandDetail, iconCommentChevron;
@@ -175,6 +175,7 @@ public class WatchActivity extends AppCompatActivity {
 	public Runnable progressLoop;
 	public Runnable hideControlsRunnable;
 	public Runnable autoDowngradeRunnable;
+	public Runnable snifferTimeoutRunnable;
 	public boolean areControlsVisible = true;
 	public String currentPlayingUrl = "";
 	public String currentStreamReferer = "";
@@ -200,7 +201,7 @@ public class WatchActivity extends AppCompatActivity {
 	public ArrayList<String> qualityUrls = new ArrayList<>();
 
 	public String dmSessionCookie = "";
-	private boolean isWebViewFallbackActive = false;
+	private boolean isSnifferActive = false;
 	private boolean isResumingFromMiniPlayer = false;
 
 	private String pendingHistoryEpisode = "";
@@ -459,7 +460,7 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	private void addExpToCurrentUser(final long amount) {
-		String key = getCurrentUserKey();
+		final String key = getCurrentUserKey();
 		if (key.isEmpty() || amount <= 0L) return;
 
 		DatabaseReference expRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
@@ -748,6 +749,33 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
+	private void startBackgroundDownloadForCurrentEpisode() {
+		if (currentPlayingUrl == null || currentPlayingUrl.trim().isEmpty()) {
+			DongflixToast.show(this, "Stream video belum siap untuk diunduh");
+			return;
+		}
+		String titleToSave = !detailTitle.isEmpty()
+			? detailTitle
+			: (textJudul != null && !textJudul.getText().toString().trim().isEmpty()
+				? textJudul.getText().toString().trim() : currentSlug);
+
+		String epLabel = "EP " + (currentEpisodeIndex + 1);
+		if (episodeList != null && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.size()) {
+			Object epObj = episodeList.get(currentEpisodeIndex).get("episode");
+			if (epObj != null && !epObj.toString().trim().isEmpty()) {
+				String rawEp = epObj.toString().replace("Ep ", "").replace("Eps ", "").trim();
+				epLabel = "EP " + rawEp;
+			}
+		}
+
+		DongflixToast.show(this, "Unduhan berjalan di latar belakang");
+		DongflixDownloadManager.getInstance().startDownload(
+			this,
+			titleToSave,
+			epLabel,
+			currentPlayingUrl.trim()
+		);
+	}
 	private void setupCommentSection() {
 		if (btnCommentSection == null) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -1397,7 +1425,7 @@ public class WatchActivity extends AppCompatActivity {
 
 				FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
 				if (u == null) {
-					Toast.makeText(WatchActivity.this, "Silakan login untuk berkomentar", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(WatchActivity.this, "Silakan login untuk berkomentar");
 					return;
 				}
 
@@ -2623,6 +2651,17 @@ public class WatchActivity extends AppCompatActivity {
 			rootWatch.setPadding(0, 0, 0, 0);
 		}
 
+		if (layoutPlayer != null) {
+			layoutPlayer.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+				@Override
+				public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft, int oldTop, int oldRight, int oldBottom) {
+					if ((right - left) != (oldRight - oldLeft) || (bottom - top) != (oldBottom - oldTop)) {
+						adjustVideoAspectRatio();
+					}
+				}
+			});
+		}
+
 		if (btnLock != null) {
 			btnLock.setVisibility(View.GONE);
 		}
@@ -2825,14 +2864,22 @@ public class WatchActivity extends AppCompatActivity {
 
 	public void adjustVideoAspectRatio() {
 		if (playerTextureView == null || layoutPlayer == null) return;
-		if (currentVideoWidth <= 0 || currentVideoHeight <= 0) return;
 
 		layoutPlayer.post(new Runnable() {
 			@Override
 			public void run() {
+				if (playerTextureView == null || layoutPlayer == null) return;
 				int containerWidth = layoutPlayer.getWidth();
 				int containerHeight = layoutPlayer.getHeight();
 				if (containerWidth <= 0 || containerHeight <= 0) return;
+
+				if (currentVideoWidth <= 0 || currentVideoHeight <= 0) {
+					FrameLayout.LayoutParams defLp = new FrameLayout.LayoutParams(
+						containerWidth, containerHeight, Gravity.CENTER
+					);
+					playerTextureView.setLayoutParams(defLp);
+					return;
+				}
 
 				float videoAspect = (float) currentVideoWidth / currentVideoHeight;
 				float containerAspect = (float) containerWidth / containerHeight;
@@ -2858,13 +2905,11 @@ public class WatchActivity extends AppCompatActivity {
 					}
 				}
 
-				FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) playerTextureView.getLayoutParams();
-				lp.width = targetWidth;
-				lp.height = targetHeight;
-				lp.gravity = Gravity.CENTER;
+				FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(targetWidth, targetHeight, Gravity.CENTER);
 				playerTextureView.setLayoutParams(lp);
 				playerTextureView.setScaleX(1.0f);
 				playerTextureView.setScaleY(1.0f);
+				playerTextureView.requestLayout();
 			}
 		});
 	}
@@ -2891,7 +2936,7 @@ public class WatchActivity extends AppCompatActivity {
 		isScreenLocked = true;
 		hideControls();
 		showUnlockPillTemporarily();
-		Toast.makeText(this, "Layar dikunci", Toast.LENGTH_SHORT).show();
+		DongflixToast.show(this, "Layar dikunci");
 	}
 
 	private void unlockScreenControls() {
@@ -2903,7 +2948,7 @@ public class WatchActivity extends AppCompatActivity {
 			playerHandler.removeCallbacks(hideUnlockBtnRunnable);
 		}
 		showControls();
-		Toast.makeText(this, "Kunci layar dibuka", Toast.LENGTH_SHORT).show();
+		DongflixToast.show(this, "Kunci layar dibuka");
 	}
 
 	private void showUnlockPillTemporarily() {
@@ -3449,7 +3494,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	public void showAllEpisodesBottomSheet() {
 		if (episodeList == null || episodeList.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Daftar episode belum dimuat", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(WatchActivity.this, "Daftar episode belum dimuat");
 			return;
 		}
 
@@ -3555,7 +3600,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	public void showServerDialog() {
 		if (currentEpisodeServerNames == null || currentEpisodeServerNames.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Daftar server belum siap", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(WatchActivity.this, "Daftar server belum siap");
 			return;
 		}
 
@@ -3585,7 +3630,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	public void showQualityDialog() {
 		if (qualityNames == null || qualityNames.isEmpty()) {
-			Toast.makeText(WatchActivity.this, "Pilihan resolusi belum siap", Toast.LENGTH_SHORT).show();
+			DongflixToast.show(WatchActivity.this, "Pilihan resolusi belum siap");
 			return;
 		}
 
@@ -3736,6 +3781,7 @@ public class WatchActivity extends AppCompatActivity {
 	@Override
 	public void onDestroy() {
 		detachCommentsListener();
+		DongflixToast.dismissCurrent();
 		if (shimmerAnimator != null) {
 			shimmerAnimator.cancel();
 			shimmerAnimator = null;
@@ -3744,6 +3790,7 @@ public class WatchActivity extends AppCompatActivity {
 			if (progressLoop != null) playerHandler.removeCallbacks(progressLoop);
 			if (hideControlsRunnable != null) playerHandler.removeCallbacks(hideControlsRunnable);
 			if (autoDowngradeRunnable != null) playerHandler.removeCallbacks(autoDowngradeRunnable);
+			if (snifferTimeoutRunnable != null) playerHandler.removeCallbacks(snifferTimeoutRunnable);
 			if (hideUnlockBtnRunnable != null) playerHandler.removeCallbacks(hideUnlockBtnRunnable);
 			playerHandler.removeCallbacksAndMessages(null);
 		}
@@ -3759,12 +3806,12 @@ public class WatchActivity extends AppCompatActivity {
 			mediaPlayer = null;
 		}
 
-		if (fallbackWebView != null) {
+		if (hiddenSnifferWebView != null) {
 			try {
-				fallbackWebView.stopLoading();
-				fallbackWebView.destroy();
+				hiddenSnifferWebView.stopLoading();
+				hiddenSnifferWebView.destroy();
 			} catch (Exception ignored) {}
-			fallbackWebView = null;
+			hiddenSnifferWebView = null;
 		}
 
 		if (playerSurface != null) {
@@ -3791,16 +3838,26 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			}
 		}
-		if (fallbackWebView != null && isWebViewFallbackActive) {
-			fallbackWebView.onPause();
-		}
 	}
 
 	@Override
 	public void onResume() {
 		super.onResume();
-		if (fallbackWebView != null && isWebViewFallbackActive) {
-			fallbackWebView.onResume();
+		if (isFullscreen) {
+			applyFullscreenSystemUi(true);
+			adjustVideoAspectRatio();
+		}
+	}
+
+	@Override
+	public void onConfigurationChanged(@NonNull Configuration newConfig) {
+		super.onConfigurationChanged(newConfig);
+		if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE && !isFullscreen) {
+			toggleFullscreen();
+		} else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT && isFullscreen) {
+			toggleFullscreen();
+		} else {
+			adjustVideoAspectRatio();
 		}
 	}
 
@@ -3900,7 +3957,7 @@ public class WatchActivity extends AppCompatActivity {
 				} catch (Exception ignored) {}
 			}
 			updateQualityBadgeText();
-			Toast.makeText(WatchActivity.this, "Jaringan lambat, otomatis ke " + qualityNames.get(lowerIdx), Toast.LENGTH_SHORT).show();
+			DongflixToast.show(WatchActivity.this, "Jaringan lambat, otomatis ke " + qualityNames.get(lowerIdx));
 			playVideoUrl(qualityUrls.get(lowerIdx), currentPos);
 		}
 	}
@@ -4094,62 +4151,58 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
-	private void hideFallbackWebView() {
-		isWebViewFallbackActive = false;
-		if (fallbackWebView != null) {
-			try {
-				fallbackWebView.stopLoading();
-				fallbackWebView.loadUrl("about:blank");
-				fallbackWebView.setVisibility(View.GONE);
-			} catch (Exception ignored) {}
+	private void stopHiddenSniffer() {
+		isSnifferActive = false;
+		if (playerHandler != null && snifferTimeoutRunnable != null) {
+			playerHandler.removeCallbacks(snifferTimeoutRunnable);
 		}
-		if (playerTextureView != null) {
-			playerTextureView.setVisibility(View.VISIBLE);
+		if (hiddenSnifferWebView != null) {
+			try {
+				hiddenSnifferWebView.stopLoading();
+				hiddenSnifferWebView.loadUrl("about:blank");
+			} catch (Exception ignored) {}
 		}
 	}
 
-	private void playViaWebViewInterceptor(final String embedUrl) {
+	// Sniffer tersembunyi di belakang player agar OK.ru / server embed tetap masuk ke native MediaPlayer tanpa menimpa layar
+	private void sniffStreamForPlayer(final String embedUrl, final int seekOnReadyMs) {
 		runOnUiThread(new Runnable() {
 			@Override
 			public void run() {
 				try {
-					if (mediaPlayer != null) {
-						try { mediaPlayer.stop(); mediaPlayer.reset(); mediaPlayer.release(); } catch (Exception ignored) {}
-						mediaPlayer = null;
+					stopHiddenSniffer();
+					isSnifferActive = true;
+
+					if (hiddenSnifferWebView == null && layoutPlayer != null) {
+						hiddenSnifferWebView = new WebView(WatchActivity.this);
+						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(1, 1);
+						hiddenSnifferWebView.setLayoutParams(lp);
+						hiddenSnifferWebView.setAlpha(0f);
+						hiddenSnifferWebView.setVisibility(View.INVISIBLE);
+						layoutPlayer.addView(hiddenSnifferWebView, 0);
 					}
 
-					if (fallbackWebView == null && layoutPlayer != null) {
-						fallbackWebView = new WebView(WatchActivity.this);
-						FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-							ViewGroup.LayoutParams.MATCH_PARENT,
-							ViewGroup.LayoutParams.MATCH_PARENT
-						);
-						fallbackWebView.setLayoutParams(lp);
-						fallbackWebView.setBackgroundColor(Color.BLACK);
-						layoutPlayer.addView(fallbackWebView, 0);
-					}
-
-					if (fallbackWebView != null) {
-						WebSettings ws = fallbackWebView.getSettings();
+					if (hiddenSnifferWebView != null) {
+						WebSettings ws = hiddenSnifferWebView.getSettings();
 						ws.setJavaScriptEnabled(true);
 						ws.setDomStorageEnabled(true);
 						ws.setMediaPlaybackRequiresUserGesture(false);
-						ws.setAllowFileAccess(true);
 						ws.setUserAgentString("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
 
-						fallbackWebView.setWebChromeClient(new WebChromeClient());
-						fallbackWebView.setWebViewClient(new WebViewClient() {
+						hiddenSnifferWebView.setWebChromeClient(new WebChromeClient());
+						hiddenSnifferWebView.setWebViewClient(new WebViewClient() {
 							@Override
 							public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
 								if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request != null && request.getUrl() != null) {
 									final String reqUrl = request.getUrl().toString();
 									String low = reqUrl.toLowerCase();
-									if ((low.contains(".m3u8") || low.contains(".mp4")) && !low.contains("ads") && !low.contains("analytics") && !low.contains("tracker")) {
+									if ((low.contains(".m3u8") || low.contains(".mp4") || low.contains("okcdn.ru"))
+										&& !low.contains("ads") && !low.contains("analytics") && !low.contains("tracker")) {
 										runOnUiThread(new Runnable() {
 											@Override
 											public void run() {
-												if (isWebViewFallbackActive) {
-													hideFallbackWebView();
+												if (isSnifferActive) {
+													stopHiddenSniffer();
 													qualityNames.clear();
 													qualityUrls.clear();
 													qualityNames.add("Auto");
@@ -4157,7 +4210,7 @@ public class WatchActivity extends AppCompatActivity {
 													isAutoQualityMode = true;
 													selectedQualityIndex = 0;
 													updateQualityBadgeText();
-													playVideoUrl(reqUrl, savedSeekPosition);
+													playVideoUrl(reqUrl, seekOnReadyMs);
 												}
 											}
 										});
@@ -4165,28 +4218,33 @@ public class WatchActivity extends AppCompatActivity {
 								}
 								return super.shouldInterceptRequest(view, request);
 							}
-
-							@Override
-							public void onPageFinished(WebView view, String url) {
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-								if (btnPlay != null) {
-									btnPlay.setEnabled(true);
-									btnPlay.setAlpha(1.0f);
-								}
-							}
 						});
 
-						isWebViewFallbackActive = true;
-						if (playerTextureView != null) playerTextureView.setVisibility(View.GONE);
-						fallbackWebView.setVisibility(View.VISIBLE);
-						if (playerControlsOverlay != null) playerControlsOverlay.bringToFront();
+						if (playerHandler != null) {
+							snifferTimeoutRunnable = new Runnable() {
+								@Override
+								public void run() {
+									if (isSnifferActive) {
+										stopHiddenSniffer();
+										if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+										if (btnPlay != null) {
+											btnPlay.setEnabled(true);
+											btnPlay.setAlpha(1.0f);
+										}
+										DongflixToast.show(WatchActivity.this, "Stream OK.ru tidak ditemukan, coba server lain");
+									}
+								}
+							};
+							playerHandler.postDelayed(snifferTimeoutRunnable, 8000L);
+						}
 
 						Map<String, String> extraHeaders = new HashMap<>();
-						extraHeaders.put("Referer", "https://anichin.cafe/");
-						fallbackWebView.loadUrl(embedUrl, extraHeaders);
+						extraHeaders.put("Referer", "https://ok.ru/");
+						hiddenSnifferWebView.loadUrl(embedUrl, extraHeaders);
 					}
 				} catch (Exception e) {
 					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					DongflixToast.show(WatchActivity.this, "Gagal memuat stream server");
 				}
 			}
 		});
@@ -4195,7 +4253,10 @@ public class WatchActivity extends AppCompatActivity {
 	public void playVideoUrl(final String rawUrl, final int targetSeek) {
 		if (rawUrl == null || rawUrl.trim().isEmpty()) return;
 
-		hideFallbackWebView();
+		stopHiddenSniffer();
+		if (playerTextureView != null) {
+			playerTextureView.setVisibility(View.VISIBLE);
+		}
 
 		String normalized = rawUrl.trim();
 		if (normalized.startsWith("Https://")) {
@@ -4249,7 +4310,7 @@ public class WatchActivity extends AppCompatActivity {
 					Map<String, String> headers = new HashMap<>();
 					headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
-					if (cleanUrl.contains("ok.ru") || cleanUrl.contains("odnoklassniki")) {
+					if (cleanUrl.contains("ok.ru") || cleanUrl.contains("odnoklassniki") || cleanUrl.contains("okcdn")) {
 						headers.put("Referer", "https://ok.ru/");
 					} else if (cleanUrl.contains("dailymotion") || cleanUrl.contains("dmcdn")) {
 						headers.put("Referer", "https://www.dailymotion.com/");
@@ -4397,7 +4458,7 @@ public class WatchActivity extends AppCompatActivity {
 								btnPlay.setAlpha(1.0f);
 								btnPlay.setImageResource(R.drawable.ic_play1);
 							}
-							Toast.makeText(WatchActivity.this, "Gagal memutar stream, coba server lain", Toast.LENGTH_SHORT).show();
+							DongflixToast.show(WatchActivity.this, "Gagal memutar stream, coba server lain");
 							return true;
 						}
 					});
@@ -4415,34 +4476,64 @@ public class WatchActivity extends AppCompatActivity {
 		});
 	}
 
+	private void applyFullscreenSystemUi(boolean fullscreen) {
+		Window window = getWindow();
+		View decorView = window.getDecorView();
+		if (fullscreen) {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+				WindowManager.LayoutParams lp = window.getAttributes();
+				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+				window.setAttributes(lp);
+			}
+			window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+				WindowInsetsControllerCompat ctrl = WindowCompat.getInsetsController(window, decorView);
+				if (ctrl != null) {
+					ctrl.hide(WindowInsetsCompat.Type.systemBars());
+					ctrl.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+				}
+			} else {
+				decorView.setSystemUiVisibility(
+					View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+					| View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+					| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+					| View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+					| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+					| View.SYSTEM_UI_FLAG_FULLSCREEN
+				);
+			}
+		} else {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+				WindowManager.LayoutParams lp = window.getAttributes();
+				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+				window.setAttributes(lp);
+			}
+			window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+				WindowInsetsControllerCompat ctrl = WindowCompat.getInsetsController(window, decorView);
+				if (ctrl != null) {
+					ctrl.show(WindowInsetsCompat.Type.systemBars());
+				}
+			} else {
+				decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+			}
+		}
+	}
+
 	public void toggleFullscreen() {
-		final Window window = getWindow();
-		final View decorView = window.getDecorView();
 		final View rootWatch = findViewById(R.id.rootWatchLayout);
 		final View scrollContent = findViewById(R.id.vscroll16);
 		final FrameLayout playContainer = findViewById(R.id.frame_layout5);
 		final float density = getResources().getDisplayMetrics().density;
 
 		if (!isFullscreen) {
+			isFullscreen = true;
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
 			if (rootWatch != null) {
 				rootWatch.setPadding(0, 0, 0, 0);
 			}
-
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-				WindowManager.LayoutParams lp = window.getAttributes();
-				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-				window.setAttributes(lp);
-			}
-
-			window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-
-			decorView.setSystemUiVisibility(
-				View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-				| View.SYSTEM_UI_FLAG_FULLSCREEN
-				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-			);
+			applyFullscreenSystemUi(true);
 
 			if (scrollContent != null) scrollContent.setVisibility(View.GONE);
 
@@ -4545,23 +4636,14 @@ public class WatchActivity extends AppCompatActivity {
 			int padBottom = (int) (12 * density);
 			if (topBar != null) topBar.setPadding(padHoriz, padTop, padHoriz, (int)(6 * density));
 			if (bottomControls != null) bottomControls.setPadding(padHoriz, 0, padHoriz, padBottom);
-
-			isFullscreen = true;
 		} else {
+			isFullscreen = false;
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
 			if (rootWatch != null) {
 				rootWatch.setPadding(0, 0, 0, 0);
 			}
-
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-				WindowManager.LayoutParams lp = window.getAttributes();
-				lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
-				window.setAttributes(lp);
-			}
-
-			window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-			decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+			applyFullscreenSystemUi(false);
 
 			int heightPx = (int) (220 * density);
 			if (layoutPlayer != null) {
@@ -4653,11 +4735,17 @@ public class WatchActivity extends AppCompatActivity {
 			int defPadBottom = (int) (6 * density);
 			if (topBar != null) topBar.setPadding(defPadX, defPadTop, defPadX, (int)(6 * density));
 			if (bottomControls != null) bottomControls.setPadding(0, 0, 0, defPadBottom);
-
-			isFullscreen = false;
 		}
 		updateBottomDividerState();
 		adjustVideoAspectRatio();
+		if (playerHandler != null) {
+			playerHandler.postDelayed(new Runnable() {
+				@Override
+				public void run() {
+					adjustVideoAspectRatio();
+				}
+			}, 250L);
+		}
 		resetControlsTimer();
 	}
 
@@ -4937,7 +5025,9 @@ public class WatchActivity extends AppCompatActivity {
 					}
 					adjustVideoAspectRatio();
 				}
-				@Override public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
+				@Override public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+					adjustVideoAspectRatio();
+				}
 				@Override
 				public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
 					if (playerSurface != null) {
@@ -5099,7 +5189,7 @@ public class WatchActivity extends AppCompatActivity {
 					try {
 						startActivity(new Intent(Settings.ACTION_CAST_SETTINGS));
 					} catch (Exception e) {
-						Toast.makeText(WatchActivity.this, "Fitur Cast tidak tersedia di perangkat ini", Toast.LENGTH_SHORT).show();
+						DongflixToast.show(WatchActivity.this, "Fitur Cast tidak tersedia di perangkat ini");
 					}
 				}
 			});
@@ -5171,7 +5261,7 @@ public class WatchActivity extends AppCompatActivity {
 					resetControlsTimer();
 					isFillModeActive = !isFillModeActive;
 					adjustVideoAspectRatio();
-					Toast.makeText(WatchActivity.this, isFillModeActive ? "Mode: Fill" : "Mode: Original", Toast.LENGTH_SHORT).show();
+					DongflixToast.show(WatchActivity.this, isFillModeActive ? "Mode: Fill" : "Mode: Original");
 				}
 			});
 		}
@@ -5181,6 +5271,15 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onClick(View v) {
 					showServerDialog();
+				}
+			});
+		}
+
+		if (btnActionDownload != null) {
+			btnActionDownload.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					startBackgroundDownloadForCurrentEpisode();
 				}
 			});
 		}
@@ -5347,7 +5446,19 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void run() {
 					try {
-						String html = fetchHttpString(finalTargetUrl, "https://ok.ru/", false);
+						String okPageUrl = finalTargetUrl;
+						if (okPageUrl.contains("ok.ru/videoembed/")) {
+							String vidId = okPageUrl.substring(okPageUrl.lastIndexOf("/") + 1).replaceAll("[^0-9]", "");
+							if (!vidId.isEmpty()) {
+								okPageUrl = "https://m.ok.ru/video/" + vidId;
+							}
+						}
+
+						String html = fetchHttpString(okPageUrl, "https://ok.ru/", false);
+						if (html.isEmpty() && !okPageUrl.equals(finalTargetUrl)) {
+							html = fetchHttpString(finalTargetUrl, "https://ok.ru/", false);
+						}
+
 						String foundOptions = "";
 						int idx = html.indexOf("data-options=");
 						if (idx != -1) {
@@ -5389,6 +5500,7 @@ public class WatchActivity extends AppCompatActivity {
 									JSONObject v = videos.getJSONObject(k);
 									if (v.has("url")) {
 										String rawUrl = v.getString("url").replace("\\/", "/").replace("\\u0026", "&");
+										if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
 										String rName = v.optString("name", "Resolusi " + (k + 1)).toUpperCase();
 
 										if (rName.equalsIgnoreCase("mobile")) rName = "144P";
@@ -5402,6 +5514,19 @@ public class WatchActivity extends AppCompatActivity {
 										tempUrls.add(rawUrl);
 									}
 								}
+							}
+						}
+
+						if (tempUrls.isEmpty() && !html.isEmpty()) {
+							String unescaped = html.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
+							Matcher mOk = Pattern.compile("(https?://[^\"'\\s<>]*(?:okcdn\\.ru|\\.mp4|\\.m3u8)[^\"'\\s<>]*)").matcher(unescaped);
+							while (mOk.find()) {
+								String u = mOk.group(1);
+								if (!tempUrls.contains(u)) {
+									tempNames.add("Resolusi " + (tempUrls.size() + 1));
+									tempUrls.add(u);
+								}
+								if (tempUrls.size() >= 4) break;
 							}
 						}
 
@@ -5420,12 +5545,12 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
 								} else {
-									playViaWebViewInterceptor(finalTargetUrl);
+									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 								}
 							}
 						});
 					} catch (Exception e) {
-						playViaWebViewInterceptor(finalTargetUrl);
+						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 					}
 				}
 			}).start();
@@ -5512,12 +5637,12 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
 								} else {
-									playViaWebViewInterceptor("https://geo.dailymotion.com/player.html?video=" + cleanDmId);
+									sniffStreamForPlayer("https://geo.dailymotion.com/player.html?video=" + cleanDmId, seekOnReadyMs);
 								}
 							}
 						});
 					} catch (Exception e) {
-						playViaWebViewInterceptor(finalTargetUrl);
+						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 					}
 				}
 			}).start();
@@ -5593,12 +5718,12 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalDtubeUrl, seekOnReadyMs);
 								} else {
-									playViaWebViewInterceptor(finalTargetUrl);
+									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 								}
 							}
 						});
 					} catch (Exception e) {
-						playViaWebViewInterceptor(finalTargetUrl);
+						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 					}
 				}
 			}).start();
@@ -5701,12 +5826,12 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
 								} else {
-									playViaWebViewInterceptor(finalTargetUrl);
+									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 								}
 							}
 						});
 					} catch (Exception e) {
-						playViaWebViewInterceptor(finalTargetUrl);
+						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 					}
 				}
 			}).start();
@@ -5771,12 +5896,12 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalOdyUrl, seekOnReadyMs);
 								} else {
-									playViaWebViewInterceptor(finalTargetUrl);
+									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 								}
 							}
 						});
 					} catch (Exception e) {
-						playViaWebViewInterceptor(finalTargetUrl);
+						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 					}
 				}
 			}).start();
@@ -5855,12 +5980,12 @@ public class WatchActivity extends AppCompatActivity {
 
 									playVideoUrl(finalGenericUrl, seekOnReadyMs);
 								} else {
-									playViaWebViewInterceptor(finalTargetUrl);
+									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 								}
 							}
 						});
 					} catch (Exception e) {
-						playViaWebViewInterceptor(finalTargetUrl);
+						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
 					}
 				}
 			}).start();
