@@ -19,6 +19,7 @@ import android.widget.*;
 import androidx.annotation.*;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
+import androidx.core.content.ContextCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.*;
 import com.bumptech.glide.Glide;
@@ -36,18 +37,13 @@ public class MainActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
-	private static final int REQ_PICK_AVATAR = 305;
 
 	private String currentUserKey = "";
 	private String currentUserEmail = "";
 	private String currentDisplayName = "R Z";
 	private String currentUsername = "rulsz";
 	private String currentPhotoUrl = "";
-	private String pendingEditPhotoUrl = "";
 	private long currentUserExp = 0L;
-
-	private ImageView dialogEditAvatarPreview;
-	private TextView dialogEditAvatarInitial;
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> fullCatalogList = new ArrayList<>();
@@ -131,10 +127,21 @@ public class MainActivity extends AppCompatActivity {
 	private ValueAnimator mainShimmerAnimator;
 	private float mainShimmerPhase = 0f;
 	private boolean isMainLoading = true;
+	private boolean isDownloadReceiverRegistered = false;
 
 	private SharedPreferences favPrefs;
 	private HashMap<String, Object> currentHeroItem;
 	private Typeface outfitFont;
+
+	private final BroadcastReceiver downloadProgressReceiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			loadLocalDownloads();
+			if (activeNavTabIndex == 2 && activePustakaTab == 2) {
+				renderActivePustakaTab();
+			}
+		}
+	};
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -159,6 +166,7 @@ public class MainActivity extends AppCompatActivity {
 			requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 201);
 		}
 
+		registerDownloadReceiverSafely();
 		initialize();
 		setupContinueWatchingSection();
 		setupPullToRefresh();
@@ -175,71 +183,35 @@ public class MainActivity extends AppCompatActivity {
 	}
 
 	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		super.onActivityResult(requestCode, resultCode, data);
-		if (requestCode == REQ_PICK_AVATAR && resultCode == RESULT_OK && data != null && data.getData() != null) {
-			String encoded = encodeImageUriToDataUrl(data.getData());
-			if (encoded != null && !encoded.isEmpty()) {
-				pendingEditPhotoUrl = encoded;
-				bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
-			} else {
-				DongflixToast.show(this, "Gagal memproses foto");
-			}
+	protected void onResume() {
+		super.onResume();
+		registerDownloadReceiverSafely();
+		loadLocalDownloads();
+		if (activeNavTabIndex == 2 && activePustakaTab == 2) {
+			renderActivePustakaTab();
 		}
 	}
 
-	private String encodeImageUriToDataUrl(Uri uri) {
+	private void registerDownloadReceiverSafely() {
+		if (isDownloadReceiverRegistered) return;
 		try {
-			InputStream is = getContentResolver().openInputStream(uri);
-			if (is == null) return "";
-			Bitmap raw = BitmapFactory.decodeStream(is);
-			is.close();
-			if (raw == null) return "";
-
-			int edge = Math.min(raw.getWidth(), raw.getHeight());
-			int x = Math.max(0, (raw.getWidth() - edge) / 2);
-			int y = Math.max(0, (raw.getHeight() - edge) / 2);
-			Bitmap square = Bitmap.createBitmap(raw, x, y, edge, edge);
-
-			int maxSide = 256;
-			Bitmap scaled = edge > maxSide
-				? Bitmap.createScaledBitmap(square, maxSide, maxSide, true)
-				: square;
-
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			scaled.compress(Bitmap.CompressFormat.JPEG, 78, baos);
-			byte[] bytes = baos.toByteArray();
-			if (bytes.length > 900_000) {
-				baos.reset();
-				scaled.compress(Bitmap.CompressFormat.JPEG, 55, baos);
-				bytes = baos.toByteArray();
-			}
-			return "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
-		} catch (Exception e) {
-			return "";
-		}
+			ContextCompat.registerReceiver(
+				this,
+				downloadProgressReceiver,
+				new IntentFilter(DongflixDownloadManager.ACTION_DOWNLOAD_PROGRESS),
+				ContextCompat.RECEIVER_NOT_EXPORTED
+			);
+			isDownloadReceiverRegistered = true;
+		} catch (Exception ignored) {}
 	}
 
-	private void bindAvatarPreview(ImageView imgView, TextView initialView, String photoUrl, String displayName) {
-		String initial = (displayName != null && !displayName.trim().isEmpty())
-			? displayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
-		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
-			if (imgView != null) {
-				imgView.setVisibility(View.VISIBLE);
-				applyCircularAvatar(imgView, photoUrl.trim());
-			}
-			if (initialView != null) initialView.setVisibility(View.GONE);
-		} else {
-			if (imgView != null) imgView.setVisibility(View.GONE);
-			if (initialView != null) {
-				initialView.setVisibility(View.VISIBLE);
-				initialView.setText(initial);
-				GradientDrawable iniBg = new GradientDrawable();
-				iniBg.setShape(GradientDrawable.OVAL);
-				iniBg.setColor(Color.parseColor("#1D4ED8"));
-				initialView.setBackground(iniBg);
-			}
+	private String normalizeAvatarUrl(String rawUrl) {
+		if (rawUrl == null) return "";
+		String trimmed = rawUrl.trim();
+		if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
+			return trimmed;
 		}
+		return "";
 	}
 
 	private String safeStr(Map<String, Object> map, String key, String fallback) {
@@ -448,40 +420,16 @@ public class MainActivity extends AppCompatActivity {
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
 		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		int sizePx = Math.max((int) (46 * d), target.getWidth() > 0 ? target.getWidth() : (int) (46 * d));
+		String cleanUrl = normalizeAvatarUrl(photoUrl);
 
-		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
-			String cleanUrl = photoUrl.trim();
+		if (!cleanUrl.isEmpty() && !isFinishing() && !isDestroyed()) {
 			target.setPadding(0, 0, 0, 0);
 			target.clearColorFilter();
 			target.setBackground(null);
 			target.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-			if (cleanUrl.startsWith("data:image")) {
-				try {
-					String base64Part = cleanUrl.substring(cleanUrl.indexOf(",") + 1);
-					byte[] decoded = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT);
-					Bitmap rawBmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
-					if (rawBmp != null) {
-						int edge = Math.min(rawBmp.getWidth(), rawBmp.getHeight());
-						Bitmap square = Bitmap.createBitmap(rawBmp, (rawBmp.getWidth() - edge) / 2, (rawBmp.getHeight() - edge) / 2, edge, edge);
-						Bitmap scaled = Bitmap.createScaledBitmap(square, sizePx, sizePx, true);
-						Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-						Canvas canvas = new Canvas(out);
-						Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-						Rect r = new Rect(0, 0, sizePx, sizePx);
-						canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, p);
-						p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-						canvas.drawBitmap(scaled, r, r, p);
-						target.setImageBitmap(out);
-						return;
-					}
-				} catch (Exception ignored) {}
-			} else if (!isFinishing() && !isDestroyed()) {
-				Glide.with(this).load(Uri.parse(cleanUrl)).circleCrop()
-					.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(target);
-				return;
-			}
+			Glide.with(this).load(Uri.parse(cleanUrl)).circleCrop()
+				.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(target);
+			return;
 		}
 
 		int pad = (int) (3 * d);
@@ -501,7 +449,7 @@ public class MainActivity extends AppCompatActivity {
 		currentDisplayName = fallbackName;
 		currentUsername = fallbackName.toLowerCase(Locale.US).replaceAll("[^a-z0-9_]", "");
 		if (currentUsername.isEmpty()) currentUsername = "rulsz";
-		currentPhotoUrl = user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : "";
+		currentPhotoUrl = user.getPhotoUrl() != null ? normalizeAvatarUrl(user.getPhotoUrl().toString()) : "";
 
 		TextView tvUserHeader = findViewById(R.id.text_username);
 		if (tvUserHeader != null) tvUserHeader.setText(currentDisplayName);
@@ -534,7 +482,7 @@ public class MainActivity extends AppCompatActivity {
 				}
 
 				Object photoObj = snap.child("photoURL").getValue();
-				currentPhotoUrl = photoObj != null ? photoObj.toString().trim() : "";
+				currentPhotoUrl = normalizeAvatarUrl(photoObj != null ? photoObj.toString() : "");
 				currentUserExp = parseLongSafe(snap.child("exp").getValue());
 
 				TextView tvHeader = findViewById(R.id.text_username);
@@ -703,7 +651,7 @@ public class MainActivity extends AppCompatActivity {
 	private void bindSectionLikePopularToday(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
 		if (rv == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayout.HORIZONTAL, false));
 		rv.setNestedScrollingEnabled(false);
 		rv.setOnFlingListener(null);
 		rv.setClipToPadding(false);
@@ -778,7 +726,7 @@ public class MainActivity extends AppCompatActivity {
 
 		if (recyclerContinue != null) {
 			float d = getResources().getDisplayMetrics().density;
-			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayout.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
 			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (112 * d)));
 		}
@@ -1095,6 +1043,7 @@ public class MainActivity extends AppCompatActivity {
 			public void onClick(View v) {
 				activePustakaTab = tabIndex;
 				updatePustakaTabVisual(tabIndex);
+				if (tabIndex == 2) loadLocalDownloads();
 				renderActivePustakaTab();
 			}
 		});
@@ -1796,17 +1745,9 @@ public class MainActivity extends AppCompatActivity {
 
 	private void openEditProfileDialog() {
 		float d = getResources().getDisplayMetrics().density;
-		pendingEditPhotoUrl = currentPhotoUrl;
 
 		final Dialog dialog = new Dialog(this);
 		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-		dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-			@Override
-			public void onDismiss(DialogInterface dInt) {
-				dialogEditAvatarPreview = null;
-				dialogEditAvatarInitial = null;
-			}
-		});
 
 		LinearLayout card = new LinearLayout(this);
 		card.setOrientation(LinearLayout.VERTICAL);
@@ -1823,78 +1764,6 @@ public class MainActivity extends AppCompatActivity {
 		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
 		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		card.addView(tvTitle);
-
-		LinearLayout photoRow = new LinearLayout(this);
-		photoRow.setOrientation(LinearLayout.HORIZONTAL);
-		photoRow.setGravity(Gravity.CENTER_VERTICAL);
-		LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		prLp.topMargin = (int) (14 * d);
-		photoRow.setLayoutParams(prLp);
-
-		FrameLayout avatarBox = new FrameLayout(this);
-		LinearLayout.LayoutParams abLp = new LinearLayout.LayoutParams((int) (54 * d), (int) (54 * d));
-		abLp.rightMargin = (int) (12 * d);
-		avatarBox.setLayoutParams(abLp);
-
-		dialogEditAvatarPreview = new ImageView(this);
-		dialogEditAvatarPreview.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		dialogEditAvatarPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-		dialogEditAvatarInitial = new TextView(this);
-		dialogEditAvatarInitial.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		dialogEditAvatarInitial.setGravity(Gravity.CENTER);
-		dialogEditAvatarInitial.setTextColor(Color.WHITE);
-		dialogEditAvatarInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-		dialogEditAvatarInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-
-		avatarBox.addView(dialogEditAvatarPreview);
-		avatarBox.addView(dialogEditAvatarInitial);
-		bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
-
-		TextView btnPickPhoto = new TextView(this);
-		btnPickPhoto.setText("Pilih Foto");
-		btnPickPhoto.setTextColor(Color.WHITE);
-		btnPickPhoto.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		btnPickPhoto.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnPickPhoto.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
-		GradientDrawable pickBg = new GradientDrawable();
-		pickBg.setColor(Color.parseColor("#1A2030"));
-		pickBg.setCornerRadius(100f);
-		pickBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2AFFFFFF"));
-		btnPickPhoto.setBackground(pickBg);
-		btnPickPhoto.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				try {
-					Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-					intent.setType("image/*");
-					startActivityForResult(Intent.createChooser(intent, "Pilih Foto Profil"), REQ_PICK_AVATAR);
-				} catch (Exception e) {
-					DongflixToast.show(MainActivity.this, "Tidak dapat membuka galeri");
-				}
-			}
-		});
-
-		TextView btnResetPhoto = new TextView(this);
-		btnResetPhoto.setText("Hapus");
-		btnResetPhoto.setTextColor(Color.parseColor("#94A3B8"));
-		btnResetPhoto.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-		btnResetPhoto.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnResetPhoto.setPadding((int) (10 * d), (int) (8 * d), (int) (10 * d), (int) (8 * d));
-		btnResetPhoto.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				pendingEditPhotoUrl = "";
-				bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, "", currentDisplayName);
-			}
-		});
-
-		photoRow.addView(avatarBox);
-		photoRow.addView(btnPickPhoto);
-		photoRow.addView(btnResetPhoto);
-		card.addView(photoRow);
 
 		final EditText etName = new EditText(this);
 		etName.setText(currentDisplayName);
@@ -1930,15 +1799,30 @@ public class MainActivity extends AppCompatActivity {
 		etUsername.setBackground(inBg.getConstantState() != null ? inBg.getConstantState().newDrawable() : inBg);
 		card.addView(etUsername);
 
+		final EditText etPhotoUrl = new EditText(this);
+		etPhotoUrl.setText(normalizeAvatarUrl(currentPhotoUrl));
+		etPhotoUrl.setHint("URL Foto Profil (https://...)");
+		etPhotoUrl.setHintTextColor(Color.parseColor("#64748B"));
+		etPhotoUrl.setTextColor(Color.WHITE);
+		etPhotoUrl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		etPhotoUrl.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etPhotoUrl.setSingleLine(true);
+		etPhotoUrl.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+		LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		pLp.topMargin = (int) (10 * d);
+		etPhotoUrl.setLayoutParams(pLp);
+		etPhotoUrl.setBackground(inBg.getConstantState() != null ? inBg.getConstantState().newDrawable() : inBg);
+		card.addView(etPhotoUrl);
+
 		final TextView tvUsernameStatus = new TextView(this);
-		tvUsernameStatus.setText("Username minimal 3 karakter (huruf, angka, _)");
+		tvUsernameStatus.setText("Gunakan URL gambar https:// (kosongkan untuk ikon default)");
 		tvUsernameStatus.setTextColor(Color.parseColor("#94A3B8"));
 		tvUsernameStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		tvUsernameStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
 		LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		stLp.topMargin = (int) (6 * d);
+		stLp.topMargin = (int) (8 * d);
 		stLp.bottomMargin = (int) (16 * d);
 		tvUsernameStatus.setLayoutParams(stLp);
 		card.addView(tvUsernameStatus);
@@ -2012,6 +1896,7 @@ public class MainActivity extends AppCompatActivity {
 			public void onClick(View v) {
 				final String newName = etName.getText().toString().trim();
 				String rawUser = etUsername.getText().toString().trim().replaceFirst("^@", "").replaceAll("\\s+", "_").toLowerCase(Locale.US);
+				String rawUrl = etPhotoUrl.getText().toString().trim();
 				if (newName.isEmpty()) {
 					DongflixToast.show(MainActivity.this, "Nama tidak boleh kosong");
 					return;
@@ -2024,8 +1909,13 @@ public class MainActivity extends AppCompatActivity {
 					DongflixToast.show(MainActivity.this, "Username minimal 3 karakter");
 					return;
 				}
+				if (!rawUrl.isEmpty() && !rawUrl.startsWith("https://") && !rawUrl.startsWith("http://")) {
+					DongflixToast.show(MainActivity.this, "URL foto harus diawali https:// atau http://");
+					return;
+				}
 
 				final String finalUser = rawUser;
+				final String finalPhotoUrl = normalizeAvatarUrl(rawUrl);
 				btnSave.setEnabled(false);
 				btnSave.setText("Mengecek...");
 
@@ -2043,7 +1933,7 @@ public class MainActivity extends AppCompatActivity {
 
 						currentDisplayName = newName;
 						currentUsername = finalUser;
-						currentPhotoUrl = pendingEditPhotoUrl != null ? pendingEditPhotoUrl : "";
+						currentPhotoUrl = finalPhotoUrl;
 
 						TextView tvHeader = findViewById(R.id.text_username);
 						if (tvHeader != null) tvHeader.setText(currentDisplayName);
@@ -2137,12 +2027,13 @@ public class MainActivity extends AppCompatActivity {
 		if (tvAccountName != null) tvAccountName.setText(currentDisplayName);
 		if (tvAccountHandle != null) tvAccountHandle.setText("@" + currentUsername);
 
+		String validPhoto = normalizeAvatarUrl(currentPhotoUrl);
 		String initial = !currentDisplayName.trim().isEmpty()
 			? currentDisplayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
-		if (!currentPhotoUrl.trim().isEmpty()) {
+		if (!validPhoto.isEmpty()) {
 			if (imgAccountAvatar != null) {
 				imgAccountAvatar.setVisibility(View.VISIBLE);
-				applyCircularAvatar(imgAccountAvatar, currentPhotoUrl.trim());
+				applyCircularAvatar(imgAccountAvatar, validPhoto);
 			}
 			if (tvAccountInitial != null) tvAccountInitial.setVisibility(View.GONE);
 		} else {
@@ -2301,6 +2192,30 @@ public class MainActivity extends AppCompatActivity {
 
 	private void loadLocalDownloads() {
 		ArrayList<HashMap<String, Object>> found = new ArrayList<>();
+		Set<String> seenPaths = new HashSet<>();
+
+		// 1. Muat tugas unduhan aktif / riwayat progress dari DongflixDownloadManager
+		List<HashMap<String, Object>> bgTasks = DongflixDownloadManager.getInstance().getTasks(this);
+		for (HashMap<String, Object> task : bgTasks) {
+			String path = safeStr(task, "file_path", "");
+			String status = safeStr(task, "status", "downloading");
+			int pct = (int) parseLongSafe(task.get("progress"));
+			long dl = parseLongSafe(task.get("downloaded"));
+			long tot = parseLongSafe(task.get("total"));
+
+			HashMap<String, Object> row = new HashMap<>(task);
+			row.put("is_active_download", !"completed".equals(status));
+			if ("completed".equals(status)) {
+				long sz = tot > 0L ? tot : dl;
+				row.put("size_mb", String.format(Locale.US, "%.1f MB", sz / (1024f * 1024f)));
+			} else {
+				row.put("size_mb", String.format(Locale.US, "%d%% • %.1f MB", pct, dl / (1024f * 1024f)));
+			}
+			if (!path.isEmpty()) seenPaths.add(path);
+			found.add(row);
+		}
+
+		// 2. Scan file lokal yang sudah selesai di folder unduhan
 		try {
 			File[] dirs = {
 				getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
@@ -2309,14 +2224,15 @@ public class MainActivity extends AppCompatActivity {
 			};
 			for (File dir : dirs) {
 				if (dir != null && dir.exists() && dir.isDirectory() && dir.canRead()) {
-					collectDownloadFiles(dir, found, 0);
+					collectDownloadFiles(dir, found, seenPaths, 0);
 				}
 			}
 		} catch (Exception ignored) {}
+
 		downloadsList = found;
 	}
 
-	private void collectDownloadFiles(File dir, ArrayList<HashMap<String, Object>> out, int depth) {
+	private void collectDownloadFiles(File dir, ArrayList<HashMap<String, Object>> out, Set<String> seenPaths, int depth) {
 		if (dir == null || depth > 3) return;
 		File[] children;
 		try {
@@ -2329,13 +2245,18 @@ public class MainActivity extends AppCompatActivity {
 		for (File f : children) {
 			if (f == null || !f.exists() || !f.canRead()) continue;
 			if (f.isDirectory()) {
-				collectDownloadFiles(f, out, depth + 1);
+				collectDownloadFiles(f, out, seenPaths, depth + 1);
 			} else if (f.length() > 0L) {
 				String lower = f.getName().toLowerCase(Locale.US);
 				if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".webm")) {
+					if (seenPaths.contains(f.getAbsolutePath())) continue;
+					seenPaths.add(f.getAbsolutePath());
 					HashMap<String, Object> item = new HashMap<>();
 					item.put("title", f.getName().replaceAll("\\.[^.]+$", "").replace("_", " "));
 					item.put("episode", "Offline");
+					item.put("status", "completed");
+					item.put("progress", 100);
+					item.put("is_active_download", false);
 					item.put("file_path", f.getAbsolutePath());
 					item.put("size_mb", String.format(Locale.US, "%.1f MB", f.length() / (1024f * 1024f)));
 					out.add(item);
@@ -2365,9 +2286,9 @@ public class MainActivity extends AppCompatActivity {
 		} else {
 			loadLocalDownloads();
 			activeData = downloadsList != null ? downloadsList : new ArrayList<HashMap<String, Object>>();
-			sectionLabel = "Video Offline";
+			sectionLabel = "Unduhan & Video Offline";
 			emptyTitle = "Belum ada unduhan";
-			emptyDesc = "Video yang kamu unduh akan tersimpan di perangkat ini.";
+			emptyDesc = "Video yang kamu unduh akan tersimpan dan terlihat progress-nya di sini.";
 		}
 
 		if (textPustakaCountBadge != null) textPustakaCountBadge.setText(activeData.size() + " item");
@@ -2393,7 +2314,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		File videoFile = new File(filePath);
 		if (!videoFile.exists() || !videoFile.canRead() || videoFile.length() <= 0L) {
-			DongflixToast.show(this, "File video rusak atau sudah dihapus");
+			DongflixToast.show(this, "File video masih diunduh atau sudah dihapus");
 			renderActivePustakaTab();
 			return;
 		}
@@ -2443,12 +2364,17 @@ public class MainActivity extends AppCompatActivity {
 			renderActivePustakaTab();
 		} else {
 			String path = safeStr(item, "file_path", "");
+			String taskId = safeStr(item, "id", "");
+			if (!taskId.isEmpty()) {
+				DongflixDownloadManager.getInstance().removeTask(this, taskId);
+			}
 			if (!path.isEmpty()) {
 				try {
 					File f = new File(path);
 					if (f.exists()) f.delete();
 				} catch (Exception ignored) {}
 			}
+			loadLocalDownloads();
 			renderActivePustakaTab();
 		}
 	}
@@ -2731,6 +2657,12 @@ public class MainActivity extends AppCompatActivity {
 
 	@Override
 	protected void onDestroy() {
+		if (isDownloadReceiverRegistered) {
+			try {
+				unregisterReceiver(downloadProgressReceiver);
+			} catch (Exception ignored) {}
+			isDownloadReceiverRegistered = false;
+		}
 		stopMainShimmer();
 		stopHeroAutoSlider();
 		DongflixToast.dismissCurrent();
@@ -3151,6 +3083,7 @@ public class MainActivity extends AppCompatActivity {
 			renderJelajahiGrid();
 		} else if (idx == 2) {
 			if (pages[2] != null) pages[2].setVisibility(View.VISIBLE);
+			if (activePustakaTab == 2) loadLocalDownloads();
 			renderActivePustakaTab();
 		} else if (idx == 3) {
 			if (pages[3] != null) pages[3].setVisibility(View.VISIBLE);
@@ -3792,9 +3725,24 @@ public class MainActivity extends AppCompatActivity {
 			tvSub.setLayoutParams(sLp);
 			tvSub.setTag("sub");
 
+			FrameLayout dlBarTrack = new FrameLayout(ctx);
+			LinearLayout.LayoutParams dtLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(3, (int) (3 * d)));
+			dtLp.topMargin = (int) (6 * d);
+			dlBarTrack.setLayoutParams(dtLp);
+			dlBarTrack.setBackgroundColor(Color.parseColor("#1E2433"));
+			dlBarTrack.setTag("dl_track");
+			dlBarTrack.setVisibility(View.GONE);
+
+			View dlBarFill = new View(ctx);
+			dlBarFill.setLayoutParams(new FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
+			dlBarFill.setBackgroundColor(Color.parseColor("#38BDF8"));
+			dlBarFill.setTag("dl_fill");
+			dlBarTrack.addView(dlBarFill);
+
 			info.addView(tvTitle);
 			info.addView(tvBadge);
 			info.addView(tvSub);
+			info.addView(dlBarTrack);
 
 			TextView btnRemove = new TextView(ctx);
 			btnRemove.setText("✕");
@@ -3832,10 +3780,13 @@ public class MainActivity extends AppCompatActivity {
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
+			View dlTrack = holder.itemView.findViewWithTag("dl_track");
+			final View dlFill = holder.itemView.findViewWithTag("dl_fill");
 			TextView btnRemove = holder.itemView.findViewWithTag("btn_remove");
 
 			final String title = cleanText(safeStr(item, "title", mode == 2 ? "Video Offline" : "Donghua"));
 			if (tvTitle != null) tvTitle.setText(title);
+			if (dlTrack != null) dlTrack.setVisibility(View.GONE);
 
 			if (mode == 0) {
 				String epRaw = safeStr(item, "episode", "1").trim();
@@ -3846,8 +3797,31 @@ public class MainActivity extends AppCompatActivity {
 				if (tvEp != null) tvEp.setText(ep.isEmpty() ? "Favorit" : ep);
 				if (tvSub != null) tvSub.setText(safeStr(item, "status", "Tersimpan di Daftarku"));
 			} else {
-				if (tvEp != null) tvEp.setText("OFFLINE • " + safeStr(item, "size_mb", ""));
-				if (tvSub != null) tvSub.setText("Ketuk untuk memutar video");
+				boolean isActive = Boolean.TRUE.equals(item.get("is_active_download"));
+				String st = safeStr(item, "status", "completed");
+				final int pct = (int) Math.max(0L, Math.min(100L, parseLongSafe(item.get("progress"))));
+				if (tvEp != null) {
+					tvEp.setText((isActive ? "MENGUNDUH • " : "OFFLINE • ") + safeStr(item, "size_mb", ""));
+				}
+				if (tvSub != null) {
+					if ("failed".equals(st)) {
+						tvSub.setText("Unduhan gagal • Ketuk untuk coba lagi");
+					} else if (isActive) {
+						tvSub.setText("Progress latar belakang: " + pct + "%");
+					} else {
+						tvSub.setText("Selesai • Ketuk untuk memutar video");
+					}
+				}
+				if (dlTrack != null && dlFill != null && (isActive || "failed".equals(st))) {
+					dlTrack.setVisibility(View.VISIBLE);
+					dlTrack.post(new Runnable() {
+						@Override
+						public void run() {
+							int w = Math.round(dlTrack.getWidth() * (pct / 100f));
+							dlFill.setLayoutParams(new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT));
+						}
+					});
+				}
 			}
 
 			if (btnRemove != null) {
@@ -3862,9 +3836,17 @@ public class MainActivity extends AppCompatActivity {
 			if (mode == 2) {
 				if (img != null) img.setImageResource(R.drawable.default_image);
 				final String path = safeStr(item, "file_path", "");
+				final String url = safeStr(item, "url", "");
+				final String epLabel = safeStr(item, "episode", "EP");
+				final String st = safeStr(item, "status", "completed");
 				holder.itemView.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
+						if ("failed".equals(st) && !url.isEmpty()) {
+							DongflixToast.show(MainActivity.this, "Mengulang unduhan di latar belakang...");
+							DongflixDownloadManager.getInstance().startDownload(MainActivity.this, title, epLabel, url);
+							return;
+						}
 						openDownloadedVideoSafely(path, title);
 					}
 				});
