@@ -8,6 +8,8 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -37,6 +39,7 @@ import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
+import android.util.Base64;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -194,13 +197,49 @@ public class ChatActivity extends AppCompatActivity {
 		startListeningMessages();
 	}
 
-	private String normalizeProfileUrl(String rawUrl) {
-		if (rawUrl == null) return "";
-		String trimmed = rawUrl.trim();
+	private String normalizeAvatarSource(String raw) {
+		if (raw == null) return "";
+		String trimmed = raw.trim();
+		if (trimmed.isEmpty()) return "";
 		if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
 			return trimmed;
 		}
+		if (trimmed.startsWith("data:image")) {
+			return trimmed;
+		}
+		// Mendukung string Base64 mentah yang cukup panjang
+		if (trimmed.length() > 64 && trimmed.matches("^[A-Za-z0-9+/=\\r\\n]+$")) {
+			return "data:image/jpeg;base64," + trimmed.replaceAll("\\s+", "");
+		}
 		return "";
+	}
+
+	private Bitmap decodeBase64AvatarBitmap(String dataOrBase64) {
+		if (dataOrBase64 == null || dataOrBase64.isEmpty()) return null;
+		try {
+			String payload = dataOrBase64;
+			int commaIdx = payload.indexOf(",");
+			if (payload.startsWith("data:image") && commaIdx >= 0) {
+				payload = payload.substring(commaIdx + 1);
+			}
+			payload = payload.replaceAll("\\s+", "");
+			byte[] decoded = Base64.decode(payload, Base64.DEFAULT);
+			if (decoded == null || decoded.length == 0) return null;
+
+			BitmapFactory.Options opts = new BitmapFactory.Options();
+			opts.inJustDecodeBounds = true;
+			BitmapFactory.decodeByteArray(decoded, 0, decoded.length, opts);
+			int sample = 1;
+			while ((opts.outWidth / sample) > 256 || (opts.outHeight / sample) > 256) {
+				sample *= 2;
+			}
+
+			BitmapFactory.Options decodeOpts = new BitmapFactory.Options();
+			decodeOpts.inSampleSize = Math.max(1, sample);
+			return BitmapFactory.decodeByteArray(decoded, 0, decoded.length, decodeOpts);
+		} catch (Throwable ignored) {
+			return null;
+		}
 	}
 
 	private void armFastLoadTimeout() {
@@ -1277,7 +1316,8 @@ public class ChatActivity extends AppCompatActivity {
 	private void cacheProfileEntry(String userId, HashMap<String, Object> profile) {
 		if (userId == null || userId.isEmpty() || profile == null) return;
 		HashMap<String, Object> cleanMap = new HashMap<>(profile);
-		cleanMap.put("photoURL", normalizeProfileUrl(cleanMap.get("photoURL") != null ? cleanMap.get("photoURL").toString() : ""));
+		String rawPhoto = cleanMap.get("photoURL") != null ? cleanMap.get("photoURL").toString() : "";
+		cleanMap.put("photoURL", normalizeAvatarSource(rawPhoto));
 		userProfileCache.put(userId, cleanMap);
 
 		boolean existsInList = false;
@@ -1361,15 +1401,15 @@ public class ChatActivity extends AppCompatActivity {
 		String myId = getCurrentUserId();
 		HashMap<String, Object> prof = userProfileCache.get(myId);
 
-		String photoUrl = "";
+		String photoSrc = "";
 		if (prof != null && prof.get("photoURL") != null) {
-			photoUrl = normalizeProfileUrl(prof.get("photoURL").toString());
+			photoSrc = normalizeAvatarSource(prof.get("photoURL").toString());
 		}
-		if (photoUrl.isEmpty() && currentUser.getPhotoUrl() != null) {
-			photoUrl = normalizeProfileUrl(currentUser.getPhotoUrl().toString());
+		if (photoSrc.isEmpty() && currentUser.getPhotoUrl() != null) {
+			photoSrc = normalizeAvatarSource(currentUser.getPhotoUrl().toString());
 		}
 
-		bindChatAvatar(headerProfileAvatar, photoUrl);
+		bindChatAvatar(headerProfileAvatar, photoSrc);
 	}
 
 	private void showCurrentUserProfileInfo() {
@@ -1981,10 +2021,10 @@ public class ChatActivity extends AppCompatActivity {
 
 			String photoUrl = "";
 			if (cachedProf != null && cachedProf.get("photoURL") != null) {
-				photoUrl = normalizeProfileUrl(cachedProf.get("photoURL").toString());
+				photoUrl = normalizeAvatarSource(cachedProf.get("photoURL").toString());
 			}
 			if (photoUrl.isEmpty() && item.get("photoURL") != null) {
-				photoUrl = normalizeProfileUrl(item.get("photoURL").toString());
+				photoUrl = normalizeAvatarSource(item.get("photoURL").toString());
 			}
 
 			long exp = cachedProf != null && cachedProf.get("exp") != null
@@ -2250,7 +2290,7 @@ public class ChatActivity extends AppCompatActivity {
 		return ss;
 	}
 
-	private void bindChatAvatar(ImageView target, String photoUrl) {
+	private void bindChatAvatar(ImageView target, String photoSrc) {
 		target.setOutlineProvider(new ViewOutlineProvider() {
 			@Override
 			public void getOutline(View view, Outline outline) {
@@ -2259,16 +2299,25 @@ public class ChatActivity extends AppCompatActivity {
 		});
 		target.setClipToOutline(true);
 
-		String validUrl = normalizeProfileUrl(photoUrl);
-		if (!validUrl.isEmpty()) {
+		String normalized = normalizeAvatarSource(photoSrc);
+		if (!normalized.isEmpty()) {
 			target.setPadding(0, 0, 0, 0);
 			target.clearColorFilter();
 			target.setBackgroundColor(Color.parseColor("#161A24"));
-			Glide.with(getApplicationContext())
-				.load(Uri.parse(validUrl))
-				.circleCrop()
-				.into(target);
-			return;
+
+			if (normalized.startsWith("data:image")) {
+				Bitmap bmp = decodeBase64AvatarBitmap(normalized);
+				if (bmp != null) {
+					target.setImageBitmap(bmp);
+					return;
+				}
+			} else {
+				Glide.with(getApplicationContext())
+					.load(Uri.parse(normalized))
+					.circleCrop()
+					.into(target);
+				return;
+			}
 		}
 
 		int pad = (int) (5 * getResources().getDisplayMetrics().density);
@@ -2414,7 +2463,7 @@ public class ChatActivity extends AppCompatActivity {
 			: (email.contains("@") ? email.split("@")[0] : "");
 
 		String photo = prof != null && prof.get("photoURL") != null
-			? normalizeProfileUrl(prof.get("photoURL").toString())
+			? normalizeAvatarSource(prof.get("photoURL").toString())
 			: "";
 
 		final long exp = prof != null && prof.get("exp") != null ? parseLongVal(prof.get("exp")) : 0L;
