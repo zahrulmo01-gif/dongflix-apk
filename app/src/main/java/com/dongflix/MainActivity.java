@@ -31,33 +31,21 @@ import com.google.gson.reflect.TypeToken;
 import eightbitlab.com.blurview.BlurView;
 import eightbitlab.com.blurview.RenderScriptBlur;
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
-	private static final String CLOUDINARY_CLOUD_NAME = "pqyvpk17";
-	private static final String CLOUDINARY_UPLOAD_PRESET = "dongflix";
-	private static final String CLOUDINARY_UPLOAD_URL =
-		"https://api.cloudinary.com/v1_1/" + CLOUDINARY_CLOUD_NAME + "/image/upload";
-	private static final int REQ_PICK_AVATAR = 305;
+	private static final int REQ_EDIT_PROFILE = 405;
 
 	private String currentUserKey = "";
 	private String currentUserEmail = "";
 	private String currentDisplayName = "R Z";
 	private String currentUsername = "rulsz";
+	private String currentBio = "";
 	private String currentPhotoUrl = "";
-	private String pendingEditPhotoUrl = "";
 	private long currentUserExp = 0L;
-
-	private ImageView dialogEditAvatarPreview;
-	private TextView dialogEditAvatarInitial;
-	private TextView dialogBtnPickPhoto;
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> fullCatalogList = new ArrayList<>();
@@ -121,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
 
 	// Akun UI
 	private ImageView imgAccountAvatar;
-	private TextView tvAccountInitial, tvAccountName, tvAccountHandle;
+	private TextView tvAccountInitial, tvAccountName, tvAccountHandle, tvAccountBio;
 	private TextView tvStatWatchTime, tvStatSavedCount, tvStatExpCount;
 	private TextView tvAccountLevelTitle, tvAccountExpProgressLabel, tvAccountExpPercent;
 	private View viewAccountExpTrack, viewAccountExpFill;
@@ -156,11 +144,6 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 	};
-
-	public interface CloudinaryUploadCallback {
-		void onSuccess(String secureUrl);
-		void onError(String reason);
-	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -206,8 +189,21 @@ public class MainActivity extends AppCompatActivity {
 		super.onResume();
 		registerDownloadReceiverSafely();
 		loadLocalDownloads();
+		refreshAccountUi();
 		if (activeNavTabIndex == 2 && activePustakaTab == 2) {
 			renderActivePustakaTab();
+		}
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == REQ_EDIT_PROFILE && resultCode == RESULT_OK) {
+			FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+			if (user != null) {
+				loadLoggedInUserProfile(user);
+			}
+			refreshAccountUi();
 		}
 	}
 
@@ -222,205 +218,6 @@ public class MainActivity extends AppCompatActivity {
 			);
 			isDownloadReceiverRegistered = true;
 		} catch (Exception ignored) {}
-	}
-
-	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		super.onActivityResult(requestCode, resultCode, data);
-		if (requestCode == REQ_PICK_AVATAR && resultCode == RESULT_OK && data != null && data.getData() != null) {
-			final Uri pickedUri = data.getData();
-			if (dialogBtnPickPhoto != null) {
-				dialogBtnPickPhoto.setEnabled(false);
-				dialogBtnPickPhoto.setText("Mengunggah...");
-			}
-			DongflixToast.show(this, "Mengunggah foto profil ke Cloudinary...");
-			uploadAvatarToCloudinary(pickedUri, new CloudinaryUploadCallback() {
-				@Override
-				public void onSuccess(String secureUrl) {
-					if (dialogBtnPickPhoto != null) {
-						dialogBtnPickPhoto.setEnabled(true);
-						dialogBtnPickPhoto.setText("Pilih Foto");
-					}
-					pendingEditPhotoUrl = secureUrl;
-					bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
-					DongflixToast.show(MainActivity.this, "Foto berhasil diunggah");
-				}
-
-				@Override
-				public void onError(String reason) {
-					if (dialogBtnPickPhoto != null) {
-						dialogBtnPickPhoto.setEnabled(true);
-						dialogBtnPickPhoto.setText("Pilih Foto");
-					}
-					DongflixToast.show(MainActivity.this, "Gagal unggah: " + reason);
-				}
-			});
-		}
-	}
-
-	private void uploadAvatarToCloudinary(final Uri imageUri, final CloudinaryUploadCallback callback) {
-		final Context appCtx = getApplicationContext();
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				HttpURLConnection conn = null;
-				String boundary = "----DongflixUpload" + System.currentTimeMillis();
-				String lineEnd = "\r\n";
-				String twoHyphens = "--";
-
-				try {
-					byte[] jpegBytes = readAndCompressAvatar(appCtx, imageUri);
-					if (jpegBytes == null || jpegBytes.length == 0) {
-						postUploadError(callback, "File gambar tidak terbaca");
-						return;
-					}
-
-					URL url = new URL(CLOUDINARY_UPLOAD_URL);
-					conn = (HttpURLConnection) url.openConnection();
-					conn.setDoInput(true);
-					conn.setDoOutput(true);
-					conn.setUseCaches(false);
-					conn.setRequestMethod("POST");
-					conn.setConnectTimeout(15000);
-					conn.setReadTimeout(25000);
-					conn.setRequestProperty("Connection", "Keep-Alive");
-					conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
-
-					DataOutputStream dos = new DataOutputStream(conn.getOutputStream());
-
-					dos.writeBytes(twoHyphens + boundary + lineEnd);
-					dos.writeBytes("Content-Disposition: form-data; name=\"upload_preset\"" + lineEnd + lineEnd);
-					dos.writeBytes(CLOUDINARY_UPLOAD_PRESET + lineEnd);
-
-					dos.writeBytes(twoHyphens + boundary + lineEnd);
-					dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"" + lineEnd);
-					dos.writeBytes("Content-Type: image/jpeg" + lineEnd + lineEnd);
-					dos.write(jpegBytes);
-					dos.writeBytes(lineEnd);
-
-					dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
-					dos.flush();
-					dos.close();
-
-					int status = conn.getResponseCode();
-					InputStream is = (status >= 200 && status < 300)
-						? conn.getInputStream() : conn.getErrorStream();
-
-					StringBuilder sb = new StringBuilder();
-					if (is != null) {
-						BufferedReader br = new BufferedReader(new InputStreamReader(is));
-						String line;
-						while ((line = br.readLine()) != null) {
-							sb.append(line);
-						}
-						br.close();
-					}
-
-					String body = sb.toString();
-					if (status < 200 || status >= 300) {
-						String errMsg = extractJsonField(body, "message");
-						postUploadError(callback, errMsg.isEmpty() ? ("HTTP " + status) : errMsg);
-						return;
-					}
-
-					String uploadedUrl = extractJsonField(body, "secure_url");
-					if (uploadedUrl.isEmpty()) {
-						uploadedUrl = extractJsonField(body, "url");
-					}
-					if (uploadedUrl.isEmpty()) {
-						postUploadError(callback, "URL hasil unggah kosong");
-						return;
-					}
-
-					final String finalUrl = uploadedUrl.startsWith("http://")
-						? uploadedUrl.replace("http://", "https://") : uploadedUrl;
-					runOnUiThread(new Runnable() {
-						@Override
-						public void run() {
-							if (!isFinishing() && !isDestroyed() && callback != null) {
-								callback.onSuccess(finalUrl);
-							}
-						}
-					});
-				} catch (Exception e) {
-					postUploadError(callback, e.getMessage() != null ? e.getMessage() : "Kesalahan jaringan");
-				} finally {
-					if (conn != null) conn.disconnect();
-				}
-			}
-		}).start();
-	}
-
-	private byte[] readAndCompressAvatar(Context ctx, Uri uri) {
-		try {
-			InputStream is = ctx.getContentResolver().openInputStream(uri);
-			if (is == null) return null;
-			Bitmap raw = BitmapFactory.decodeStream(is);
-			is.close();
-			if (raw == null) return null;
-
-			int edge = Math.min(raw.getWidth(), raw.getHeight());
-			int x = Math.max(0, (raw.getWidth() - edge) / 2);
-			int y = Math.max(0, (raw.getHeight() - edge) / 2);
-			Bitmap square = Bitmap.createBitmap(raw, x, y, edge, edge);
-
-			int maxSide = 512;
-			Bitmap scaled = edge > maxSide
-				? Bitmap.createScaledBitmap(square, maxSide, maxSide, true)
-				: square;
-
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			scaled.compress(Bitmap.CompressFormat.JPEG, 82, baos);
-			return baos.toByteArray();
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	private String extractJsonField(String json, String field) {
-		if (json == null || json.isEmpty() || field == null) return "";
-		try {
-			Matcher m = Pattern
-				.compile("\"" + Pattern.quote(field) + "\"\\s*:\\s*\"([^\"]*)\"")
-				.matcher(json);
-			if (m.find() && m.group(1) != null) {
-				return m.group(1).replace("\\/", "/");
-			}
-		} catch (Exception ignored) {}
-		return "";
-	}
-
-	private void postUploadError(final CloudinaryUploadCallback callback, final String reason) {
-		runOnUiThread(new Runnable() {
-			@Override
-			public void run() {
-				if (!isFinishing() && !isDestroyed() && callback != null) {
-					callback.onError(reason);
-				}
-			}
-		});
-	}
-
-	private void bindAvatarPreview(ImageView imgView, TextView initialView, String photoUrl, String displayName) {
-		String initial = (displayName != null && !displayName.trim().isEmpty())
-			? displayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
-		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
-			if (imgView != null) {
-				imgView.setVisibility(View.VISIBLE);
-				applyCircularAvatar(imgView, photoUrl.trim());
-			}
-			if (initialView != null) initialView.setVisibility(View.GONE);
-		} else {
-			if (imgView != null) imgView.setVisibility(View.GONE);
-			if (initialView != null) {
-				initialView.setVisibility(View.VISIBLE);
-				initialView.setText(initial);
-				GradientDrawable iniBg = new GradientDrawable();
-				iniBg.setShape(GradientDrawable.OVAL);
-				iniBg.setColor(Color.parseColor("#1D4ED8"));
-				initialView.setBackground(iniBg);
-			}
-		}
 	}
 
 	private String safeStr(Map<String, Object> map, String key, String fallback) {
@@ -714,6 +511,9 @@ public class MainActivity extends AppCompatActivity {
 					if (currentUsername.isEmpty()) currentUsername = fallbackName;
 				}
 
+				Object bioObj = snap.child("bio").getValue();
+				currentBio = bioObj != null ? bioObj.toString().trim() : "";
+
 				Object photoObj = snap.child("photoURL").getValue();
 				currentPhotoUrl = photoObj != null ? photoObj.toString().trim() : "";
 				currentUserExp = parseLongSafe(snap.child("exp").getValue());
@@ -884,7 +684,7 @@ public class MainActivity extends AppCompatActivity {
 	private void bindSectionLikePopularToday(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
 		if (rv == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayout.HORIZONTAL, false));
+		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 		rv.setNestedScrollingEnabled(false);
 		rv.setOnFlingListener(null);
 		rv.setClipToPadding(false);
@@ -959,7 +759,7 @@ public class MainActivity extends AppCompatActivity {
 
 		if (recyclerContinue != null) {
 			float d = getResources().getDisplayMetrics().density;
-			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayout.HORIZONTAL, false));
+			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
 			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (112 * d)));
 		}
@@ -1423,8 +1223,20 @@ public class MainActivity extends AppCompatActivity {
 		hLp.topMargin = (int) (2 * d);
 		tvAccountHandle.setLayoutParams(hLp);
 
+		tvAccountBio = new TextView(this);
+		tvAccountBio.setTextColor(Color.parseColor("#CBD5E1"));
+		tvAccountBio.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+		tvAccountBio.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvAccountBio.setMaxLines(2);
+		tvAccountBio.setEllipsize(TextUtils.TruncateAt.END);
+		tvAccountBio.setVisibility(View.GONE);
+		LinearLayout.LayoutParams bioLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		bioLp.topMargin = (int) (4 * d);
+		tvAccountBio.setLayoutParams(bioLp);
+
 		identityCol.addView(tvAccountName);
 		identityCol.addView(tvAccountHandle);
+		identityCol.addView(tvAccountBio);
 
 		TextView btnEditProfile = new TextView(this);
 		btnEditProfile.setText("Ubah Profil");
@@ -1651,6 +1463,15 @@ public class MainActivity extends AppCompatActivity {
 		refreshAccountUi();
 	}
 
+	private void openEditProfileDialog() {
+		Intent intent = new Intent(MainActivity.this, EditProfileActivity.class);
+		intent.putExtra("name", currentDisplayName);
+		intent.putExtra("username", currentUsername);
+		intent.putExtra("bio", currentBio);
+		intent.putExtra("photoURL", currentPhotoUrl);
+		startActivityForResult(intent, REQ_EDIT_PROFILE);
+	}
+
 	private void openAccountSettingsDialog() {
 		float d = getResources().getDisplayMetrics().density;
 		final Dialog dialog = new Dialog(this);
@@ -1692,7 +1513,7 @@ public class MainActivity extends AppCompatActivity {
 		btnRow.setGravity(Gravity.END);
 
 		TextView btnEdit = new TextView(this);
-		btnEdit.setText("Ubah Profil");
+		btnEdit.setText("Edit Profil");
 		btnEdit.setTextColor(Color.parseColor("#38BDF8"));
 		btnEdit.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
 		btnEdit.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
@@ -1976,349 +1797,18 @@ public class MainActivity extends AppCompatActivity {
 		return row;
 	}
 
-	private void openEditProfileDialog() {
-		float d = getResources().getDisplayMetrics().density;
-		pendingEditPhotoUrl = currentPhotoUrl;
-
-		final Dialog dialog = new Dialog(this);
-		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-		dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-			@Override
-			public void onDismiss(DialogInterface dInt) {
-				dialogEditAvatarPreview = null;
-				dialogEditAvatarInitial = null;
-				dialogBtnPickPhoto = null;
-			}
-		});
-
-		LinearLayout card = new LinearLayout(this);
-		card.setOrientation(LinearLayout.VERTICAL);
-		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
-		GradientDrawable cardBg = new GradientDrawable();
-		cardBg.setColor(Color.parseColor("#12141A"));
-		cardBg.setCornerRadius(20 * d);
-		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
-		card.setBackground(cardBg);
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Ubah Profil");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		card.addView(tvTitle);
-
-		LinearLayout photoRow = new LinearLayout(this);
-		photoRow.setOrientation(LinearLayout.HORIZONTAL);
-		photoRow.setGravity(Gravity.CENTER_VERTICAL);
-		LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		prLp.topMargin = (int) (14 * d);
-		photoRow.setLayoutParams(prLp);
-
-		FrameLayout avatarBox = new FrameLayout(this);
-		LinearLayout.LayoutParams abLp = new LinearLayout.LayoutParams((int) (54 * d), (int) (54 * d));
-		abLp.rightMargin = (int) (12 * d);
-		avatarBox.setLayoutParams(abLp);
-
-		dialogEditAvatarPreview = new ImageView(this);
-		dialogEditAvatarPreview.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		dialogEditAvatarPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-		dialogEditAvatarInitial = new TextView(this);
-		dialogEditAvatarInitial.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-		dialogEditAvatarInitial.setGravity(Gravity.CENTER);
-		dialogEditAvatarInitial.setTextColor(Color.WHITE);
-		dialogEditAvatarInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-		dialogEditAvatarInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-
-		avatarBox.addView(dialogEditAvatarPreview);
-		avatarBox.addView(dialogEditAvatarInitial);
-		bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
-
-		dialogBtnPickPhoto = new TextView(this);
-		dialogBtnPickPhoto.setText("Pilih Foto");
-		dialogBtnPickPhoto.setTextColor(Color.WHITE);
-		dialogBtnPickPhoto.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		dialogBtnPickPhoto.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		dialogBtnPickPhoto.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
-		GradientDrawable pickBg = new GradientDrawable();
-		pickBg.setColor(Color.parseColor("#1A2030"));
-		pickBg.setCornerRadius(100f);
-		pickBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2AFFFFFF"));
-		dialogBtnPickPhoto.setBackground(pickBg);
-		dialogBtnPickPhoto.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				try {
-					Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-					intent.setType("image/*");
-					startActivityForResult(Intent.createChooser(intent, "Pilih Foto Profil"), REQ_PICK_AVATAR);
-				} catch (Exception e) {
-					DongflixToast.show(MainActivity.this, "Tidak dapat membuka galeri");
-				}
-			}
-		});
-
-		TextView btnResetPhoto = new TextView(this);
-		btnResetPhoto.setText("Hapus");
-		btnResetPhoto.setTextColor(Color.parseColor("#94A3B8"));
-		btnResetPhoto.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-		btnResetPhoto.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnResetPhoto.setPadding((int) (10 * d), (int) (8 * d), (int) (10 * d), (int) (8 * d));
-		btnResetPhoto.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				pendingEditPhotoUrl = "";
-				bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, "", currentDisplayName);
-			}
-		});
-
-		photoRow.addView(avatarBox);
-		photoRow.addView(dialogBtnPickPhoto);
-		photoRow.addView(btnResetPhoto);
-		card.addView(photoRow);
-
-		final EditText etName = new EditText(this);
-		etName.setText(currentDisplayName);
-		etName.setHint("Nama tampilan");
-		etName.setHintTextColor(Color.parseColor("#64748B"));
-		etName.setTextColor(Color.WHITE);
-		etName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-		etName.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		etName.setSingleLine(true);
-		etName.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
-		LinearLayout.LayoutParams nLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		nLp.topMargin = (int) (14 * d);
-		etName.setLayoutParams(nLp);
-		GradientDrawable inBg = new GradientDrawable();
-		inBg.setColor(Color.parseColor("#181C26"));
-		inBg.setCornerRadius(12 * d);
-		inBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1FFFFFFF"));
-		etName.setBackground(inBg);
-		card.addView(etName);
-
-		final EditText etUsername = new EditText(this);
-		etUsername.setText(currentUsername);
-		etUsername.setHint("Username (tanpa @)");
-		etUsername.setHintTextColor(Color.parseColor("#64748B"));
-		etUsername.setTextColor(Color.WHITE);
-		etUsername.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-		etUsername.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		etUsername.setSingleLine(true);
-		etUsername.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
-		LinearLayout.LayoutParams uLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		uLp.topMargin = (int) (10 * d);
-		etUsername.setLayoutParams(uLp);
-		etUsername.setBackground(inBg.getConstantState() != null ? inBg.getConstantState().newDrawable() : inBg);
-		card.addView(etUsername);
-
-		final TextView tvUsernameStatus = new TextView(this);
-		tvUsernameStatus.setText("Username minimal 3 karakter (huruf, angka, _)");
-		tvUsernameStatus.setTextColor(Color.parseColor("#94A3B8"));
-		tvUsernameStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-		tvUsernameStatus.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		stLp.topMargin = (int) (6 * d);
-		stLp.bottomMargin = (int) (16 * d);
-		tvUsernameStatus.setLayoutParams(stLp);
-		card.addView(tvUsernameStatus);
-
-		final Handler checkHandler = new Handler(Looper.getMainLooper());
-		final Runnable[] pendingCheck = new Runnable[1];
-
-		etUsername.addTextChangedListener(new TextWatcher() {
-			@Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-			@Override
-			public void onTextChanged(CharSequence s, int st, int b, int c) {
-				if (pendingCheck[0] != null) checkHandler.removeCallbacks(pendingCheck[0]);
-				final String candidate = s.toString().trim().replaceFirst("^@", "").toLowerCase(Locale.US);
-				if (candidate.length() < 3) {
-					tvUsernameStatus.setText("Username minimal 3 karakter");
-					tvUsernameStatus.setTextColor(Color.parseColor("#F87171"));
-					return;
-				}
-				tvUsernameStatus.setText("Mengecek ketersediaan username...");
-				tvUsernameStatus.setTextColor(Color.parseColor("#94A3B8"));
-				pendingCheck[0] = new Runnable() {
-					@Override
-					public void run() {
-						verifyUsernameAvailability(candidate, new UsernameCheckCallback() {
-							@Override
-							public void onResult(boolean available, String message) {
-								if (dialog.isShowing()) {
-									tvUsernameStatus.setText(message);
-									tvUsernameStatus.setTextColor(
-										available ? Color.parseColor("#34D399") : Color.parseColor("#F87171")
-									);
-								}
-							}
-						});
-					}
-				};
-				checkHandler.postDelayed(pendingCheck[0], 350);
-			}
-			@Override public void afterTextChanged(Editable s) {}
-		});
-
-		LinearLayout btnRow = new LinearLayout(this);
-		btnRow.setOrientation(LinearLayout.HORIZONTAL);
-		btnRow.setGravity(Gravity.END);
-
-		TextView btnCancel = new TextView(this);
-		btnCancel.setText("Batal");
-		btnCancel.setTextColor(Color.parseColor("#94A3B8"));
-		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnCancel.setPadding((int) (16 * d), (int) (9 * d), (int) (16 * d), (int) (9 * d));
-		btnCancel.setOnClickListener(new View.OnClickListener() {
-			@Override public void onClick(View v) { dialog.dismiss(); }
-		});
-
-		final TextView btnSave = new TextView(this);
-		btnSave.setText("Simpan");
-		btnSave.setTextColor(Color.WHITE);
-		btnSave.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnSave.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnSave.setPadding((int) (18 * d), (int) (9 * d), (int) (18 * d), (int) (9 * d));
-		LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-		sLp.leftMargin = (int) (8 * d);
-		btnSave.setLayoutParams(sLp);
-		GradientDrawable saveBg = new GradientDrawable();
-		saveBg.setColor(Color.parseColor("#2563EB"));
-		saveBg.setCornerRadius(100f);
-		btnSave.setBackground(saveBg);
-		btnSave.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				final String newName = etName.getText().toString().trim();
-				String rawUser = etUsername.getText().toString().trim().replaceFirst("^@", "").replaceAll("\\s+", "_").toLowerCase(Locale.US);
-				if (newName.isEmpty()) {
-					DongflixToast.show(MainActivity.this, "Nama tidak boleh kosong");
-					return;
-				}
-				if (rawUser.isEmpty()) {
-					rawUser = newName.toLowerCase(Locale.US).replaceAll("[^a-z0-9_]", "");
-					if (rawUser.isEmpty()) rawUser = "user";
-				}
-				if (rawUser.length() < 3) {
-					DongflixToast.show(MainActivity.this, "Username minimal 3 karakter");
-					return;
-				}
-
-				final String finalUser = rawUser;
-				btnSave.setEnabled(false);
-				btnSave.setText("Mengecek...");
-
-				verifyUsernameAvailability(finalUser, new UsernameCheckCallback() {
-					@Override
-					public void onResult(boolean available, String message) {
-						btnSave.setEnabled(true);
-						btnSave.setText("Simpan");
-						if (!available) {
-							tvUsernameStatus.setText(message);
-							tvUsernameStatus.setTextColor(Color.parseColor("#F87171"));
-							DongflixToast.show(MainActivity.this, message);
-							return;
-						}
-
-						currentDisplayName = newName;
-						currentUsername = finalUser;
-						currentPhotoUrl = pendingEditPhotoUrl != null ? pendingEditPhotoUrl : "";
-
-						TextView tvHeader = findViewById(R.id.text_username);
-						if (tvHeader != null) tvHeader.setText(currentDisplayName);
-						applyCircularAvatar(imgUserAvatar, currentPhotoUrl);
-						refreshAccountUi();
-
-						if (!currentUserKey.isEmpty()) {
-							Map<String, Object> updates = new HashMap<>();
-							updates.put("name", currentDisplayName);
-							updates.put("username", currentUsername);
-							updates.put("photoURL", currentPhotoUrl);
-							updates.put("email", currentUserEmail);
-							updates.put("isLifetimePremium", true);
-							FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-								.getReference("users")
-								.child(currentUserKey)
-								.updateChildren(updates);
-						}
-
-						DongflixToast.show(MainActivity.this, "Profil diperbarui");
-						dialog.dismiss();
-					}
-				});
-			}
-		});
-
-		btnRow.addView(btnCancel);
-		btnRow.addView(btnSave);
-		card.addView(btnRow);
-
-		dialog.setContentView(card);
-		Window win = dialog.getWindow();
-		if (win != null) {
-			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-			int screenW = getResources().getDisplayMetrics().widthPixels;
-			win.setLayout(Math.min((int) (345 * d), screenW - (int) (32 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
-		}
-		dialog.show();
-	}
-
-	private interface UsernameCheckCallback {
-		void onResult(boolean available, String message);
-	}
-
-	private void verifyUsernameAvailability(final String candidateUsername, final UsernameCheckCallback cb) {
-		final String normCandidate = candidateUsername.trim().replaceFirst("^@", "").toLowerCase(Locale.US);
-		if (normCandidate.equalsIgnoreCase(currentUsername)) {
-			cb.onResult(true, "Username tersedia (username kamu saat ini)");
-			return;
-		}
-		if (!normCandidate.matches("^[a-z0-9_]{3,20}$")) {
-			cb.onResult(false, "Gunakan 3-20 karakter huruf kecil, angka, atau _");
-			return;
-		}
-
-		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-			.getReference("users")
-			.addListenerForSingleValueEvent(new ValueEventListener() {
-				@Override
-				public void onDataChange(@NonNull DataSnapshot snap) {
-					if (isFinishing() || isDestroyed()) return;
-					boolean taken = false;
-					if (snap.exists()) {
-						for (DataSnapshot child : snap.getChildren()) {
-							String childKey = child.getKey() != null ? child.getKey() : "";
-							if (!currentUserKey.isEmpty() && currentUserKey.equalsIgnoreCase(childKey)) {
-								continue;
-							}
-							Object uVal = child.child("username").getValue();
-							if (uVal != null && uVal.toString().trim().replaceFirst("^@", "").equalsIgnoreCase(normCandidate)) {
-								taken = true;
-								break;
-							}
-						}
-					}
-					if (taken) {
-						cb.onResult(false, "Username @" + normCandidate + " sudah digunakan");
-					} else {
-						cb.onResult(true, "Username @" + normCandidate + " tersedia");
-					}
-				}
-
-				@Override
-				public void onCancelled(@NonNull DatabaseError error) {
-					cb.onResult(false, "Gagal mengecek username");
-				}
-			});
-	}
-
 	private void refreshAccountUi() {
 		if (tvAccountName != null) tvAccountName.setText(currentDisplayName);
 		if (tvAccountHandle != null) tvAccountHandle.setText("@" + currentUsername);
+		if (tvAccountBio != null) {
+			if (currentBio != null && !currentBio.trim().isEmpty()) {
+				tvAccountBio.setText(currentBio.trim());
+				tvAccountBio.setVisibility(View.VISIBLE);
+			} else {
+				tvAccountBio.setText("");
+				tvAccountBio.setVisibility(View.GONE);
+			}
+		}
 
 		String initial = !currentDisplayName.trim().isEmpty()
 			? currentDisplayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
