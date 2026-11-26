@@ -34,14 +34,17 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
-import org.json.JSONObject;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
-	private static final String CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/pqyvpk17/image/upload";
-	private static final String CLOUDINARY_UPLOAD_PRESET = "dongflix_unsigned";
+	private static final String CLOUDINARY_CLOUD_NAME = "pqyvpk17";
+	private static final String CLOUDINARY_UPLOAD_PRESET = "dongflix";
+	private static final String CLOUDINARY_UPLOAD_URL =
+		"https://api.cloudinary.com/v1_1/" + CLOUDINARY_CLOUD_NAME + "/image/upload";
 	private static final int REQ_PICK_AVATAR = 305;
 
 	private String currentUserKey = "";
@@ -50,11 +53,11 @@ public class MainActivity extends AppCompatActivity {
 	private String currentUsername = "rulsz";
 	private String currentPhotoUrl = "";
 	private String pendingEditPhotoUrl = "";
-	private Bitmap pendingCroppedBitmap = null;
 	private long currentUserExp = 0L;
 
 	private ImageView dialogEditAvatarPreview;
 	private TextView dialogEditAvatarInitial;
+	private TextView dialogBtnPickPhoto;
 
 	private ArrayList<HashMap<String, Object>> listMap = new ArrayList<>();
 	private ArrayList<HashMap<String, Object>> fullCatalogList = new ArrayList<>();
@@ -154,6 +157,11 @@ public class MainActivity extends AppCompatActivity {
 		}
 	};
 
+	public interface CloudinaryUploadCallback {
+		void onSuccess(String secureUrl);
+		void onError(String reason);
+	}
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -220,328 +228,177 @@ public class MainActivity extends AppCompatActivity {
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
 		if (requestCode == REQ_PICK_AVATAR && resultCode == RESULT_OK && data != null && data.getData() != null) {
-			Bitmap decoded = decodeSampledBitmapFromUri(data.getData(), 1024);
-			if (decoded != null) {
-				openSquareCircleCropDialog(decoded);
-			} else {
-				DongflixToast.show(this, "Gagal membaca gambar yang dipilih");
+			final Uri pickedUri = data.getData();
+			if (dialogBtnPickPhoto != null) {
+				dialogBtnPickPhoto.setEnabled(false);
+				dialogBtnPickPhoto.setText("Mengunggah...");
 			}
+			DongflixToast.show(this, "Mengunggah foto profil ke Cloudinary...");
+			uploadAvatarToCloudinary(pickedUri, new CloudinaryUploadCallback() {
+				@Override
+				public void onSuccess(String secureUrl) {
+					if (dialogBtnPickPhoto != null) {
+						dialogBtnPickPhoto.setEnabled(true);
+						dialogBtnPickPhoto.setText("Pilih Foto");
+					}
+					pendingEditPhotoUrl = secureUrl;
+					bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
+					DongflixToast.show(MainActivity.this, "Foto berhasil diunggah");
+				}
+
+				@Override
+				public void onError(String reason) {
+					if (dialogBtnPickPhoto != null) {
+						dialogBtnPickPhoto.setEnabled(true);
+						dialogBtnPickPhoto.setText("Pilih Foto");
+					}
+					DongflixToast.show(MainActivity.this, "Gagal unggah: " + reason);
+				}
+			});
 		}
 	}
 
-	private Bitmap decodeSampledBitmapFromUri(Uri uri, int maxDim) {
-		try {
-			InputStream boundsStream = getContentResolver().openInputStream(uri);
-			if (boundsStream == null) return null;
-			BitmapFactory.Options opts = new BitmapFactory.Options();
-			opts.inJustDecodeBounds = true;
-			BitmapFactory.decodeStream(boundsStream, null, opts);
-			boundsStream.close();
+	private void uploadAvatarToCloudinary(final Uri imageUri, final CloudinaryUploadCallback callback) {
+		final Context appCtx = getApplicationContext();
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				HttpURLConnection conn = null;
+				String boundary = "----DongflixUpload" + System.currentTimeMillis();
+				String lineEnd = "\r\n";
+				String twoHyphens = "--";
 
-			int sample = 1;
-			while ((opts.outWidth / sample) > maxDim || (opts.outHeight / sample) > maxDim) {
-				sample *= 2;
+				try {
+					byte[] jpegBytes = readAndCompressAvatar(appCtx, imageUri);
+					if (jpegBytes == null || jpegBytes.length == 0) {
+						postUploadError(callback, "File gambar tidak terbaca");
+						return;
+					}
+
+					URL url = new URL(CLOUDINARY_UPLOAD_URL);
+					conn = (HttpURLConnection) url.openConnection();
+					conn.setDoInput(true);
+					conn.setDoOutput(true);
+					conn.setUseCaches(false);
+					conn.setRequestMethod("POST");
+					conn.setConnectTimeout(15000);
+					conn.setReadTimeout(25000);
+					conn.setRequestProperty("Connection", "Keep-Alive");
+					conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
+
+					DataOutputStream dos = new DataOutputStream(conn.getOutputStream());
+
+					dos.writeBytes(twoHyphens + boundary + lineEnd);
+					dos.writeBytes("Content-Disposition: form-data; name=\"upload_preset\"" + lineEnd + lineEnd);
+					dos.writeBytes(CLOUDINARY_UPLOAD_PRESET + lineEnd);
+
+					dos.writeBytes(twoHyphens + boundary + lineEnd);
+					dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"" + lineEnd);
+					dos.writeBytes("Content-Type: image/jpeg" + lineEnd + lineEnd);
+					dos.write(jpegBytes);
+					dos.writeBytes(lineEnd);
+
+					dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
+					dos.flush();
+					dos.close();
+
+					int status = conn.getResponseCode();
+					InputStream is = (status >= 200 && status < 300)
+						? conn.getInputStream() : conn.getErrorStream();
+
+					StringBuilder sb = new StringBuilder();
+					if (is != null) {
+						BufferedReader br = new BufferedReader(new InputStreamReader(is));
+						String line;
+						while ((line = br.readLine()) != null) {
+							sb.append(line);
+						}
+						br.close();
+					}
+
+					String body = sb.toString();
+					if (status < 200 || status >= 300) {
+						String errMsg = extractJsonField(body, "message");
+						postUploadError(callback, errMsg.isEmpty() ? ("HTTP " + status) : errMsg);
+						return;
+					}
+
+					String uploadedUrl = extractJsonField(body, "secure_url");
+					if (uploadedUrl.isEmpty()) {
+						uploadedUrl = extractJsonField(body, "url");
+					}
+					if (uploadedUrl.isEmpty()) {
+						postUploadError(callback, "URL hasil unggah kosong");
+						return;
+					}
+
+					final String finalUrl = uploadedUrl.startsWith("http://")
+						? uploadedUrl.replace("http://", "https://") : uploadedUrl;
+					runOnUiThread(new Runnable() {
+						@Override
+						public void run() {
+							if (!isFinishing() && !isDestroyed() && callback != null) {
+								callback.onSuccess(finalUrl);
+							}
+						}
+					});
+				} catch (Exception e) {
+					postUploadError(callback, e.getMessage() != null ? e.getMessage() : "Kesalahan jaringan");
+				} finally {
+					if (conn != null) conn.disconnect();
+				}
 			}
+		}).start();
+	}
 
-			InputStream decodeStream = getContentResolver().openInputStream(uri);
-			if (decodeStream == null) return null;
-			BitmapFactory.Options decOpts = new BitmapFactory.Options();
-			decOpts.inSampleSize = Math.max(1, sample);
-			Bitmap bmp = BitmapFactory.decodeStream(decodeStream, null, decOpts);
-			decodeStream.close();
-			return bmp;
+	private byte[] readAndCompressAvatar(Context ctx, Uri uri) {
+		try {
+			InputStream is = ctx.getContentResolver().openInputStream(uri);
+			if (is == null) return null;
+			Bitmap raw = BitmapFactory.decodeStream(is);
+			is.close();
+			if (raw == null) return null;
+
+			int edge = Math.min(raw.getWidth(), raw.getHeight());
+			int x = Math.max(0, (raw.getWidth() - edge) / 2);
+			int y = Math.max(0, (raw.getHeight() - edge) / 2);
+			Bitmap square = Bitmap.createBitmap(raw, x, y, edge, edge);
+
+			int maxSide = 512;
+			Bitmap scaled = edge > maxSide
+				? Bitmap.createScaledBitmap(square, maxSide, maxSide, true)
+				: square;
+
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			scaled.compress(Bitmap.CompressFormat.JPEG, 82, baos);
+			return baos.toByteArray();
 		} catch (Exception e) {
 			return null;
 		}
 	}
 
-	private void openSquareCircleCropDialog(final Bitmap sourceBitmap) {
-		final float d = getResources().getDisplayMetrics().density;
-		final Dialog cropDialog = new Dialog(this);
-		cropDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+	private String extractJsonField(String json, String field) {
+		if (json == null || json.isEmpty() || field == null) return "";
+		try {
+			Matcher m = Pattern
+				.compile("\"" + Pattern.quote(field) + "\"\\s*:\\s*\"([^\"]*)\"")
+				.matcher(json);
+			if (m.find() && m.group(1) != null) {
+				return m.group(1).replace("\\/", "/");
+			}
+		} catch (Exception ignored) {}
+		return "";
+	}
 
-		LinearLayout root = new LinearLayout(this);
-		root.setOrientation(LinearLayout.VERTICAL);
-		root.setPadding((int) (18 * d), (int) (18 * d), (int) (18 * d), (int) (18 * d));
-		GradientDrawable bg = new GradientDrawable();
-		bg.setColor(Color.parseColor("#12141A"));
-		bg.setCornerRadius(20 * d);
-		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
-		root.setBackground(bg);
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Crop Foto Profil");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		root.addView(tvTitle);
-
-		TextView tvHint = new TextView(this);
-		tvHint.setText("Geser atau cubit gambar di dalam kotak. Area lingkaran menunjukkan tampilan profil.");
-		tvHint.setTextColor(Color.parseColor("#94A3B8"));
-		tvHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-		tvHint.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		hLp.topMargin = (int) (4 * d);
-		hLp.bottomMargin = (int) (14 * d);
-		tvHint.setLayoutParams(hLp);
-		root.addView(tvHint);
-
-		int screenW = getResources().getDisplayMetrics().widthPixels;
-		int cropBoxSize = Math.min((int) (280 * d), screenW - (int) (72 * d));
-
-		final SquareCircleCropView cropView = new SquareCircleCropView(this, sourceBitmap);
-		LinearLayout.LayoutParams cvLp = new LinearLayout.LayoutParams(cropBoxSize, cropBoxSize);
-		cvLp.gravity = Gravity.CENTER_HORIZONTAL;
-		cropView.setLayoutParams(cvLp);
-		root.addView(cropView);
-
-		LinearLayout btnRow = new LinearLayout(this);
-		btnRow.setOrientation(LinearLayout.HORIZONTAL);
-		btnRow.setGravity(Gravity.END);
-		LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		brLp.topMargin = (int) (16 * d);
-		btnRow.setLayoutParams(brLp);
-
-		TextView btnCancel = new TextView(this);
-		btnCancel.setText("Batal");
-		btnCancel.setTextColor(Color.parseColor("#94A3B8"));
-		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnCancel.setPadding((int) (16 * d), (int) (9 * d), (int) (16 * d), (int) (9 * d));
-		btnCancel.setOnClickListener(new View.OnClickListener() {
-			@Override public void onClick(View v) { cropDialog.dismiss(); }
-		});
-
-		TextView btnApplyCrop = new TextView(this);
-		btnApplyCrop.setText("Gunakan Foto");
-		btnApplyCrop.setTextColor(Color.WHITE);
-		btnApplyCrop.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnApplyCrop.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnApplyCrop.setPadding((int) (18 * d), (int) (9 * d), (int) (18 * d), (int) (9 * d));
-		LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		aLp.leftMargin = (int) (8 * d);
-		btnApplyCrop.setLayoutParams(aLp);
-		GradientDrawable applyBg = new GradientDrawable();
-		applyBg.setColor(Color.parseColor("#2563EB"));
-		applyBg.setCornerRadius(100f);
-		btnApplyCrop.setBackground(applyBg);
-		btnApplyCrop.setOnClickListener(new View.OnClickListener() {
+	private void postUploadError(final CloudinaryUploadCallback callback, final String reason) {
+		runOnUiThread(new Runnable() {
 			@Override
-			public void onClick(View v) {
-				Bitmap cropped = cropView.getCroppedSquareBitmap(400);
-				if (cropped != null) {
-					pendingCroppedBitmap = cropped;
-					bindAvatarBitmapPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, cropped);
+			public void run() {
+				if (!isFinishing() && !isDestroyed() && callback != null) {
+					callback.onError(reason);
 				}
-				cropDialog.dismiss();
 			}
 		});
-
-		btnRow.addView(btnCancel);
-		btnRow.addView(btnApplyCrop);
-		root.addView(btnRow);
-
-		cropDialog.setContentView(root);
-		Window win = cropDialog.getWindow();
-		if (win != null) {
-			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-			win.setLayout(Math.min((int) (345 * d), screenW - (int) (32 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
-		}
-		cropDialog.show();
-	}
-
-	private static class SquareCircleCropView extends View {
-		private final Bitmap bitmap;
-		private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-		private final Paint maskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		private final Paint squareBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		private final Paint circleGuidePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		private final ScaleGestureDetector scaleDetector;
-
-		private float scale = 1f;
-		private float minScale = 1f;
-		private float offsetX = 0f;
-		private float offsetY = 0f;
-		private float lastTouchX = 0f;
-		private float lastTouchY = 0f;
-		private boolean initialized = false;
-
-		SquareCircleCropView(Context context, Bitmap bmp) {
-			super(context);
-			this.bitmap = bmp;
-			maskPaint.setColor(Color.parseColor("#88000000"));
-			maskPaint.setStyle(Paint.Style.FILL);
-
-			squareBorderPaint.setColor(Color.parseColor("#38BDF8"));
-			squareBorderPaint.setStyle(Paint.Style.STROKE);
-			squareBorderPaint.setStrokeWidth(3f);
-
-			circleGuidePaint.setColor(Color.WHITE);
-			circleGuidePaint.setStyle(Paint.Style.STROKE);
-			circleGuidePaint.setStrokeWidth(3f);
-
-			scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
-				@Override
-				public boolean onScale(ScaleGestureDetector detector) {
-					float next = scale * detector.getScaleFactor();
-					scale = Math.max(minScale, Math.min(minScale * 4f, next));
-					clampOffsets();
-					invalidate();
-					return true;
-				}
-			});
-		}
-
-		private void ensureInitialized() {
-			if (initialized || getWidth() <= 0 || getHeight() <= 0 || bitmap == null) return;
-			float viewSize = Math.min(getWidth(), getHeight());
-			minScale = Math.max(viewSize / bitmap.getWidth(), viewSize / bitmap.getHeight());
-			scale = minScale;
-			offsetX = (viewSize - bitmap.getWidth() * scale) / 2f;
-			offsetY = (viewSize - bitmap.getHeight() * scale) / 2f;
-			initialized = true;
-		}
-
-		private void clampOffsets() {
-			float viewSize = Math.min(getWidth(), getHeight());
-			float drawnW = bitmap.getWidth() * scale;
-			float drawnH = bitmap.getHeight() * scale;
-			offsetX = Math.min(0f, Math.max(viewSize - drawnW, offsetX));
-			offsetY = Math.min(0f, Math.max(viewSize - drawnH, offsetY));
-		}
-
-		@Override
-		public boolean onTouchEvent(MotionEvent event) {
-			scaleDetector.onTouchEvent(event);
-			switch (event.getActionMasked()) {
-				case MotionEvent.ACTION_DOWN:
-					lastTouchX = event.getX();
-					lastTouchY = event.getY();
-					break;
-				case MotionEvent.ACTION_MOVE:
-					if (!scaleDetector.isInProgress()) {
-						offsetX += (event.getX() - lastTouchX);
-						offsetY += (event.getY() - lastTouchY);
-						clampOffsets();
-						invalidate();
-					}
-					lastTouchX = event.getX();
-					lastTouchY = event.getY();
-					break;
-			}
-			return true;
-		}
-
-		@Override
-		protected void onDraw(Canvas canvas) {
-			super.onDraw(canvas);
-			ensureInitialized();
-			int w = getWidth();
-			int h = getHeight();
-			if (w <= 0 || h <= 0 || bitmap == null) return;
-
-			canvas.save();
-			Matrix m = new Matrix();
-			m.postScale(scale, scale);
-			m.postTranslate(offsetX, offsetY);
-			canvas.drawBitmap(bitmap, m, bitmapPaint);
-
-			// Gelapkan area di luar indikator lingkaran agar terlihat jelas area profil bulat
-			Path outsideCircle = new Path();
-			outsideCircle.addRect(0, 0, w, h, Path.Direction.CW);
-			outsideCircle.addCircle(w / 2f, h / 2f, Math.min(w, h) / 2f, Path.Direction.CCW);
-			canvas.drawPath(outsideCircle, maskPaint);
-
-			// Indikator lingkaran profil
-			canvas.drawCircle(w / 2f, h / 2f, (Math.min(w, h) / 2f) - 2f, circleGuidePaint);
-			// Bingkai crop kotak
-			canvas.drawRect(1.5f, 1.5f, w - 1.5f, h - 1.5f, squareBorderPaint);
-			canvas.restore();
-		}
-
-		public Bitmap getCroppedSquareBitmap(int outSizePx) {
-			ensureInitialized();
-			int viewSize = Math.min(getWidth(), getHeight());
-			if (viewSize <= 0 || bitmap == null) return bitmap;
-
-			Bitmap out = Bitmap.createBitmap(outSizePx, outSizePx, Bitmap.Config.ARGB_8888);
-			Canvas c = new Canvas(out);
-			float factor = (float) outSizePx / (float) viewSize;
-			Matrix m = new Matrix();
-			m.postScale(scale * factor, scale * factor);
-			m.postTranslate(offsetX * factor, offsetY * factor);
-			c.drawBitmap(bitmap, m, bitmapPaint);
-			return out;
-		}
-	}
-
-	private String uploadBitmapToCloudinary(Bitmap bmp) throws Exception {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		bmp.compress(Bitmap.CompressFormat.JPEG, 88, baos);
-		byte[] jpegBytes = baos.toByteArray();
-
-		String boundary = "----DongflixBoundary" + System.currentTimeMillis();
-		URL url = new URL(CLOUDINARY_UPLOAD_URL);
-		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-		conn.setRequestMethod("POST");
-		conn.setDoOutput(true);
-		conn.setConnectTimeout(20000);
-		conn.setReadTimeout(25000);
-		conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-
-		DataOutputStream out = new DataOutputStream(conn.getOutputStream());
-		out.writeBytes("--" + boundary + "\r\n");
-		out.writeBytes("Content-Disposition: form-data; name=\"upload_preset\"\r\n\r\n");
-		out.writeBytes(CLOUDINARY_UPLOAD_PRESET + "\r\n");
-
-		out.writeBytes("--" + boundary + "\r\n");
-		out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"\r\n");
-		out.writeBytes("Content-Type: image/jpeg\r\n\r\n");
-		out.write(jpegBytes);
-		out.writeBytes("\r\n--" + boundary + "--\r\n");
-		out.flush();
-		out.close();
-
-		int code = conn.getResponseCode();
-		InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-		BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = br.readLine()) != null) sb.append(line);
-		br.close();
-		conn.disconnect();
-
-		JSONObject res = new JSONObject(sb.toString());
-		if (res.has("secure_url")) {
-			return res.getString("secure_url");
-		}
-		throw new Exception(res.optString("error", "Upload Cloudinary gagal"));
-	}
-
-	private void bindAvatarBitmapPreview(ImageView imgView, TextView initialView, Bitmap bmp) {
-		if (imgView == null || bmp == null) return;
-		float d = getResources().getDisplayMetrics().density;
-		int sizePx = (int) (54 * d);
-		Bitmap scaled = Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true);
-		Bitmap circleBmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-		Canvas c = new Canvas(circleBmp);
-		Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-		c.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, p);
-		p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-		c.drawBitmap(scaled, 0, 0, p);
-
-		imgView.setVisibility(View.VISIBLE);
-		imgView.setPadding(0, 0, 0, 0);
-		imgView.clearColorFilter();
-		imgView.setImageBitmap(circleBmp);
-		if (initialView != null) initialView.setVisibility(View.GONE);
 	}
 
 	private void bindAvatarPreview(ImageView imgView, TextView initialView, String photoUrl, String displayName) {
@@ -1027,7 +884,7 @@ public class MainActivity extends AppCompatActivity {
 	private void bindSectionLikePopularToday(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
 		if (rv == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+		rv.setLayoutManager(new LinearLayoutManager(this, LinearLayout.HORIZONTAL, false));
 		rv.setNestedScrollingEnabled(false);
 		rv.setOnFlingListener(null);
 		rv.setClipToPadding(false);
@@ -1102,7 +959,7 @@ public class MainActivity extends AppCompatActivity {
 
 		if (recyclerContinue != null) {
 			float d = getResources().getDisplayMetrics().density;
-			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+			recyclerContinue.setLayoutManager(new LinearLayoutManager(this, LinearLayout.HORIZONTAL, false));
 			recyclerContinue.setNestedScrollingEnabled(false);
 			recyclerContinue.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (112 * d)));
 		}
@@ -2122,7 +1979,6 @@ public class MainActivity extends AppCompatActivity {
 	private void openEditProfileDialog() {
 		float d = getResources().getDisplayMetrics().density;
 		pendingEditPhotoUrl = currentPhotoUrl;
-		pendingCroppedBitmap = null;
 
 		final Dialog dialog = new Dialog(this);
 		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -2131,7 +1987,7 @@ public class MainActivity extends AppCompatActivity {
 			public void onDismiss(DialogInterface dInt) {
 				dialogEditAvatarPreview = null;
 				dialogEditAvatarInitial = null;
-				pendingCroppedBitmap = null;
+				dialogBtnPickPhoto = null;
 			}
 		});
 
@@ -2180,18 +2036,18 @@ public class MainActivity extends AppCompatActivity {
 		avatarBox.addView(dialogEditAvatarInitial);
 		bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, pendingEditPhotoUrl, currentDisplayName);
 
-		TextView btnPickPhoto = new TextView(this);
-		btnPickPhoto.setText("Pilih Foto");
-		btnPickPhoto.setTextColor(Color.WHITE);
-		btnPickPhoto.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		btnPickPhoto.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnPickPhoto.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
+		dialogBtnPickPhoto = new TextView(this);
+		dialogBtnPickPhoto.setText("Pilih Foto");
+		dialogBtnPickPhoto.setTextColor(Color.WHITE);
+		dialogBtnPickPhoto.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		dialogBtnPickPhoto.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		dialogBtnPickPhoto.setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
 		GradientDrawable pickBg = new GradientDrawable();
 		pickBg.setColor(Color.parseColor("#1A2030"));
 		pickBg.setCornerRadius(100f);
 		pickBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2AFFFFFF"));
-		btnPickPhoto.setBackground(pickBg);
-		btnPickPhoto.setOnClickListener(new View.OnClickListener() {
+		dialogBtnPickPhoto.setBackground(pickBg);
+		dialogBtnPickPhoto.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				try {
@@ -2214,13 +2070,12 @@ public class MainActivity extends AppCompatActivity {
 			@Override
 			public void onClick(View v) {
 				pendingEditPhotoUrl = "";
-				pendingCroppedBitmap = null;
 				bindAvatarPreview(dialogEditAvatarPreview, dialogEditAvatarInitial, "", currentDisplayName);
 			}
 		});
 
 		photoRow.addView(avatarBox);
-		photoRow.addView(btnPickPhoto);
+		photoRow.addView(dialogBtnPickPhoto);
 		photoRow.addView(btnResetPhoto);
 		card.addView(photoRow);
 
@@ -2355,55 +2210,44 @@ public class MainActivity extends AppCompatActivity {
 
 				final String finalUser = rawUser;
 				btnSave.setEnabled(false);
-				btnSave.setText("Menyimpan...");
+				btnSave.setText("Mengecek...");
 
 				verifyUsernameAvailability(finalUser, new UsernameCheckCallback() {
 					@Override
 					public void onResult(boolean available, String message) {
+						btnSave.setEnabled(true);
+						btnSave.setText("Simpan");
 						if (!available) {
-							btnSave.setEnabled(true);
-							btnSave.setText("Simpan");
 							tvUsernameStatus.setText(message);
 							tvUsernameStatus.setTextColor(Color.parseColor("#F87171"));
 							DongflixToast.show(MainActivity.this, message);
 							return;
 						}
 
-						final Bitmap bmpToUpload = pendingCroppedBitmap;
-						if (bmpToUpload != null) {
-							btnSave.setText("Mengunggah...");
-							new Thread(new Runnable() {
-								@Override
-								public void run() {
-									try {
-										final String uploadedUrl = uploadBitmapToCloudinary(bmpToUpload);
-										runOnUiThread(new Runnable() {
-											@Override
-											public void run() {
-												btnSave.setEnabled(true);
-												btnSave.setText("Simpan");
-												commitProfileUpdate(newName, finalUser, uploadedUrl);
-												dialog.dismiss();
-											}
-										});
-									} catch (final Exception e) {
-										runOnUiThread(new Runnable() {
-											@Override
-											public void run() {
-												btnSave.setEnabled(true);
-												btnSave.setText("Simpan");
-												DongflixToast.show(MainActivity.this, "Gagal mengunggah foto ke Cloudinary");
-											}
-										});
-									}
-								}
-							}).start();
-						} else {
-							btnSave.setEnabled(true);
-							btnSave.setText("Simpan");
-							commitProfileUpdate(newName, finalUser, pendingEditPhotoUrl != null ? pendingEditPhotoUrl : "");
-							dialog.dismiss();
+						currentDisplayName = newName;
+						currentUsername = finalUser;
+						currentPhotoUrl = pendingEditPhotoUrl != null ? pendingEditPhotoUrl : "";
+
+						TextView tvHeader = findViewById(R.id.text_username);
+						if (tvHeader != null) tvHeader.setText(currentDisplayName);
+						applyCircularAvatar(imgUserAvatar, currentPhotoUrl);
+						refreshAccountUi();
+
+						if (!currentUserKey.isEmpty()) {
+							Map<String, Object> updates = new HashMap<>();
+							updates.put("name", currentDisplayName);
+							updates.put("username", currentUsername);
+							updates.put("photoURL", currentPhotoUrl);
+							updates.put("email", currentUserEmail);
+							updates.put("isLifetimePremium", true);
+							FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+								.getReference("users")
+								.child(currentUserKey)
+								.updateChildren(updates);
 						}
+
+						DongflixToast.show(MainActivity.this, "Profil diperbarui");
+						dialog.dismiss();
 					}
 				});
 			}
@@ -2421,32 +2265,6 @@ public class MainActivity extends AppCompatActivity {
 			win.setLayout(Math.min((int) (345 * d), screenW - (int) (32 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
 		}
 		dialog.show();
-	}
-
-	private void commitProfileUpdate(String newName, String finalUser, String finalPhotoUrl) {
-		currentDisplayName = newName;
-		currentUsername = finalUser;
-		currentPhotoUrl = finalPhotoUrl;
-
-		TextView tvHeader = findViewById(R.id.text_username);
-		if (tvHeader != null) tvHeader.setText(currentDisplayName);
-		applyCircularAvatar(imgUserAvatar, currentPhotoUrl);
-		refreshAccountUi();
-
-		if (!currentUserKey.isEmpty()) {
-			Map<String, Object> updates = new HashMap<>();
-			updates.put("name", currentDisplayName);
-			updates.put("username", currentUsername);
-			updates.put("photoURL", currentPhotoUrl);
-			updates.put("email", currentUserEmail);
-			updates.put("isLifetimePremium", true);
-			FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-				.getReference("users")
-				.child(currentUserKey)
-				.updateChildren(updates);
-		}
-
-		DongflixToast.show(MainActivity.this, "Profil diperbarui");
 	}
 
 	private interface UsernameCheckCallback {
@@ -2668,19 +2486,20 @@ public class MainActivity extends AppCompatActivity {
 		ArrayList<HashMap<String, Object>> found = new ArrayList<>();
 		Set<String> seenPaths = new HashSet<>();
 
-		List<HashMap<String, Object>> bgTasks = DongflixDownloadManager.getInstance().getTasks(this);
-		for (HashMap<String, Object> task : bgTasks) {
-			String path = safeStr(task, "file_path", "");
-			String status = safeStr(task, "status", "downloading");
-			int pct = (int) parseLongSafe(task.get("progress"));
-			long dl = parseLongSafe(task.get("downloaded"));
-			long tot = parseLongSafe(task.get("total"));
+		for (HashMap<String, Object> t : DongflixDownloadManager.getInstance().getTasks(this)) {
+			String path = safeStr(t, "file_path", "");
+			String status = safeStr(t, "status", "downloading");
+			int pct = (int) parseLongSafe(t.get("progress"));
+			long dl = parseLongSafe(t.get("downloaded"));
+			long tot = parseLongSafe(t.get("total"));
 
-			HashMap<String, Object> row = new HashMap<>(task);
+			HashMap<String, Object> row = new HashMap<>(t);
 			row.put("is_active_download", !"completed".equals(status));
 			if ("completed".equals(status)) {
 				long sz = tot > 0L ? tot : dl;
 				row.put("size_mb", String.format(Locale.US, "%.1f MB", sz / (1024f * 1024f)));
+			} else if ("failed".equals(status)) {
+				row.put("size_mb", "Gagal");
 			} else {
 				row.put("size_mb", String.format(Locale.US, "%d%% • %.1f MB", pct, dl / (1024f * 1024f)));
 			}
@@ -2785,7 +2604,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		File videoFile = new File(filePath);
 		if (!videoFile.exists() || !videoFile.canRead() || videoFile.length() <= 0L) {
-			DongflixToast.show(this, "File video masih diunduh atau sudah dihapus");
+			DongflixToast.show(this, "File video rusak atau sudah dihapus");
 			renderActivePustakaTab();
 			return;
 		}
@@ -4251,7 +4070,7 @@ public class MainActivity extends AppCompatActivity {
 			TextView tvTitle = holder.itemView.findViewWithTag("title");
 			TextView tvEp = holder.itemView.findViewWithTag("ep");
 			TextView tvSub = holder.itemView.findViewWithTag("sub");
-			final View dlTrack = holder.itemView.findViewWithTag("dl_track");
+			View dlTrack = holder.itemView.findViewWithTag("dl_track");
 			final View dlFill = holder.itemView.findViewWithTag("dl_fill");
 			TextView btnRemove = holder.itemView.findViewWithTag("btn_remove");
 
@@ -4305,24 +4124,17 @@ public class MainActivity extends AppCompatActivity {
 			}
 
 			if (mode == 2) {
-				String cov = normalizeCoverUrl(safeStr(item, "cover", ""));
-				if (img != null) {
-					if (!cov.isEmpty() && !isFinishing() && !isDestroyed()) {
-						Glide.with(MainActivity.this).load(Uri.parse(cov)).placeholder(R.drawable.default_image).into(img);
-					} else {
-						img.setImageResource(R.drawable.default_image);
-					}
-				}
+				if (img != null) img.setImageResource(R.drawable.default_image);
 				final String path = safeStr(item, "file_path", "");
 				final String url = safeStr(item, "url", "");
-				final String epLabel = safeStr(item, "episode", "EP 1");
+				final String epLabel = safeStr(item, "episode", "EP");
 				final String st = safeStr(item, "status", "completed");
 				holder.itemView.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
 						if ("failed".equals(st) && !url.isEmpty()) {
 							DongflixToast.show(MainActivity.this, "Mengulang unduhan di latar belakang...");
-							DongflixDownloadManager.getInstance().startDownload(MainActivity.this, title, epLabel, cov, url, "");
+							DongflixDownloadManager.getInstance().startDownload(MainActivity.this, title, epLabel, url);
 							return;
 						}
 						openDownloadedVideoSafely(path, title);
