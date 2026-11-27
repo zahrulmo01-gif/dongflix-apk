@@ -24,10 +24,6 @@ public class StreamExtractorHelper {
 		void onNeedSniffer(String snifferUrl, String referer);
 	}
 
-	/**
-	 * Menormalkan semua label resolusi agar selalu berbentuk angka + "p" (contoh: 144p, 240p, 360p, 480p, 720p, 1080p).
-	 * Jika resolusi spesifik tidak diketahui (single stream), default ke "720p".
-	 */
 	public static String normalizeResolutionToP(String raw) {
 		if (raw == null) return "720p";
 		String s = raw.trim().toLowerCase(Locale.US);
@@ -82,7 +78,7 @@ public class StreamExtractorHelper {
 				try {
 					if (serverKey.contains("ok") || serverKey.contains("odnoklassniki") || lowerUrl.contains("ok.ru")) {
 						extractOkRu(finalTargetUrl, mainHandler, callback);
-					} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly")) {
+					} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly") || lowerUrl.contains("dongflix-dailymotion")) {
 						extractDailymotion(finalTargetUrl, mainHandler, callback);
 					} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
 						extractDtube(finalTargetUrl, mainHandler, callback);
@@ -188,123 +184,138 @@ public class StreamExtractorHelper {
 		}
 	}
 
-	private static void extractDailymotion(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		String dailyId = "";
-		Uri parsedUri = Uri.parse(finalTargetUrl);
-		if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
-			dailyId = parsedUri.getQueryParameter("id");
-		} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
-			dailyId = parsedUri.getQueryParameter("video");
-		} else if (finalTargetUrl.contains("/video/")) {
-			String[] parts = finalTargetUrl.split("/video/");
-			if (parts.length > 1) dailyId = parts[1].split("[?&#_]")[0];
-		} else if (finalTargetUrl.contains("dai.ly/")) {
-			String[] parts = finalTargetUrl.split("dai.ly/");
-			if (parts.length > 1) dailyId = parts[1].split("[?&#]")[0];
-		} else {
-			String cPath = finalTargetUrl.split("\\?")[0];
-			dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
-		}
+	private static void extractDailymotion(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) {
+		try {
+			String dailyId = "";
+			Uri parsedUri = Uri.parse(finalTargetUrl);
+			if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
+				dailyId = parsedUri.getQueryParameter("id");
+			} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
+				dailyId = parsedUri.getQueryParameter("video");
+			} else if (finalTargetUrl.contains("/video/")) {
+				String[] parts = finalTargetUrl.split("/video/");
+				if (parts.length > 1) dailyId = parts[1].split("[?&#_]")[0];
+			} else if (finalTargetUrl.contains("dai.ly/")) {
+				String[] parts = finalTargetUrl.split("dai.ly/");
+				if (parts.length > 1) dailyId = parts[1].split("[?&#]")[0];
+			} else {
+				String cPath = finalTargetUrl.split("\\?")[0];
+				dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
+			}
 
-		if (dailyId == null || dailyId.trim().isEmpty()) {
-			postSniffer(mainHandler, callback, finalTargetUrl, "https://www.dailymotion.com/");
-			return;
-		}
+			if (dailyId == null || dailyId.trim().isEmpty()) {
+				postSniffer(mainHandler, callback, finalTargetUrl, "https://www.dailymotion.com/");
+				return;
+			}
 
-		String cleanDmId = dailyId.trim();
-		String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + cleanDmId
-			+ "?embedder=https%3A%2F%2Fwww.dailymotion.com%2F&app=com.dailymotion.neon";
-		HttpFetchResult res = fetchHttp(dmApiUrl, "https://www.dailymotion.com/", true);
+			String cleanDmId = dailyId.trim();
+			String embedFallbackUrl = "https://geo.dailymotion.com/player.html?video=" + cleanDmId;
+			String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + cleanDmId
+				+ "?embedder=" + Uri.encode(embedFallbackUrl) + "&app=com.dailymotion.neon";
 
-		ArrayList<String> dmNames = new ArrayList<>();
-		ArrayList<String> dmUrls = new ArrayList<>();
+			HttpFetchResult res = fetchHttp(dmApiUrl, embedFallbackUrl, true);
+			ArrayList<String> dmNames = new ArrayList<>();
+			ArrayList<String> dmUrls = new ArrayList<>();
 
-		if (!res.body.isEmpty()) {
-			JSONObject metaObj = new JSONObject(res.body);
-			if (metaObj.has("qualities")) {
-				JSONObject qualities = metaObj.getJSONObject("qualities");
-				String[] checkKeys = new String[]{"1080", "720", "480", "380", "240", "144"};
+			if (res.body != null && !res.body.trim().isEmpty()) {
+				JSONObject metaObj = new JSONObject(res.body);
+				if (metaObj.has("qualities")) {
+					JSONObject qualities = metaObj.getJSONObject("qualities");
+					String[] checkKeys = new String[]{"1080", "720", "480", "380", "240", "144"};
 
-				for (String qKey : checkKeys) {
-					if (qualities.has(qKey)) {
-						JSONArray qArr = qualities.optJSONArray(qKey);
-						if (qArr != null) {
-							String chosenUrl = "";
-							for (int idx = 0; idx < qArr.length(); idx++) {
-								JSONObject itemQ = qArr.getJSONObject(idx);
-								String mime = itemQ.optString("type", "");
-								String u = itemQ.optString("url", "");
-								if (!u.isEmpty() && mime.contains("mp4")) {
-									chosenUrl = u;
-									break;
+					for (String qKey : checkKeys) {
+						if (qualities.has(qKey)) {
+							JSONArray qArr = qualities.optJSONArray(qKey);
+							if (qArr != null) {
+								String chosenUrl = "";
+								for (int idx = 0; idx < qArr.length(); idx++) {
+									JSONObject itemQ = qArr.getJSONObject(idx);
+									String mime = itemQ.optString("type", "");
+									String u = itemQ.optString("url", "");
+									if (!u.isEmpty() && mime.contains("mp4")) {
+										chosenUrl = u;
+										break;
+									}
 								}
-							}
-							if (chosenUrl.isEmpty() && qArr.length() > 0) {
-								chosenUrl = qArr.getJSONObject(0).optString("url", "");
-							}
-							if (!chosenUrl.isEmpty()) {
-								addUniqueQuality(dmNames, dmUrls, normalizeResolutionToP(qKey), chosenUrl);
+								if (chosenUrl.isEmpty() && qArr.length() > 0) {
+									chosenUrl = qArr.getJSONObject(0).optString("url", "");
+								}
+								if (!chosenUrl.isEmpty()) {
+									addUniqueQuality(dmNames, dmUrls, normalizeResolutionToP(qKey), chosenUrl);
+								}
 							}
 						}
 					}
-				}
 
-				if (dmUrls.isEmpty() && qualities.has("auto")) {
-					JSONArray autoArr = qualities.optJSONArray("auto");
-					if (autoArr != null && autoArr.length() > 0) {
-						String autoUrl = autoArr.getJSONObject(0).optString("url", "");
-						if (!autoUrl.isEmpty()) {
-							addUniqueQuality(dmNames, dmUrls, "720p", autoUrl);
+					if (dmUrls.isEmpty() && qualities.has("auto")) {
+						JSONArray autoArr = qualities.optJSONArray("auto");
+						if (autoArr != null && autoArr.length() > 0) {
+							String autoUrl = autoArr.getJSONObject(0).optString("url", "");
+							if (!autoUrl.isEmpty()) {
+								addUniqueQuality(dmNames, dmUrls, "720p", autoUrl);
+							}
 						}
 					}
 				}
 			}
-		}
 
-		if (!dmUrls.isEmpty()) {
-			postSuccess(mainHandler, callback, dmNames, dmUrls, "https://www.dailymotion.com/", res.cookie);
-		} else {
-			postSniffer(mainHandler, callback, "https://geo.dailymotion.com/player.html?video=" + cleanDmId, "https://www.dailymotion.com/");
+			if (!dmUrls.isEmpty()) {
+				postSuccess(mainHandler, callback, dmNames, dmUrls, "https://www.dailymotion.com/", res.cookie);
+			} else {
+				postSniffer(mainHandler, callback, embedFallbackUrl, "https://www.dailymotion.com/");
+			}
+		} catch (Exception e) {
+			String fallbackId = Uri.parse(finalTargetUrl).getQueryParameter("id");
+			String snifferTarget = (fallbackId != null && !fallbackId.trim().isEmpty())
+				? "https://geo.dailymotion.com/player.html?video=" + fallbackId.trim()
+				: finalTargetUrl;
+			postSniffer(mainHandler, callback, snifferTarget, "https://www.dailymotion.com/");
 		}
 	}
 
-	private static void extractDtube(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		ArrayList<String> names = new ArrayList<>();
-		ArrayList<String> urls = new ArrayList<>();
+	private static void extractDtube(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) {
+		try {
+			ArrayList<String> names = new ArrayList<>();
+			ArrayList<String> urls = new ArrayList<>();
 
-		Pattern pDirectQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
-		Matcher mDirectQm = pDirectQm.matcher(finalTargetUrl);
-		if (mDirectQm.find()) {
-			addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mDirectQm.group(1));
-		}
+			Uri uri = Uri.parse(finalTargetUrl);
+			String vParam = uri.getQueryParameter("v");
+			String videoId = (vParam != null && !vParam.trim().isEmpty()) ? vParam.trim() : "";
 
-		if (urls.isEmpty() && finalTargetUrl.contains("/v/")) {
-			String afterV = finalTargetUrl.substring(finalTargetUrl.indexOf("/v/") + 3).split("[?#]")[0];
-			String[] parts = afterV.split("/");
-			if (parts.length >= 2) {
-				String author = parts[0].trim();
-				String permlink = parts[1].trim();
-				String rpcBody = "{\"jsonrpc\":\"2.0\",\"method\":\"condenser_api.get_content\",\"params\":[\"" + author + "\",\"" + permlink + "\"],\"id\":1}";
-				String rpcRes = postJsonHttp("https://api.hive.blog", rpcBody);
-				JSONObject rpcJson = new JSONObject(rpcRes);
-				if (rpcJson.has("result")) {
-					JSONObject resObj = rpcJson.getJSONObject("result");
-					String metaStr = resObj.optString("json_metadata", "");
-					if (!metaStr.isEmpty()) {
-						JSONObject metaJson = new JSONObject(metaStr);
-						if (metaJson.has("video")) {
-							JSONObject videoObj = metaJson.getJSONObject("video");
-							if (videoObj.has("files")) {
-								JSONObject filesObj = videoObj.getJSONObject("files");
-								if (filesObj.has("ipfs")) {
-									JSONObject ipfsObj = filesObj.getJSONObject("ipfs");
-									if (ipfsObj.has("vid")) {
-										JSONObject vidObj = ipfsObj.getJSONObject("vid");
-										String[] keys = {"1080", "720", "480", "360", "240", "src"};
-										for (String k : keys) {
-											String hash = vidObj.optString(k, "");
-											if (!hash.isEmpty()) {
-												addUniqueQuality(names, urls, normalizeResolutionToP(k), "https://dweb.link/ipfs/" + hash);
+			Pattern pDirectQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
+			Matcher mDirectQm = pDirectQm.matcher(finalTargetUrl);
+			if (mDirectQm.find()) {
+				addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mDirectQm.group(1));
+			}
+
+			if (urls.isEmpty() && finalTargetUrl.contains("/v/")) {
+				String afterV = finalTargetUrl.substring(finalTargetUrl.indexOf("/v/") + 3).split("[?#]")[0];
+				String[] parts = afterV.split("/");
+				if (parts.length >= 2) {
+					String author = parts[0].trim();
+					String permlink = parts[1].trim();
+					String rpcBody = "{\"jsonrpc\":\"2.0\",\"method\":\"condenser_api.get_content\",\"params\":[\"" + author + "\",\"" + permlink + "\"],\"id\":1}";
+					String rpcRes = postJsonHttp("https://api.hive.blog", rpcBody);
+					JSONObject rpcJson = new JSONObject(rpcRes);
+					if (rpcJson.has("result")) {
+						JSONObject resObj = rpcJson.getJSONObject("result");
+						String metaStr = resObj.optString("json_metadata", "");
+						if (!metaStr.isEmpty()) {
+							JSONObject metaJson = new JSONObject(metaStr);
+							if (metaJson.has("video")) {
+								JSONObject videoObj = metaJson.getJSONObject("video");
+								if (videoObj.has("files")) {
+									JSONObject filesObj = videoObj.getJSONObject("files");
+									if (filesObj.has("ipfs")) {
+										JSONObject ipfsObj = filesObj.getJSONObject("ipfs");
+										if (ipfsObj.has("vid")) {
+											JSONObject vidObj = ipfsObj.getJSONObject("vid");
+											String[] keys = {"1080", "720", "480", "360", "240", "src"};
+											for (String k : keys) {
+												String hash = vidObj.optString(k, "");
+												if (!hash.isEmpty()) {
+													addUniqueQuality(names, urls, normalizeResolutionToP(k), "https://dweb.link/ipfs/" + hash);
+												}
 											}
 										}
 									}
@@ -314,19 +325,65 @@ public class StreamExtractorHelper {
 					}
 				}
 			}
-		}
 
-		if (urls.isEmpty()) {
-			String html = fetchHttp(finalTargetUrl, "https://emb.d.tube/", false).body;
-			Matcher mQm = pDirectQm.matcher(html);
-			if (mQm.find()) {
-				addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mQm.group(1));
+			if (urls.isEmpty() && !videoId.isEmpty()) {
+				String[] apiCandidates = {
+					"https://api.d.tube/v/" + videoId,
+					"https://d.tube/api/v/" + videoId,
+					"https://emb.d.tube/#!/" + videoId
+				};
+				for (String apiUrl : apiCandidates) {
+					try {
+						String body = fetchHttp(apiUrl, "https://d.tube/", false).body;
+						if (body == null || body.trim().isEmpty()) continue;
+						String unescaped = body.replace("\\/", "/").replace("\\u0026", "&");
+
+						Matcher mMedia = Pattern.compile("(https?://[^\"'\\s<>]+\\.(?:mp4|m3u8)[^\"'\\s<>]*)").matcher(unescaped);
+						while (mMedia.find()) {
+							String mediaUrl = mMedia.group(1);
+							addUniqueQuality(names, urls, normalizeResolutionToP(mediaUrl), mediaUrl);
+							if (urls.size() >= 3) break;
+						}
+
+						if (urls.isEmpty()) {
+							Matcher mQm = pDirectQm.matcher(unescaped);
+							if (mQm.find()) {
+								addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mQm.group(1));
+							}
+						}
+						if (!urls.isEmpty()) break;
+					} catch (Exception ignored) {}
+				}
 			}
-		}
 
-		if (!urls.isEmpty()) {
-			postSuccess(mainHandler, callback, names, urls, "https://emb.d.tube/", "");
-		} else {
+			if (urls.isEmpty()) {
+				String html = fetchHttp(finalTargetUrl, "https://emb.d.tube/", false).body;
+				if (html != null && !html.isEmpty()) {
+					String unescaped = html.replace("\\/", "/").replace("\\u0026", "&");
+					Matcher mMedia = Pattern.compile("(https?://[^\"'\\s<>]+\\.(?:mp4|m3u8)[^\"'\\s<>]*)").matcher(unescaped);
+					while (mMedia.find()) {
+						String mediaUrl = mMedia.group(1);
+						addUniqueQuality(names, urls, normalizeResolutionToP(mediaUrl), mediaUrl);
+						if (urls.size() >= 3) break;
+					}
+					if (urls.isEmpty()) {
+						Matcher mQm = pDirectQm.matcher(unescaped);
+						if (mQm.find()) {
+							addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mQm.group(1));
+						}
+					}
+				}
+			}
+
+			if (!urls.isEmpty()) {
+				postSuccess(mainHandler, callback, names, urls, "https://emb.d.tube/", "");
+			} else {
+				String snifferUrl = !videoId.isEmpty()
+					? "https://emb.d.tube/#!/" + videoId
+					: finalTargetUrl;
+				postSniffer(mainHandler, callback, snifferUrl, "https://emb.d.tube/");
+			}
+		} catch (Exception e) {
 			postSniffer(mainHandler, callback, finalTargetUrl, "https://emb.d.tube/");
 		}
 	}
@@ -614,6 +671,12 @@ public class StreamExtractorHelper {
 		}
 
 		if (conn == null) return new HttpFetchResult("", collectedCookie);
+		int respCode = conn.getResponseCode();
+		if (respCode < 200 || respCode >= 300) {
+			conn.disconnect();
+			return new HttpFetchResult("", collectedCookie);
+		}
+
 		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
 		StringBuilder sb = new StringBuilder();
 		String line;
@@ -639,6 +702,12 @@ public class StreamExtractorHelper {
 		os.write(jsonPayload.getBytes("UTF-8"));
 		os.flush();
 		os.close();
+
+		int respCode = conn.getResponseCode();
+		if (respCode < 200 || respCode >= 300) {
+			conn.disconnect();
+			return "";
+		}
 
 		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
 		StringBuilder sb = new StringBuilder();
