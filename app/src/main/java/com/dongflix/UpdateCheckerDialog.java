@@ -26,6 +26,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -168,6 +170,41 @@ public class UpdateCheckerDialog {
 		return Typeface.DEFAULT;
 	}
 
+	private static List<String> splitNotesByDot(String rawNotes) {
+		List<String> out = new ArrayList<>();
+		if (rawNotes == null || rawNotes.trim().isEmpty()) return out;
+
+		String[] lines = rawNotes.split("\\n+");
+		for (String line : lines) {
+			String trimmedLine = line.trim();
+			if (trimmedLine.isEmpty()) continue;
+
+			// Pecah berdasarkan tanda titik (.) dengan menjaga versi angka (misal 1.0.3) dan domain/URL
+			StringBuilder current = new StringBuilder();
+			for (int i = 0; i < trimmedLine.length(); i++) {
+				char ch = trimmedLine.charAt(i);
+				if (ch == '.') {
+					char prev = i > 0 ? trimmedLine.charAt(i - 1) : 0;
+					char next = i + 1 < trimmedLine.length() ? trimmedLine.charAt(i + 1) : 0;
+					boolean isDecimalOrVersion = Character.isDigit(prev) && Character.isDigit(next);
+					boolean isDomainOrUrl = Character.isLetterOrDigit(prev) && Character.isLetter(next);
+					if (isDecimalOrVersion || isDomainOrUrl) {
+						current.append(ch);
+					} else {
+						String part = current.toString().trim();
+						if (!part.isEmpty()) out.add(part);
+						current.setLength(0);
+					}
+				} else {
+					current.append(ch);
+				}
+			}
+			String tail = current.toString().trim();
+			if (!tail.isEmpty()) out.add(tail);
+		}
+		return out;
+	}
+
 	public static void showBottomSheet(
 		final Activity activity,
 		String currentVer,
@@ -204,7 +241,7 @@ public class UpdateCheckerDialog {
 
 			GradientDrawable sheetBg = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#131A29"), Color.parseColor("#080B12")}
+				new int[]{Color.parseColor("#121826"), Color.parseColor("#07090F")}
 			);
 			float topRadius = 28 * d;
 			sheetBg.setCornerRadii(new float[]{
@@ -213,7 +250,6 @@ public class UpdateCheckerDialog {
 				0f, 0f,
 				0f, 0f
 			});
-			sheetBg.setStroke(Math.max(1, (int) (1.2f * d)), Color.parseColor("#3838BDF8"));
 			sheet.setBackground(sheetBg);
 
 			// Drag handle pill
@@ -246,7 +282,6 @@ public class UpdateCheckerDialog {
 			GradientDrawable pillBg = new GradientDrawable();
 			pillBg.setColor(Color.parseColor("#1A38BDF8"));
 			pillBg.setCornerRadius(100f);
-			pillBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#4438BDF8"));
 			tvPill.setBackground(pillBg);
 
 			TextView tvVersionChip = new TextView(activity);
@@ -261,9 +296,8 @@ public class UpdateCheckerDialog {
 			vcChipLp.leftMargin = (int) (8 * d);
 			tvVersionChip.setLayoutParams(vcChipLp);
 			GradientDrawable chipBg = new GradientDrawable();
-			chipBg.setColor(Color.parseColor("#161D2E"));
+			chipBg.setColor(Color.parseColor("#1C2538"));
 			chipBg.setCornerRadius(100f);
-			chipBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#22FFFFFF"));
 			tvVersionChip.setBackground(chipBg);
 
 			badgeRow.addView(tvPill);
@@ -298,7 +332,7 @@ public class UpdateCheckerDialog {
 			tvDesc.setLayoutParams(descLp);
 			sheet.addView(tvDesc);
 
-			// Box catatan pembaruan
+			// Box catatan pembaruan (warna berbeda dari background sheet, tanpa stroke)
 			LinearLayout notesBox = new LinearLayout(activity);
 			notesBox.setOrientation(LinearLayout.VERTICAL);
 			notesBox.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (12 * d));
@@ -309,9 +343,8 @@ public class UpdateCheckerDialog {
 			boxLp.bottomMargin = (int) (18 * d);
 			notesBox.setLayoutParams(boxLp);
 			GradientDrawable boxBg = new GradientDrawable();
-			boxBg.setColor(Color.parseColor("#101522"));
+			boxBg.setColor(Color.parseColor("#1D263B"));
 			boxBg.setCornerRadius(18 * d);
-			boxBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
 			notesBox.setBackground(boxBg);
 
 			TextView tvNotesTitle = new TextView(activity);
@@ -333,10 +366,8 @@ public class UpdateCheckerDialog {
 			LinearLayout listCol = new LinearLayout(activity);
 			listCol.setOrientation(LinearLayout.VERTICAL);
 
-			String[] items = updateNotes.split("\\s*,\\s*|\\n+");
-			for (String item : items) {
-				String clean = item.trim();
-				if (clean.isEmpty()) continue;
+			List<String> items = splitNotesByDot(updateNotes);
+			for (String clean : items) {
 				TextView tvItem = new TextView(activity);
 				tvItem.setText("•  " + clean);
 				tvItem.setTextColor(Color.parseColor("#CBD5E1"));
@@ -373,9 +404,8 @@ public class UpdateCheckerDialog {
 				laterLp.rightMargin = (int) (10 * d);
 				btnLater.setLayoutParams(laterLp);
 				GradientDrawable laterBg = new GradientDrawable();
-				laterBg.setColor(Color.parseColor("#141A26"));
+				laterBg.setColor(Color.parseColor("#182032"));
 				laterBg.setCornerRadius(100f);
-				laterBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
 				btnLater.setBackground(laterBg);
 				btnLater.setOnClickListener(new View.OnClickListener() {
 					@Override
