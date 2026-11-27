@@ -102,7 +102,6 @@ public class ChatActivity extends AppCompatActivity {
 	private static final int ICON_DELETE = 5;
 
 	private static final int MAX_VISIBLE_MESSAGES = 25;
-	private static final int MAX_PROFILE_FETCH_PER_PASS = 6;
 	private static final long FAST_TIMEOUT_MS = 2500L;
 
 	private static final String[] DEFAULT_STICKERS = {
@@ -120,6 +119,7 @@ public class ChatActivity extends AppCompatActivity {
 	private DatabaseReference liveChatRef;
 	private DatabaseReference usersRef;
 	private ValueEventListener chatListener;
+	private ValueEventListener usersListener;
 
 	private final Handler uiHandler = new Handler(Looper.getMainLooper());
 	private Runnable loadTimeoutRunnable;
@@ -127,7 +127,7 @@ public class ChatActivity extends AppCompatActivity {
 	private FrameLayout chatRoot;
 	private FrameLayout headerOverlayWrapper;
 	private LinearLayout chatHeader;
-	private ImageView headerProfileAvatar;
+	private AvatarDecorationView headerProfileAvatarDecor;
 	private FrameLayout pinnedMessageCard;
 	private LinearLayout chatBottomBar;
 	private ScrollView chatScrollView;
@@ -147,9 +147,9 @@ public class ChatActivity extends AppCompatActivity {
 	private LinearLayout stickerPanel;
 	private LinearLayout stickerGridContainer;
 
-	private final Map<String, HashMap<String, Object>> userProfileCache = new HashMap<>();
+	// Langsung sinkron realtime dari /users di Firebase tanpa cache lokal
+	private final Map<String, HashMap<String, Object>> liveUsersMap = new HashMap<>();
 	private final List<HashMap<String, Object>> allUsersList = new ArrayList<>();
-	private final Set<String> requestedUserIds = new HashSet<>();
 	private final List<String> stickerUrls = new ArrayList<>();
 	private final Map<String, View> messageRowMap = new LinkedHashMap<>();
 	private List<HashMap<String, Object>> latestMessages = new ArrayList<>();
@@ -167,7 +167,6 @@ public class ChatActivity extends AppCompatActivity {
 	private ValueAnimator chatShimmerAnimator;
 	private float chatShimmerPhase = 0f;
 	private boolean isChatLoading = true;
-	private boolean isProfileShimmerActive = false;
 	private Typeface appFont;
 
 	@Override
@@ -192,7 +191,7 @@ public class ChatActivity extends AppCompatActivity {
 		setupKeyboardFollowBehavior();
 		showLoadingPlaceholders();
 		armFastLoadTimeout();
-		loadCurrentUserProfileOnce();
+		startListeningUsersRealtime();
 		loadStickersFromFirebase();
 		startListeningMessages();
 	}
@@ -207,39 +206,10 @@ public class ChatActivity extends AppCompatActivity {
 		if (trimmed.startsWith("data:image")) {
 			return trimmed;
 		}
-		// Mendukung string Base64 mentah yang cukup panjang
 		if (trimmed.length() > 64 && trimmed.matches("^[A-Za-z0-9+/=\\r\\n]+$")) {
 			return "data:image/jpeg;base64," + trimmed.replaceAll("\\s+", "");
 		}
 		return "";
-	}
-
-	private Bitmap decodeBase64AvatarBitmap(String dataOrBase64) {
-		if (dataOrBase64 == null || dataOrBase64.isEmpty()) return null;
-		try {
-			String payload = dataOrBase64;
-			int commaIdx = payload.indexOf(",");
-			if (payload.startsWith("data:image") && commaIdx >= 0) {
-				payload = payload.substring(commaIdx + 1);
-			}
-			payload = payload.replaceAll("\\s+", "");
-			byte[] decoded = Base64.decode(payload, Base64.DEFAULT);
-			if (decoded == null || decoded.length == 0) return null;
-
-			BitmapFactory.Options opts = new BitmapFactory.Options();
-			opts.inJustDecodeBounds = true;
-			BitmapFactory.decodeByteArray(decoded, 0, decoded.length, opts);
-			int sample = 1;
-			while ((opts.outWidth / sample) > 256 || (opts.outHeight / sample) > 256) {
-				sample *= 2;
-			}
-
-			BitmapFactory.Options decodeOpts = new BitmapFactory.Options();
-			decodeOpts.inSampleSize = Math.max(1, sample);
-			return BitmapFactory.decodeByteArray(decoded, 0, decoded.length, decodeOpts);
-		} catch (Throwable ignored) {
-			return null;
-		}
 	}
 
 	private void armFastLoadTimeout() {
@@ -249,8 +219,7 @@ public class ChatActivity extends AppCompatActivity {
 			public void run() {
 				if (isFinishing() || isDestroyed()) return;
 				isChatLoading = false;
-				isProfileShimmerActive = false;
-				stopChatShimmerOnly();
+				stopChatShimmer();
 				if (!latestMessages.isEmpty()) {
 					renderMessages(latestMessages);
 				} else {
@@ -424,7 +393,8 @@ public class ChatActivity extends AppCompatActivity {
 	}
 
 	private void startChatShimmer() {
-		stopChatShimmerOnly();
+		stopChatShimmer();
+		isChatLoading = true;
 		chatShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
 		chatShimmerAnimator.setDuration(1200);
 		chatShimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
@@ -432,11 +402,8 @@ public class ChatActivity extends AppCompatActivity {
 		chatShimmerAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
 			@Override
 			public void onAnimationUpdate(ValueAnimator animation) {
-				if ((!isChatLoading && !isProfileShimmerActive) || messagesContainer == null) return;
+				if (!isChatLoading || messagesContainer == null) return;
 				chatShimmerPhase = (float) animation.getAnimatedValue();
-				if (headerProfileAvatar != null) {
-					headerProfileAvatar.invalidate();
-				}
 				invalidateShimmerRecursive(messagesContainer);
 			}
 		});
@@ -454,26 +421,11 @@ public class ChatActivity extends AppCompatActivity {
 		}
 	}
 
-	private void stopChatShimmerOnly() {
+	private void stopChatShimmer() {
+		isChatLoading = false;
 		if (chatShimmerAnimator != null) {
 			chatShimmerAnimator.cancel();
 			chatShimmerAnimator = null;
-		}
-	}
-
-	private void stopChatShimmer() {
-		isChatLoading = false;
-		if (!isProfileShimmerActive) {
-			stopChatShimmerOnly();
-		}
-	}
-
-	private void syncProfileShimmerState(boolean hasPendingProfiles) {
-		isProfileShimmerActive = hasPendingProfiles;
-		if (isProfileShimmerActive && (chatShimmerAnimator == null || !chatShimmerAnimator.isRunning())) {
-			startChatShimmer();
-		} else if (!isProfileShimmerActive && !isChatLoading) {
-			stopChatShimmerOnly();
 		}
 	}
 
@@ -843,6 +795,8 @@ public class ChatActivity extends AppCompatActivity {
 
 		FrameLayout profileBtn = new FrameLayout(this);
 		profileBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
+		profileBtn.setClipChildren(false);
+		profileBtn.setClipToPadding(false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) profileBtn.setElevation(14f);
 
 		BlurView profileBlur = new BlurView(this);
@@ -852,13 +806,13 @@ public class ChatActivity extends AppCompatActivity {
 		setupGlassBlur(profileBlur, chatRoot, 20f, btnSize / 2f, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		profileBtn.addView(profileBlur);
 
-		headerProfileAvatar = new ImageView(this);
-		headerProfileAvatar.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
-		headerProfileAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		headerProfileAvatarDecor = new AvatarDecorationView(this, 36, false);
+		FrameLayout.LayoutParams hAvLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER
+		);
+		headerProfileAvatarDecor.setLayoutParams(hAvLp);
 		bindHeaderProfileAvatar();
-		profileBtn.addView(headerProfileAvatar);
+		profileBtn.addView(headerProfileAvatarDecor);
 		profileBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -1287,119 +1241,95 @@ public class ChatActivity extends AppCompatActivity {
 		return pinBox;
 	}
 
-	private String resolveUserId(String uid, String email) {
-		if (uid != null && !uid.trim().isEmpty()) {
-			return uid.trim();
+	private String resolveUserKeyFromEmail(String email) {
+		if (email == null || email.trim().isEmpty()) return "";
+		return email.trim().toLowerCase(Locale.US).replace(".", ",");
+	}
+
+	private HashMap<String, Object> findUserProfile(String uid, String email) {
+		String emailKey = resolveUserKeyFromEmail(email);
+		if (!emailKey.isEmpty() && liveUsersMap.containsKey(emailKey)) {
+			return liveUsersMap.get(emailKey);
 		}
-		if (email != null && !email.trim().isEmpty()) {
-			return email.trim().toLowerCase(Locale.US).replace(".", ",");
+		if (uid != null && !uid.trim().isEmpty() && liveUsersMap.containsKey(uid.trim())) {
+			return liveUsersMap.get(uid.trim());
 		}
-		return "";
+		return null;
 	}
 
 	private String resolveNotifUserKey(String uid, String email) {
-		if (email != null && !email.trim().isEmpty()) {
-			return email.trim().toLowerCase(Locale.US).replace(".", ",");
-		}
-		if (uid != null && !uid.trim().isEmpty()) {
-			return uid.trim();
-		}
-		return "";
+		String emailKey = resolveUserKeyFromEmail(email);
+		if (!emailKey.isEmpty()) return emailKey;
+		return uid != null ? uid.trim() : "";
 	}
 
-	private String getCurrentUserId() {
+	private String getCurrentUserKey() {
 		if (currentUser == null) return "";
 		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
-		return resolveUserId(currentUser.getUid(), email);
+		String emailKey = resolveUserKeyFromEmail(email);
+		return !emailKey.isEmpty() ? emailKey : currentUser.getUid();
 	}
 
-	private void cacheProfileEntry(String userId, HashMap<String, Object> profile) {
-		if (userId == null || userId.isEmpty() || profile == null) return;
-		HashMap<String, Object> cleanMap = new HashMap<>(profile);
-		String rawPhoto = cleanMap.get("photoURL") != null ? cleanMap.get("photoURL").toString() : "";
-		cleanMap.put("photoURL", normalizeAvatarSource(rawPhoto));
-		userProfileCache.put(userId, cleanMap);
-
-		boolean existsInList = false;
-		for (HashMap<String, Object> item : allUsersList) {
-			if (userId.equals(item.get("_userId"))) {
-				existsInList = true;
-				break;
-			}
-		}
-		if (!existsInList) {
-			HashMap<String, Object> copy = new HashMap<>(cleanMap);
-			copy.put("_userId", userId);
-			allUsersList.add(copy);
-		}
-	}
-
-	private void loadCurrentUserProfileOnce() {
-		String myId = getCurrentUserId();
-		if (myId.isEmpty()) return;
-		fetchUserProfileOnceById(myId);
-	}
-
-	private void fetchUserProfileOnceById(final String userId) {
-		if (userId == null || userId.trim().isEmpty()) return;
-		final String cleanId = userId.trim();
-		if (userProfileCache.containsKey(cleanId) || requestedUserIds.contains(cleanId)) {
-			return;
-		}
-		requestedUserIds.add(cleanId);
-
-		usersRef.child(cleanId).addListenerForSingleValueEvent(new ValueEventListener() {
+	// Sinkron realtime langsung dari node /users di Firebase tanpa cache lokal
+	private void startListeningUsersRealtime() {
+		usersListener = new ValueEventListener() {
 			@Override
 			public void onDataChange(@NonNull DataSnapshot snapshot) {
 				if (isFinishing() || isDestroyed()) return;
-				if (snapshot.exists() && snapshot.getValue() instanceof Map) {
-					HashMap<String, Object> uMap = new HashMap<>();
-					for (Map.Entry<?, ?> e : ((Map<?, ?>) snapshot.getValue()).entrySet()) {
-						if (e.getKey() != null) uMap.put(e.getKey().toString(), e.getValue());
-					}
-					cacheProfileEntry(cleanId, uMap);
+				liveUsersMap.clear();
+				allUsersList.clear();
 
-					if (cleanId.equals(getCurrentUserId())) {
-						bindHeaderProfileAvatar();
-					}
-					if (!latestMessages.isEmpty()) {
-						renderMessages(latestMessages);
+				if (snapshot.exists()) {
+					for (DataSnapshot child : snapshot.getChildren()) {
+						String nodeKey = child.getKey();
+						if (nodeKey == null || !(child.getValue() instanceof Map)) continue;
+
+						HashMap<String, Object> uMap = new HashMap<>();
+						for (Map.Entry<?, ?> e : ((Map<?, ?>) child.getValue()).entrySet()) {
+							if (e.getKey() != null) uMap.put(e.getKey().toString(), e.getValue());
+						}
+
+						String rawPhoto = uMap.get("photoURL") != null ? uMap.get("photoURL").toString() : "";
+						uMap.put("photoURL", normalizeAvatarSource(rawPhoto));
+						String rawFrame = uMap.get("avatarFrame") != null ? uMap.get("avatarFrame").toString().trim() : "";
+						uMap.put("avatarFrame", rawFrame);
+						uMap.put("_userId", nodeKey);
+
+						liveUsersMap.put(nodeKey, uMap);
+
+						String email = uMap.get("email") != null ? uMap.get("email").toString().trim().toLowerCase(Locale.US) : "";
+						if (!email.isEmpty()) {
+							liveUsersMap.put(resolveUserKeyFromEmail(email), uMap);
+						}
+						String uid = uMap.get("uid") != null ? uMap.get("uid").toString().trim() : "";
+						if (!uid.isEmpty()) {
+							liveUsersMap.put(uid, uMap);
+						}
+
+						allUsersList.add(uMap);
 					}
 				}
-				syncProfileShimmerState(false);
+
+				bindHeaderProfileAvatar();
+				if (!latestMessages.isEmpty()) {
+					renderMessages(latestMessages);
+				}
 			}
 
 			@Override
-			public void onCancelled(@NonNull DatabaseError error) {
-				syncProfileShimmerState(false);
-			}
-		});
-	}
-
-	private void prefetchProfilesForMessagesOnce(List<HashMap<String, Object>> msgList) {
-		if (msgList == null || msgList.isEmpty()) {
-			syncProfileShimmerState(false);
-			return;
-		}
-		int fetchedCount = 0;
-		for (int i = msgList.size() - 1; i >= 0 && fetchedCount < MAX_PROFILE_FETCH_PER_PASS; i--) {
-			HashMap<String, Object> item = msgList.get(i);
-			String email = item.get("email") != null ? item.get("email").toString().trim().toLowerCase(Locale.US) : "";
-			String uid = item.get("uid") != null ? item.get("uid").toString().trim() : "";
-			String userId = resolveUserId(uid, email);
-			if (userId.isEmpty() || userProfileCache.containsKey(userId) || requestedUserIds.contains(userId)) {
-				continue;
-			}
-			fetchedCount++;
-			fetchUserProfileOnceById(userId);
-		}
-		syncProfileShimmerState(false);
+			public void onCancelled(@NonNull DatabaseError error) {}
+		};
+		usersRef.addValueEventListener(usersListener);
 	}
 
 	private void bindHeaderProfileAvatar() {
-		if (headerProfileAvatar == null || currentUser == null) return;
-		String myId = getCurrentUserId();
-		HashMap<String, Object> prof = userProfileCache.get(myId);
+		if (headerProfileAvatarDecor == null || currentUser == null) return;
+		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
+		HashMap<String, Object> prof = findUserProfile(currentUser.getUid(), email);
+
+		String displayName = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
+			? prof.get("name").toString().trim()
+			: (email.contains("@") ? email.split("@")[0] : "R");
 
 		String photoSrc = "";
 		if (prof != null && prof.get("photoURL") != null) {
@@ -1409,14 +1339,16 @@ public class ChatActivity extends AppCompatActivity {
 			photoSrc = normalizeAvatarSource(currentUser.getPhotoUrl().toString());
 		}
 
-		bindChatAvatar(headerProfileAvatar, photoSrc);
+		String frameUrl = (prof != null && prof.get("avatarFrame") != null)
+			? prof.get("avatarFrame").toString().trim() : "";
+
+		headerProfileAvatarDecor.bind(photoSrc, displayName, frameUrl);
 	}
 
 	private void showCurrentUserProfileInfo() {
 		if (currentUser == null) return;
 		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "-";
-		String myId = getCurrentUserId();
-		HashMap<String, Object> prof = userProfileCache.get(myId);
+		HashMap<String, Object> prof = findUserProfile(currentUser.getUid(), email);
 
 		String name = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
 			? prof.get("name").toString().trim()
@@ -1424,6 +1356,9 @@ public class ChatActivity extends AppCompatActivity {
 		String uname = (prof != null && prof.get("username") != null && !prof.get("username").toString().trim().isEmpty())
 			? "@" + prof.get("username").toString().trim().replaceFirst("^@", "")
 			: "-";
+		String frameName = (prof != null && prof.get("avatarFrameName") != null && !prof.get("avatarFrameName").toString().trim().isEmpty())
+			? prof.get("avatarFrameName").toString().trim()
+			: "Tanpa bingkai";
 		long exp = prof != null ? parseLongVal(prof.get("exp")) : 0L;
 		boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
 		int level = UserBadgeView.computeLevelFromExp(exp);
@@ -1433,6 +1368,7 @@ public class ChatActivity extends AppCompatActivity {
 			.setMessage(
 				"Username: " + uname
 					+ "\nEmail: " + email
+					+ "\nBingkai: " + frameName
 					+ "\nLevel: " + (isAdm ? "Lv999+ (Admin)" : "Lv" + level + " (" + exp + " XP)")
 			)
 			.setPositiveButton("Tutup", null)
@@ -1941,7 +1877,7 @@ public class ChatActivity extends AppCompatActivity {
 				if (isFinishing() || isDestroyed()) return;
 				clearFastLoadTimeout();
 				isChatLoading = false;
-				stopChatShimmerOnly();
+				stopChatShimmer();
 				renderSnapshotMessages(snapshot);
 			}
 
@@ -1949,7 +1885,7 @@ public class ChatActivity extends AppCompatActivity {
 			public void onCancelled(@NonNull DatabaseError error) {
 				clearFastLoadTimeout();
 				isChatLoading = false;
-				stopChatShimmerOnly();
+				stopChatShimmer();
 			}
 		};
 		liveChatRef.limitToLast(MAX_VISIBLE_MESSAGES).addValueEventListener(chatListener);
@@ -1980,7 +1916,6 @@ public class ChatActivity extends AppCompatActivity {
 			msgList = msgList.subList(msgList.size() - MAX_VISIBLE_MESSAGES, msgList.size());
 		}
 		latestMessages = msgList;
-		prefetchProfilesForMessagesOnce(msgList);
 		renderMessages(msgList);
 	}
 
@@ -2008,27 +1943,34 @@ public class ChatActivity extends AppCompatActivity {
 
 			String email = item.get("email") != null ? item.get("email").toString() : "";
 			String uid = item.get("uid") != null ? item.get("uid").toString() : "";
-			String userId = resolveUserId(uid, email);
 			final String senderNotifKey = resolveNotifUserKey(uid, email);
 
-			HashMap<String, Object> cachedProf = !userId.isEmpty() ? userProfileCache.get(userId) : null;
+			HashMap<String, Object> liveProf = findUserProfile(uid, email);
 
-			final String authorName = (cachedProf != null && cachedProf.get("name") != null && !cachedProf.get("name").toString().trim().isEmpty())
-				? cachedProf.get("name").toString().trim()
+			final String authorName = (liveProf != null && liveProf.get("name") != null && !liveProf.get("name").toString().trim().isEmpty())
+				? liveProf.get("name").toString().trim()
 				: (item.get("author") != null && !item.get("author").toString().trim().isEmpty()
 					? item.get("author").toString().trim()
 					: (email.contains("@") ? email.split("@")[0] : "User"));
 
 			String photoUrl = "";
-			if (cachedProf != null && cachedProf.get("photoURL") != null) {
-				photoUrl = normalizeAvatarSource(cachedProf.get("photoURL").toString());
+			if (liveProf != null && liveProf.get("photoURL") != null) {
+				photoUrl = normalizeAvatarSource(liveProf.get("photoURL").toString());
 			}
 			if (photoUrl.isEmpty() && item.get("photoURL") != null) {
 				photoUrl = normalizeAvatarSource(item.get("photoURL").toString());
 			}
 
-			long exp = cachedProf != null && cachedProf.get("exp") != null
-				? parseLongVal(cachedProf.get("exp"))
+			String frameUrl = "";
+			if (liveProf != null && liveProf.get("avatarFrame") != null) {
+				frameUrl = liveProf.get("avatarFrame").toString().trim();
+			}
+			if (frameUrl.isEmpty() && item.get("avatarFrame") != null) {
+				frameUrl = item.get("avatarFrame").toString().trim();
+			}
+
+			long exp = liveProf != null && liveProf.get("exp") != null
+				? parseLongVal(liveProf.get("exp"))
 				: parseLongVal(item.get("exp"));
 
 			boolean isMsgAdmin = ADMIN_EMAIL.equalsIgnoreCase(email) || Boolean.TRUE.equals(item.get("isAdmin"));
@@ -2049,14 +1991,15 @@ public class ChatActivity extends AppCompatActivity {
 			rowLp.bottomMargin = (int) (12 * d);
 			row.setLayoutParams(rowLp);
 
-			ImageView avatar = new ImageView(this);
-			int avSize = (int) (36 * d);
-			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(avSize, avSize);
-			if (isMine) avLp.leftMargin = (int) (8 * d);
-			else avLp.rightMargin = (int) (8 * d);
-			avatar.setLayoutParams(avLp);
-			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			bindChatAvatar(avatar, photoUrl);
+			// Avatar + bingkai GIF langsung dari node /users
+			AvatarDecorationView avatarDecor = new AvatarDecorationView(this, 36, false);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			if (isMine) avLp.leftMargin = (int) (6 * d);
+			else avLp.rightMargin = (int) (6 * d);
+			avatarDecor.setLayoutParams(avLp);
+			avatarDecor.bind(photoUrl, authorName, frameUrl);
 
 			LinearLayout bubbleCol = new LinearLayout(this);
 			bubbleCol.setOrientation(LinearLayout.VERTICAL);
@@ -2221,9 +2164,9 @@ public class ChatActivity extends AppCompatActivity {
 
 			if (isMine) {
 				row.addView(bubbleCol);
-				row.addView(avatar);
+				row.addView(avatarDecor);
 			} else {
-				row.addView(avatar);
+				row.addView(avatarDecor);
 				row.addView(bubbleCol);
 			}
 
@@ -2232,8 +2175,6 @@ public class ChatActivity extends AppCompatActivity {
 			}
 			messagesContainer.addView(row);
 		}
-
-		syncProfileShimmerState(false);
 
 		chatScrollView.post(new Runnable() {
 			@Override
@@ -2288,47 +2229,6 @@ public class ChatActivity extends AppCompatActivity {
 			idx = end;
 		}
 		return ss;
-	}
-
-	private void bindChatAvatar(ImageView target, String photoSrc) {
-		target.setOutlineProvider(new ViewOutlineProvider() {
-			@Override
-			public void getOutline(View view, Outline outline) {
-				outline.setOval(0, 0, view.getWidth(), view.getHeight());
-			}
-		});
-		target.setClipToOutline(true);
-
-		String normalized = normalizeAvatarSource(photoSrc);
-		if (!normalized.isEmpty()) {
-			target.setPadding(0, 0, 0, 0);
-			target.clearColorFilter();
-			target.setBackgroundColor(Color.parseColor("#161A24"));
-
-			if (normalized.startsWith("data:image")) {
-				Bitmap bmp = decodeBase64AvatarBitmap(normalized);
-				if (bmp != null) {
-					target.setImageBitmap(bmp);
-					return;
-				}
-			} else {
-				Glide.with(getApplicationContext())
-					.load(Uri.parse(normalized))
-					.circleCrop()
-					.into(target);
-				return;
-			}
-		}
-
-		int pad = (int) (5 * getResources().getDisplayMetrics().density);
-		GradientDrawable fallbackBg = new GradientDrawable();
-		fallbackBg.setShape(GradientDrawable.OVAL);
-		fallbackBg.setColor(Color.parseColor("#1D2436"));
-		target.setBackground(fallbackBg);
-		target.setScaleType(ImageView.ScaleType.FIT_CENTER);
-		target.setPadding(pad, pad, pad, pad);
-		target.setImageResource(R.drawable.ic_profile);
-		target.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 	}
 
 	private void clearReplyTarget() {
@@ -2451,8 +2351,7 @@ public class ChatActivity extends AppCompatActivity {
 		if (text.isEmpty() && selectedStickerUrl.isEmpty()) return;
 
 		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
-		String myId = getCurrentUserId();
-		HashMap<String, Object> prof = userProfileCache.get(myId);
+		HashMap<String, Object> prof = findUserProfile(currentUser.getUid(), email);
 
 		final String author = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
 			? prof.get("name").toString().trim()
@@ -2464,6 +2363,10 @@ public class ChatActivity extends AppCompatActivity {
 
 		String photo = prof != null && prof.get("photoURL") != null
 			? normalizeAvatarSource(prof.get("photoURL").toString())
+			: "";
+
+		String frame = prof != null && prof.get("avatarFrame") != null
+			? prof.get("avatarFrame").toString().trim()
 			: "";
 
 		final long exp = prof != null && prof.get("exp") != null ? parseLongVal(prof.get("exp")) : 0L;
@@ -2478,6 +2381,7 @@ public class ChatActivity extends AppCompatActivity {
 		payload.put("author", author);
 		payload.put("username", username);
 		payload.put("photoURL", photo);
+		payload.put("avatarFrame", frame);
 		payload.put("exp", exp);
 		payload.put("text", sentText);
 		payload.put("stickerUrl", sentSticker);
@@ -2521,11 +2425,13 @@ public class ChatActivity extends AppCompatActivity {
 	protected void onDestroy() {
 		clearFastLoadTimeout();
 		isChatLoading = false;
-		isProfileShimmerActive = false;
-		stopChatShimmerOnly();
+		stopChatShimmer();
 		DongflixToast.dismissCurrent();
 		if (liveChatRef != null && chatListener != null) {
 			liveChatRef.removeEventListener(chatListener);
+		}
+		if (usersRef != null && usersListener != null) {
+			usersRef.removeEventListener(usersListener);
 		}
 		super.onDestroy();
 	}
