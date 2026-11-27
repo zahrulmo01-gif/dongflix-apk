@@ -42,8 +42,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -84,6 +88,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.firebase.auth.FirebaseAuth;
@@ -240,7 +246,7 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	private interface OnCommentActionListener {
-		void onReplyRequested(String parentCommentId, String mentionTag);
+		void onReplyRequested(String threadParentId, String targetUserKey, String mentionTag);
 		void onEditRequested(String commentId, String oldText);
 	}
 
@@ -1102,6 +1108,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	private void showCommentLongPressSheet(
 		final String commentId,
+		final String threadParentId,
 		final String ownerEmail,
 		final String ownerUid,
 		final String authorName,
@@ -1127,6 +1134,7 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		}
 
+		final String targetUserKey = sanitizeUserKey(ownerEmail, ownerUid);
 		final boolean isStickerOnly = (commentText == null || commentText.trim().isEmpty())
 			&& (stickerUrl != null && !stickerUrl.trim().isEmpty());
 
@@ -1175,7 +1183,7 @@ public class WatchActivity extends AppCompatActivity {
 			public void onClick(View v) {
 				sheet.dismiss();
 				if (actionListener != null) {
-					actionListener.onReplyRequested(commentId, mentionHandle);
+					actionListener.onReplyRequested(threadParentId, targetUserKey, mentionHandle);
 				}
 			}
 		});
@@ -1326,6 +1334,126 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		});
 		sheet.show();
+	}
+
+	private SpannableString formatMentionsSpannable(String raw) {
+		SpannableString ss = new SpannableString(raw);
+		int idx = 0;
+		while (idx < raw.length()) {
+			int at = raw.indexOf('@', idx);
+			if (at < 0) break;
+			int end = at + 1;
+			while (end < raw.length() && !Character.isWhitespace(raw.charAt(end))) {
+				end++;
+			}
+			if (end > at + 1) {
+				ss.setSpan(new ForegroundColorSpan(Color.parseColor("#38BDF8")), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+				ss.setSpan(new StyleSpan(Typeface.NORMAL), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+			}
+			idx = end;
+		}
+		return ss;
+	}
+
+	private void dispatchCommentNotifications(
+		String text,
+		String stickerUrl,
+		String replyTargetUserKey,
+		String senderName,
+		String senderUsername,
+		String senderEmail,
+		long senderExp,
+		boolean senderIsAdmin,
+		long timestamp
+	) {
+		FirebaseDatabase db = FirebaseDatabase.getInstance(FIREBASE_DB_URL);
+		String snippet = !text.isEmpty() ? text : (!stickerUrl.isEmpty() ? "[Stiker/GIF]" : "Komentar");
+		String myKey = getCurrentUserKey().toLowerCase(Locale.US);
+		Set<String> notifiedKeys = new HashSet<>();
+
+		if (replyTargetUserKey != null && !replyTargetUserKey.trim().isEmpty()) {
+			String normTarget = replyTargetUserKey.trim().toLowerCase(Locale.US);
+			if (!normTarget.equals(myKey) && notifiedKeys.add(normTarget)) {
+				pushNotificationToUser(
+					db,
+					replyTargetUserKey.trim(),
+					"reply",
+					senderName,
+					senderUsername,
+					senderEmail,
+					senderExp,
+					senderIsAdmin,
+					snippet,
+					timestamp
+				);
+			}
+		}
+
+		if (!text.isEmpty()) {
+			String lowerText = text.toLowerCase(Locale.US);
+			for (HashMap<String, String> prof : allUsersDirectory) {
+				if (prof == null) continue;
+				String uKey = prof.get("key") != null ? prof.get("key").trim() : "";
+				String uEmail = prof.get("email") != null ? prof.get("email").trim().toLowerCase(Locale.US) : "";
+				String targetKey = !uKey.isEmpty() ? uKey : sanitizeUserKey(uEmail, "");
+				if (targetKey.isEmpty() || targetKey.equalsIgnoreCase(myKey)) continue;
+
+				String uname = prof.get("username") != null
+					? prof.get("username").trim().replaceFirst("^@", "").toLowerCase(Locale.US) : "";
+				String dname = prof.get("name") != null
+					? prof.get("name").trim().toLowerCase(Locale.US) : "";
+
+				boolean tagged = (!uname.isEmpty() && lowerText.contains("@" + uname))
+					|| (!dname.isEmpty() && lowerText.contains("@" + dname));
+
+				if (tagged && notifiedKeys.add(targetKey.toLowerCase(Locale.US))) {
+					pushNotificationToUser(
+						db,
+						targetKey,
+						"mention",
+						senderName,
+						senderUsername,
+						senderEmail,
+						senderExp,
+						senderIsAdmin,
+						text,
+						timestamp
+					);
+				}
+			}
+		}
+	}
+
+	private void pushNotificationToUser(
+		FirebaseDatabase db,
+		String targetUserKey,
+		String type,
+		String actorName,
+		String actorUsername,
+		String actorEmail,
+		long actorExp,
+		boolean actorIsAdmin,
+		String snippet,
+		long timestamp
+	) {
+		if (targetUserKey == null || targetUserKey.trim().isEmpty()) return;
+		Map<String, Object> notifPayload = new HashMap<>();
+		notifPayload.put("type", type);
+		notifPayload.put("actorName", actorName);
+		notifPayload.put("actorUsername", actorUsername);
+		notifPayload.put("actorEmail", actorEmail);
+		notifPayload.put("actorExp", actorExp);
+		notifPayload.put("actorIsAdmin", actorIsAdmin);
+		notifPayload.put("snippet", snippet);
+		notifPayload.put("slug", currentSlug);
+		notifPayload.put("episode", getCurrentEpisodeLabelForDownload());
+		notifPayload.put("timestamp", timestamp);
+		notifPayload.put("read", false);
+
+		String notifId = db.getReference("notifications").child(targetUserKey).push().getKey();
+		if (notifId != null) {
+			db.getReference("notifications").child(targetUserKey).child(notifId).setValue(notifPayload);
+		}
 	}
 
 	private Typeface getOutfitTypeface() {
@@ -2059,6 +2187,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		final String[] selectedStickerUrl = {""};
 		final String[] activeReplyParentId = {""};
+		final String[] activeReplyTargetUserKey = {""};
 		final String[] activeEditCommentId = {""};
 
 		final ImageView ivStickerPreview = new ImageView(this);
@@ -2121,6 +2250,7 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void onClick(View v) {
 				activeReplyParentId[0] = "";
+				activeReplyTargetUserKey[0] = "";
 				activeEditCommentId[0] = "";
 				btnSticker.setVisibility(View.VISIBLE);
 				replyBanner.setVisibility(View.GONE);
@@ -2135,10 +2265,11 @@ public class WatchActivity extends AppCompatActivity {
 			repliesByParentMap,
 			new OnCommentActionListener() {
 				@Override
-				public void onReplyRequested(String parentCommentId, String mentionTag) {
+				public void onReplyRequested(String threadParentId, String targetUserKey, String mentionTag) {
 					activeEditCommentId[0] = "";
 					btnSticker.setVisibility(View.VISIBLE);
-					activeReplyParentId[0] = parentCommentId;
+					activeReplyParentId[0] = threadParentId;
+					activeReplyTargetUserKey[0] = targetUserKey != null ? targetUserKey : "";
 					replyBanner.setVisibility(View.VISIBLE);
 					tvReplyBanner.setText("Balas @" + mentionTag);
 
@@ -2153,6 +2284,7 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onEditRequested(String commentId, String oldText) {
 					activeReplyParentId[0] = "";
+					activeReplyTargetUserKey[0] = "";
 					selectedStickerUrl[0] = "";
 					stickerPreviewBox.setVisibility(View.GONE);
 					btnSticker.setVisibility(View.GONE);
@@ -2413,10 +2545,11 @@ public class WatchActivity extends AppCompatActivity {
 		btnSendIcon.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				String text = etInput.getText().toString().trim();
-				String stUrl = selectedStickerUrl[0];
-				String pId = activeReplyParentId[0];
-				String editId = activeEditCommentId[0];
+				final String text = etInput.getText().toString().trim();
+				final String stUrl = selectedStickerUrl[0];
+				final String pId = activeReplyParentId[0];
+				final String replyTargetKey = activeReplyTargetUserKey[0];
+				final String editId = activeEditCommentId[0];
 
 				if (currentSlug.isEmpty()) return;
 
@@ -2457,33 +2590,57 @@ public class WatchActivity extends AppCompatActivity {
 
 				if (text.isEmpty() && stUrl.isEmpty()) return;
 
-				String uKey = sanitizeUserKey(u.getEmail(), u.getUid());
-				HashMap<String, String> p = resolveUserProfile(u.getEmail(), u.getUid());
-				boolean isAdm = u.getEmail() != null && ADMIN_EMAIL.equalsIgnoreCase(u.getEmail().trim());
+				final String uKey = sanitizeUserKey(u.getEmail(), u.getUid());
+				final HashMap<String, String> p = resolveUserProfile(u.getEmail(), u.getUid());
+				final String senderEmail = u.getEmail() != null ? u.getEmail().trim() : "";
+				final String senderName = p.get("name") != null ? p.get("name") : "User";
+				final String senderUsername = p.get("username") != null ? p.get("username") : senderName;
+				final long senderExp = parseLongSafe(p.get("exp"), 0L);
+				final boolean isAdm = !senderEmail.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(senderEmail);
+				final long nowTs = System.currentTimeMillis();
 
 				Map<String, Object> payload = new HashMap<>();
 				payload.put("uid", u.getUid());
-				payload.put("email", u.getEmail() != null ? u.getEmail() : "");
+				payload.put("email", senderEmail);
 				payload.put("text", text);
 				payload.put("stickerUrl", stUrl);
-				payload.put("timestamp", System.currentTimeMillis());
+				payload.put("timestamp", nowTs);
 				payload.put("isAdmin", isAdm);
 				if (!pId.isEmpty()) {
 					payload.put("parentId", pId);
 				}
 
-				String entryId = String.valueOf(System.currentTimeMillis());
+				String entryId = String.valueOf(nowTs);
 				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 					.getReference("comments")
 					.child(cleanSlugKey)
 					.child(entryId)
-					.setValue(payload);
+					.setValue(payload)
+					.addOnCompleteListener(new OnCompleteListener<Void>() {
+						@Override
+						public void onComplete(@NonNull Task<Void> task) {
+							if (task.isSuccessful()) {
+								dispatchCommentNotifications(
+									text,
+									stUrl,
+									replyTargetKey,
+									senderName,
+									senderUsername,
+									senderEmail,
+									senderExp,
+									isAdm,
+									nowTs
+								);
+							}
+						}
+					});
 
 				addExpToCurrentUser(500L);
 
 				etInput.setText("");
 				selectedStickerUrl[0] = "";
 				activeReplyParentId[0] = "";
+				activeReplyTargetUserKey[0] = "";
 				stickerPreviewBox.setVisibility(View.GONE);
 				replyBanner.setVisibility(View.GONE);
 				rvMentionList.setVisibility(View.GONE);
@@ -2936,6 +3093,7 @@ public class WatchActivity extends AppCompatActivity {
 			final String uid = item.get("uid") != null ? item.get("uid").toString() : "";
 			final String text = item.get("text") != null ? item.get("text").toString() : "";
 			final String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
+			final String ownerUserKey = sanitizeUserKey(email, uid);
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
 
 			HashMap<String, String> prof = resolveUserProfile(email, uid);
@@ -2995,7 +3153,7 @@ public class WatchActivity extends AppCompatActivity {
 			}
 			if (tvBody != null) {
 				tvBody.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
-				tvBody.setText(text);
+				tvBody.setText(formatMentionsSpannable(text));
 			}
 			if (ivSticker != null) {
 				if (!stickerUrl.isEmpty() && !isFinishing() && !isDestroyed()) {
@@ -3016,7 +3174,7 @@ public class WatchActivity extends AppCompatActivity {
 					@Override
 					public void onClick(View v) {
 						if (actionListener != null) {
-							actionListener.onReplyRequested(commentId, mentionHandle);
+							actionListener.onReplyRequested(commentId, ownerUserKey, mentionHandle);
 						}
 					}
 				});
@@ -3025,7 +3183,7 @@ public class WatchActivity extends AppCompatActivity {
 			holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
 				public boolean onLongClick(View v) {
-					showCommentLongPressSheet(commentId, email, uid, displayName, mentionHandle, text, stickerUrl, actionListener);
+					showCommentLongPressSheet(commentId, commentId, email, uid, displayName, mentionHandle, text, stickerUrl, actionListener);
 					return true;
 				}
 			});
@@ -3046,7 +3204,7 @@ public class WatchActivity extends AppCompatActivity {
 
 					if (isExpanded) {
 						for (HashMap<String, Object> rItem : replies) {
-							repliesContainer.addView(buildReplyRowView(repliesContainer.getContext(), rItem, d));
+							repliesContainer.addView(buildReplyRowView(repliesContainer.getContext(), commentId, rItem, d));
 						}
 					}
 
@@ -3069,12 +3227,13 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		}
 
-		private View buildReplyRowView(Context ctx, HashMap<String, Object> rItem, float d) {
+		private View buildReplyRowView(Context ctx, final String threadParentId, HashMap<String, Object> rItem, float d) {
 			final String replyId = rItem.get("id") != null ? rItem.get("id").toString() : "";
 			final String rEmail = rItem.get("email") != null ? rItem.get("email").toString() : "";
 			final String rUid = rItem.get("uid") != null ? rItem.get("uid").toString() : "";
 			final String rText = rItem.get("text") != null ? rItem.get("text").toString() : "";
 			final String rSticker = rItem.get("stickerUrl") != null ? rItem.get("stickerUrl").toString().trim() : "";
+			final String rOwnerUserKey = sanitizeUserKey(rEmail, rUid);
 			long rTs = parseLongSafe(rItem.get("timestamp"), System.currentTimeMillis());
 
 			HashMap<String, String> rProf = resolveUserProfile(rEmail, rUid);
@@ -3160,7 +3319,7 @@ public class WatchActivity extends AppCompatActivity {
 			nRow.addView(tvLvl);
 
 			TextView tvB = new TextView(ctx);
-			tvB.setText(rText);
+			tvB.setText(formatMentionsSpannable(rText));
 			tvB.setTextColor(Color.WHITE);
 			tvB.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
 			tvB.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
@@ -3178,23 +3337,56 @@ public class WatchActivity extends AppCompatActivity {
 				ivS.setVisibility(View.GONE);
 			}
 
+			LinearLayout rFooterRow = new LinearLayout(ctx);
+			rFooterRow.setOrientation(LinearLayout.HORIZONTAL);
+			rFooterRow.setGravity(Gravity.CENTER_VERTICAL);
+			LinearLayout.LayoutParams rfLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rfLp.topMargin = (int) (4 * d);
+			rFooterRow.setLayoutParams(rfLp);
+
 			TextView tvT = new TextView(ctx);
 			tvT.setText(formatRelativeOrDateTime(rTs));
 			tvT.setTextColor(Color.parseColor("#94A3B8"));
 			tvT.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
 			tvT.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			rFooterRow.addView(tvT);
+
+			FirebaseUser curUser = FirebaseAuth.getInstance().getCurrentUser();
+			if (curUser != null) {
+				TextView btnReplyNested = new TextView(ctx);
+				btnReplyNested.setText("Balas");
+				btnReplyNested.setTextColor(Color.parseColor("#CBD5E1"));
+				btnReplyNested.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+				btnReplyNested.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+				LinearLayout.LayoutParams rnLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+				);
+				rnLp.leftMargin = (int) (14 * d);
+				btnReplyNested.setLayoutParams(rnLp);
+				btnReplyNested.setOnClickListener(new View.OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						if (actionListener != null) {
+							actionListener.onReplyRequested(threadParentId, rOwnerUserKey, replyHandle);
+						}
+					}
+				});
+				rFooterRow.addView(btnReplyNested);
+			}
 
 			col.addView(nRow);
 			col.addView(tvB);
 			col.addView(ivS);
-			col.addView(tvT);
+			col.addView(rFooterRow);
 
 			row.addView(replyAvatarDecor);
 			row.addView(col);
 			row.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
 				public boolean onLongClick(View v) {
-					showCommentLongPressSheet(replyId, rEmail, rUid, rName, replyHandle, rText, rSticker, actionListener);
+					showCommentLongPressSheet(replyId, threadParentId, rEmail, rUid, rName, replyHandle, rText, rSticker, actionListener);
 					return true;
 				}
 			});
