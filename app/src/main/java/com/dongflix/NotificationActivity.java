@@ -26,7 +26,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
-import android.view.WindowManager;
 import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -253,7 +252,6 @@ public class NotificationActivity extends AppCompatActivity {
 			block.setOrientation(LinearLayout.VERTICAL);
 			block.setPadding(0, (int) (12 * d), 0, (int) (14 * d));
 
-			// Tanggal placeholder
 			View datePh = new View(this);
 			LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams((int) (130 * d), (int) (13 * d));
 			dLp.bottomMargin = (int) (14 * d);
@@ -261,7 +259,6 @@ public class NotificationActivity extends AppCompatActivity {
 			datePh.setBackground(createShimmerDrawable(6 * d));
 			block.addView(datePh);
 
-			// Baris icon + label + jam placeholder
 			LinearLayout topRow = new LinearLayout(this);
 			topRow.setOrientation(LinearLayout.HORIZONTAL);
 			topRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -294,7 +291,6 @@ public class NotificationActivity extends AppCompatActivity {
 			topRow.addView(timePh);
 			block.addView(topRow);
 
-			// 2 baris teks pesan placeholder
 			View bodyLine1 = new View(this);
 			bodyLine1.setLayoutParams(new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, (int) (13 * d)
@@ -309,7 +305,6 @@ public class NotificationActivity extends AppCompatActivity {
 			bodyLine2.setBackground(createShimmerDrawable(6 * d));
 			block.addView(bodyLine2);
 
-			// Garis pemisah tipis
 			View divider = new View(this);
 			LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
@@ -385,7 +380,7 @@ public class NotificationActivity extends AppCompatActivity {
 		styleText(tvEmptyTitle);
 
 		TextView tvEmptyDesc = new TextView(this);
-		tvEmptyDesc.setText("Saat seseorang membalas atau menyebut kamu di live chat, notifikasinya akan muncul di sini.");
+		tvEmptyDesc.setText("Saat seseorang membalas atau menyebut kamu di komentar atau live chat, notifikasinya akan muncul di sini.");
 		tvEmptyDesc.setTextColor(Color.parseColor("#94A3B8"));
 		tvEmptyDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 		tvEmptyDesc.setGravity(Gravity.CENTER);
@@ -404,7 +399,6 @@ public class NotificationActivity extends AppCompatActivity {
 		scrollView.addView(contentHolder);
 		rootLayout.addView(scrollView);
 
-		// Header glass melayang
 		LinearLayout topHeader = new LinearLayout(this);
 		topHeader.setOrientation(LinearLayout.HORIZONTAL);
 		topHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -520,7 +514,6 @@ public class NotificationActivity extends AppCompatActivity {
 							map.put("_id", id);
 							items.add(map);
 
-							// Tandai sudah dibaca saat halaman notifikasi dibuka agar titik bulat di icon hilang
 							if (!id.isEmpty() && !Boolean.TRUE.equals(map.get("read"))) {
 								notifRef.child(id).child("read").setValue(true);
 							}
@@ -569,6 +562,10 @@ public class NotificationActivity extends AppCompatActivity {
 
 		for (HashMap<String, Object> item : items) {
 			String type = safe(item, "type", "mention");
+			String source = safe(item, "source", "");
+			final String slug = safe(item, "slug", "");
+			String title = safe(item, "title", "");
+			String episode = safe(item, "episode", "");
 			String actorName = safe(item, "actorName", "Pengguna");
 			String snippet = safe(item, "snippet", "");
 			long ts = parseLong(item.get("timestamp"));
@@ -584,7 +581,6 @@ public class NotificationActivity extends AppCompatActivity {
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			));
 
-			// Header Tanggal: "22, November 2026"
 			if (!dateHeader.equals(lastDateHeader)) {
 				lastDateHeader = dateHeader;
 				TextView tvDate = new TextView(this);
@@ -601,7 +597,6 @@ public class NotificationActivity extends AppCompatActivity {
 				itemWrap.addView(tvDate);
 			}
 
-			// Baris ikon lonceng + "Notifikasi" di kiri dan jam "14.55" di kanan
 			LinearLayout metaRow = new LinearLayout(this);
 			metaRow.setOrientation(LinearLayout.HORIZONTAL);
 			metaRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -640,10 +635,20 @@ public class NotificationActivity extends AppCompatActivity {
 			metaRow.addView(tvTime);
 			itemWrap.addView(metaRow);
 
-			// Isi notifikasi bergaya seperti gambar referensi
-			String actionPhrase = "reply".equalsIgnoreCase(type)
-				? actorName + " membalas di #live-chat: " + snippet
-				: actorName + " menyebut di #live-chat: " + snippet;
+			boolean isCommentNotif = "comment".equalsIgnoreCase(source) || (!slug.isEmpty() && !"live-chat".equalsIgnoreCase(slug));
+			String actionPhrase;
+			if (isCommentNotif) {
+				String contextLabel = !title.isEmpty()
+					? title + (!episode.isEmpty() ? " (" + episode + ")" : "")
+					: (!slug.isEmpty() ? slug : "komentar");
+				actionPhrase = "reply".equalsIgnoreCase(type)
+					? actorName + " membalas komentar di " + contextLabel + ": " + snippet
+					: actorName + " menyebut di komentar " + contextLabel + ": " + snippet;
+			} else {
+				actionPhrase = "reply".equalsIgnoreCase(type)
+					? actorName + " membalas di #live-chat: " + snippet
+					: actorName + " menyebut di #live-chat: " + snippet;
+			}
 
 			TextView tvContent = new TextView(this);
 			tvContent.setText(actionPhrase);
@@ -655,7 +660,6 @@ public class NotificationActivity extends AppCompatActivity {
 			styleText(tvContent);
 			itemWrap.addView(tvContent);
 
-			// Garis pemisah tipis di bawah setiap notifikasi
 			View divider = new View(this);
 			LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
@@ -668,7 +672,13 @@ public class NotificationActivity extends AppCompatActivity {
 			itemWrap.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					startActivity(new Intent(NotificationActivity.this, ChatActivity.class));
+					if (!slug.isEmpty() && !"live-chat".equalsIgnoreCase(slug)) {
+						Intent i = new Intent(NotificationActivity.this, WatchActivity.class);
+						i.putExtra("slug", slug);
+						startActivity(i);
+					} else {
+						startActivity(new Intent(NotificationActivity.this, ChatActivity.class));
+					}
 				}
 			});
 
