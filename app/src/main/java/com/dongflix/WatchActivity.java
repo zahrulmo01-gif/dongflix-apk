@@ -95,6 +95,9 @@ import com.google.firebase.database.Transaction;
 import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -116,6 +119,8 @@ public class WatchActivity extends AppCompatActivity {
 	private static final String FIREBASE_DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 	private static final String CATALOG_URL = "https://dongflix-api1.zahrulmo01.workers.dev/";
 	private static final String ADMIN_EMAIL = "zahrulms01@gmail.com";
+	private static final String TELEGRAM_BOT_TOKEN = "9267448781:AAH2nBl4ajhCtTV1xg8_xi9-Qp05VU7kgVA";
+	private static final String TELEGRAM_CHAT_ID = "1163053213";
 
 	private static final String[] DEFAULT_STICKERS = {
 		"https://cdn-icons-png.flaticon.com/128/9408/9408175.png",
@@ -288,15 +293,6 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			}).start();
 		}
-	}
-
-	private boolean isDailymotionUrl(String target) {
-		if (target == null) return false;
-		String lower = target.trim().toLowerCase(Locale.US);
-		return lower.contains("dailymotion.com")
-			|| lower.contains("dmcdn.net")
-			|| lower.contains("dmxleo.com")
-			|| lower.contains("dai.ly");
 	}
 
 	private void showSnifferPlayerInLayout(String embedUrl) {
@@ -499,6 +495,358 @@ public class WatchActivity extends AppCompatActivity {
 				textActionDownloadView.setTextColor(Color.WHITE);
 			}
 		}
+	}
+
+	public void showReportBottomSheet() {
+		final Dialog[] dialogHolder = new Dialog[1];
+		final float d = getResources().getDisplayMetrics().density;
+
+		final String[] reasons = new String[]{
+			"Konten tidak bisa dibuka / Link Rusak",
+			"Konten tidak layak untuk ditampilkan",
+			"DMCA Owner",
+			"Lainnya"
+		};
+		final int[] selectedIdx = new int[]{0};
+
+		final BottomSheetDialog sheet = new BottomSheetDialog(this);
+		if (sheet.getWindow() != null) {
+			sheet.getWindow().setSoftInputMode(
+				WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+				| WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+			);
+		}
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (18 * d), (int) (12 * d), (int) (18 * d), (int) (22 * d));
+
+		GradientDrawable sheetBg = new GradientDrawable();
+		sheetBg.setColor(Color.parseColor("#0B0D11"));
+		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
+		sheetBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		root.setBackground(sheetBg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int) (38 * d), (int) (4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int) (12 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#1E222B"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		FrameLayout header = new FrameLayout(this);
+		LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (40 * d)
+		);
+		headerLp.bottomMargin = (int) (10 * d);
+		header.setLayoutParams(headerLp);
+
+		TextView tvHeader = new TextView(this);
+		tvHeader.setText("Lapor Episode");
+		tvHeader.setTextColor(Color.WHITE);
+		tvHeader.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+		tvHeader.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvHeader.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL
+		));
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("✕");
+		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setLayoutParams(new FrameLayout.LayoutParams(
+			(int) (32 * d), (int) (32 * d), Gravity.END | Gravity.CENTER_VERTICAL
+		));
+		GradientDrawable closeBg = new GradientDrawable();
+		closeBg.setShape(GradientDrawable.OVAL);
+		closeBg.setColor(Color.parseColor("#181B22"));
+		btnClose.setBackground(closeBg);
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+			}
+		});
+
+		header.addView(tvHeader);
+		header.addView(btnClose);
+		root.addView(header);
+
+		final ArrayList<LinearLayout> optionRows = new ArrayList<>();
+		final ArrayList<TextView> checkBadges = new ArrayList<>();
+		final ArrayList<TextView> labelViews = new ArrayList<>();
+
+		final LinearLayout customBox = new LinearLayout(this);
+		customBox.setOrientation(LinearLayout.VERTICAL);
+		customBox.setVisibility(View.GONE);
+		customBox.setPadding((int) (12 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
+		LinearLayout.LayoutParams customBoxLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		customBoxLp.topMargin = (int) (2 * d);
+		customBoxLp.bottomMargin = (int) (10 * d);
+		customBox.setLayoutParams(customBoxLp);
+		GradientDrawable customBoxBg = new GradientDrawable();
+		customBoxBg.setColor(Color.parseColor("#181B22"));
+		customBoxBg.setCornerRadius(14 * d);
+		customBoxBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		customBox.setBackground(customBoxBg);
+
+		final EditText etCustomReason = new EditText(this);
+		etCustomReason.setHint("Tulis alasan laporan lainnya...");
+		etCustomReason.setHintTextColor(Color.parseColor("#8E8E93"));
+		etCustomReason.setTextColor(Color.WHITE);
+		etCustomReason.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		etCustomReason.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etCustomReason.setMinLines(2);
+		etCustomReason.setMaxLines(4);
+		etCustomReason.setBackgroundColor(Color.TRANSPARENT);
+		etCustomReason.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		customBox.addView(etCustomReason);
+
+		final Runnable refreshSelectionState = new Runnable() {
+			@Override
+			public void run() {
+				for (int i = 0; i < optionRows.size(); i++) {
+					boolean active = (i == selectedIdx[0]);
+					LinearLayout row = optionRows.get(i);
+					TextView badge = checkBadges.get(i);
+					TextView lbl = labelViews.get(i);
+
+					GradientDrawable rowBg = new GradientDrawable();
+					rowBg.setCornerRadius(12 * d);
+					if (active) {
+						rowBg.setColor(Color.parseColor("#181C26"));
+						rowBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
+					} else {
+						rowBg.setColor(Color.parseColor("#12141A"));
+						rowBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+					}
+					row.setBackground(rowBg);
+
+					lbl.setTextColor(active ? Color.WHITE : Color.parseColor("#E5E7EB"));
+
+					if (active) {
+						GradientDrawable cBg = new GradientDrawable();
+						cBg.setShape(GradientDrawable.OVAL);
+						cBg.setColor(Color.parseColor("#38BDF8"));
+						badge.setBackground(cBg);
+						badge.setText("✓");
+						badge.setTextColor(Color.parseColor("#0B0D11"));
+					} else {
+						GradientDrawable cBg = new GradientDrawable();
+						cBg.setShape(GradientDrawable.OVAL);
+						cBg.setColor(Color.TRANSPARENT);
+						cBg.setStroke(Math.max(1, (int) (1.5f * d)), Color.parseColor("#475569"));
+						badge.setBackground(cBg);
+						badge.setText("");
+					}
+				}
+				customBox.setVisibility(selectedIdx[0] == reasons.length - 1 ? View.VISIBLE : View.GONE);
+			}
+		};
+
+		for (int i = 0; i < reasons.length; i++) {
+			final int idx = i;
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.CENTER_VERTICAL);
+			row.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
+			LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rowLp.bottomMargin = (int) (8 * d);
+			row.setLayoutParams(rowLp);
+
+			TextView lbl = new TextView(this);
+			lbl.setText(reasons[i]);
+			lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+			lbl.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			lbl.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+			TextView badge = new TextView(this);
+			badge.setLayoutParams(new LinearLayout.LayoutParams((int) (20 * d), (int) (20 * d)));
+			badge.setGravity(Gravity.CENTER);
+			badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+			badge.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+
+			row.addView(lbl);
+			row.addView(badge);
+
+			row.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					selectedIdx[0] = idx;
+					refreshSelectionState.run();
+				}
+			});
+
+			optionRows.add(row);
+			checkBadges.add(badge);
+			labelViews.add(lbl);
+			root.addView(row);
+		}
+
+		root.addView(customBox);
+
+		LinearLayout bottomRow = new LinearLayout(this);
+		bottomRow.setOrientation(LinearLayout.HORIZONTAL);
+		bottomRow.setGravity(Gravity.CENTER_VERTICAL);
+		LinearLayout.LayoutParams bRowLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		bRowLp.topMargin = (int) (6 * d);
+		bottomRow.setLayoutParams(bRowLp);
+
+		TextView btnCancel = new TextView(this);
+		btnCancel.setText("Batal");
+		btnCancel.setTextColor(Color.parseColor("#CBD5E1"));
+		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCancel.setGravity(Gravity.CENTER);
+		btnCancel.setPadding(0, (int) (11 * d), 0, (int) (11 * d));
+		LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+		cancelLp.rightMargin = (int) (8 * d);
+		btnCancel.setLayoutParams(cancelLp);
+		GradientDrawable cancelBg = new GradientDrawable();
+		cancelBg.setColor(Color.parseColor("#181B22"));
+		cancelBg.setCornerRadius(1000f);
+		cancelBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		btnCancel.setBackground(cancelBg);
+		btnCancel.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+			}
+		});
+
+		TextView btnSendReport = new TextView(this);
+		btnSendReport.setText("Lapor");
+		btnSendReport.setTextColor(Color.WHITE);
+		btnSendReport.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		btnSendReport.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnSendReport.setGravity(Gravity.CENTER);
+		btnSendReport.setPadding(0, (int) (11 * d), 0, (int) (11 * d));
+		LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+		sendLp.leftMargin = (int) (8 * d);
+		btnSendReport.setLayoutParams(sendLp);
+		GradientDrawable sendBg = new GradientDrawable();
+		sendBg.setColor(Color.parseColor("#2563EB"));
+		sendBg.setCornerRadius(1000f);
+		btnSendReport.setBackground(sendBg);
+		btnSendReport.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String chosenReason = reasons[selectedIdx[0]];
+				String extraNote = etCustomReason.getText().toString().trim();
+				if (selectedIdx[0] == reasons.length - 1 && extraNote.isEmpty()) {
+					DongflixToast.show(WatchActivity.this, "Silakan tulis alasan laporan terlebih dahulu");
+					return;
+				}
+				sheet.dismiss();
+				sendReportToTelegramBot(chosenReason, extraNote);
+			}
+		});
+
+		bottomRow.addView(btnCancel);
+		bottomRow.addView(btnSendReport);
+		root.addView(bottomRow);
+
+		refreshSelectionState.run();
+		dialogHolder[0] = sheet;
+		sheet.setContentView(root);
+		sheet.setOnShowListener(new DialogInterface.OnShowListener() {
+			@Override
+			public void onShow(DialogInterface dialog) {
+				FrameLayout bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					bottomSheet.setBackgroundTintList(null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+						bottomSheet.setElevation(0f);
+					}
+					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behavior.setSkipCollapsed(true);
+					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+				}
+			}
+		});
+		sheet.show();
+	}
+
+	private void sendReportToTelegramBot(final String reason, final String extraNote) {
+		DongflixToast.show(this, "Mengirim laporan...");
+
+		final String titleStr = getCurrentTitleForDownload();
+		final String epStr = getCurrentEpisodeLabelForDownload();
+		final String serverStr = (textActionServer != null && !textActionServer.getText().toString().trim().isEmpty())
+			? textActionServer.getText().toString().trim()
+			: "Default";
+		final String urlStr = (currentPlayingUrl != null && !currentPlayingUrl.trim().isEmpty())
+			? currentPlayingUrl.trim()
+			: (currentEpisodeServerUrls != null && selectedServerIndex >= 0 && selectedServerIndex < currentEpisodeServerUrls.size()
+				? currentEpisodeServerUrls.get(selectedServerIndex) : "-");
+
+		final StringBuilder msg = new StringBuilder();
+		msg.append("🚩 *LAPORAN EPISODE DONGFLIX*\n");
+		msg.append("• *Judul:* ").append(titleStr).append("\n");
+		msg.append("• *Slug:* ").append(currentSlug.isEmpty() ? "-" : currentSlug).append("\n");
+		msg.append("• *Episode:* ").append(epStr).append("\n");
+		msg.append("• *Server:* ").append(serverStr).append("\n");
+		msg.append("• *Alasan:* ").append(reason).append("\n");
+		if (!extraNote.isEmpty()) {
+			msg.append("• *Detail:* ").append(extraNote).append("\n");
+		}
+		if (!urlStr.isEmpty() && !"-".equals(urlStr)) {
+			msg.append("• *URL:* ").append(urlStr);
+		}
+
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				boolean ok = false;
+				HttpURLConnection conn = null;
+				try {
+					String encodedText = URLEncoder.encode(msg.toString(), "UTF-8");
+					String apiUrl = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN
+						+ "/sendMessage?chat_id=" + URLEncoder.encode(TELEGRAM_CHAT_ID, "UTF-8")
+						+ "&text=" + encodedText
+						+ "&parse_mode=Markdown";
+
+					URL url = new URL(apiUrl);
+					conn = (HttpURLConnection) url.openConnection();
+					conn.setRequestMethod("GET");
+					conn.setConnectTimeout(12000);
+					conn.setReadTimeout(12000);
+					int code = conn.getResponseCode();
+					ok = (code >= 200 && code < 300);
+				} catch (Exception ignored) {
+					ok = false;
+				} finally {
+					try { if (conn != null) conn.disconnect(); } catch (Exception ignored) {}
+				}
+
+				final boolean sent = ok;
+				runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						if (isFinishing() || isDestroyed()) return;
+						DongflixToast.show(
+							WatchActivity.this,
+							sent ? "Laporan berhasil dikirim" : "Gagal mengirim laporan, coba lagi"
+						);
+					}
+				});
+			}
+		}).start();
 	}
 
 	private Typeface getOutfitTypeface() {
@@ -1145,114 +1493,6 @@ public class WatchActivity extends AppCompatActivity {
 		if (commentsRef != null && commentsListener != null) {
 			commentsRef.removeEventListener(commentsListener);
 		}
-	}
-
-	private void showDeleteCommentConfirmDialog(final String commentId) {
-		if (commentId == null || commentId.trim().isEmpty() || currentSlug.isEmpty()) return;
-		float d = getResources().getDisplayMetrics().density;
-
-		final Dialog dialog = new Dialog(this);
-		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-		LinearLayout card = new LinearLayout(this);
-		card.setOrientation(LinearLayout.VERTICAL);
-		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
-
-		GradientDrawable cardBg = new GradientDrawable();
-		cardBg.setColor(Color.parseColor("#12141A"));
-		cardBg.setCornerRadius(20 * d);
-		cardBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
-		card.setBackground(cardBg);
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Hapus komentar?");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f);
-		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		card.addView(tvTitle);
-
-		TextView tvDesc = new TextView(this);
-		tvDesc.setText("Komentar yang dihapus tidak dapat dikembalikan.");
-		tvDesc.setTextColor(Color.parseColor("#94A3B8"));
-		tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-		tvDesc.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		descLp.topMargin = (int) (6 * d);
-		descLp.bottomMargin = (int) (20 * d);
-		tvDesc.setLayoutParams(descLp);
-		card.addView(tvDesc);
-
-		LinearLayout btnRow = new LinearLayout(this);
-		btnRow.setOrientation(LinearLayout.HORIZONTAL);
-		btnRow.setGravity(Gravity.END);
-		btnRow.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		));
-
-		TextView btnCancel = new TextView(this);
-		btnCancel.setText("Batal");
-		btnCancel.setTextColor(Color.parseColor("#CBD5E1"));
-		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnCancel.setGravity(Gravity.CENTER);
-		btnCancel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
-		LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		cancelLp.rightMargin = (int) (10 * d);
-		btnCancel.setLayoutParams(cancelLp);
-
-		GradientDrawable cancelBg = new GradientDrawable();
-		cancelBg.setColor(Color.parseColor("#181C26"));
-		cancelBg.setCornerRadius(100f);
-		cancelBg.setStroke((int) (1 * d), Color.parseColor("#1FFFFFFF"));
-		btnCancel.setBackground(cancelBg);
-		btnCancel.setOnClickListener(new View.OnClickListener() {
-			@Override public void onClick(View v) { dialog.dismiss(); }
-		});
-
-		TextView btnConfirmDelete = new TextView(this);
-		btnConfirmDelete.setText("Hapus");
-		btnConfirmDelete.setTextColor(Color.WHITE);
-		btnConfirmDelete.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnConfirmDelete.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnConfirmDelete.setGravity(Gravity.CENTER);
-		btnConfirmDelete.setPadding((int) (20 * d), (int) (10 * d), (int) (20 * d), (int) (10 * d));
-
-		GradientDrawable delBg = new GradientDrawable();
-		delBg.setColor(Color.parseColor("#DC2626"));
-		delBg.setCornerRadius(100f);
-		btnConfirmDelete.setBackground(delBg);
-		btnConfirmDelete.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
-				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-					.getReference("comments")
-					.child(cleanKey)
-					.child(commentId)
-					.removeValue();
-				dialog.dismiss();
-			}
-		});
-
-		btnRow.addView(btnCancel);
-		btnRow.addView(btnConfirmDelete);
-		card.addView(btnRow);
-
-		dialog.setContentView(card);
-		Window win = dialog.getWindow();
-		if (win != null) {
-			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-			int screenW = getResources().getDisplayMetrics().widthPixels;
-			int dialogW = isLandscapeOrFullscreen()
-				? Math.min((int) (360 * d), screenW - (int) (48 * d))
-				: Math.min((int) (340 * d), screenW - (int) (36 * d));
-			win.setLayout(dialogW, ViewGroup.LayoutParams.WRAP_CONTENT);
-		}
-		dialog.show();
 	}
 
 	private void openTikTokCommentSheet() {
@@ -2079,21 +2319,8 @@ public class WatchActivity extends AppCompatActivity {
 			btnReply.setLayoutParams(rBtnLp);
 			btnReply.setTag("btn_reply");
 
-			TextView btnDelete = new TextView(parent.getContext());
-			btnDelete.setText("Hapus");
-			btnDelete.setTextColor(Color.parseColor("#EF4444"));
-			btnDelete.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-			btnDelete.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			LinearLayout.LayoutParams dBtnLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			dBtnLp.leftMargin = (int) (14 * d);
-			btnDelete.setLayoutParams(dBtnLp);
-			btnDelete.setTag("btn_delete");
-
 			footerRow.addView(tvTime);
 			footerRow.addView(btnReply);
-			footerRow.addView(btnDelete);
 
 			LinearLayout toggleRow = new LinearLayout(parent.getContext());
 			toggleRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -2197,7 +2424,6 @@ public class WatchActivity extends AppCompatActivity {
 			ImageView ivSticker = holder.itemView.findViewWithTag("sticker");
 			TextView tvTime = holder.itemView.findViewWithTag("time");
 			TextView btnReply = holder.itemView.findViewWithTag("btn_reply");
-			TextView btnDelete = holder.itemView.findViewWithTag("btn_delete");
 			View toggleBox = holder.itemView.findViewWithTag("toggle_box");
 			TextView btnToggleReplies = holder.itemView.findViewWithTag("toggle_replies");
 			ImageView ivToggleChevron = holder.itemView.findViewWithTag("toggle_chevron");
@@ -2259,27 +2485,6 @@ public class WatchActivity extends AppCompatActivity {
 						if (replyListener != null) {
 							replyListener.onReplyRequested(commentId, mentionHandle);
 						}
-					}
-				});
-			}
-
-			if (btnDelete != null) {
-				boolean canDelete = false;
-				if (curUser != null) {
-					String curEmail = curUser.getEmail() != null ? curUser.getEmail().trim() : "";
-					if (ADMIN_EMAIL.equalsIgnoreCase(curEmail)) {
-						canDelete = true;
-					} else if (!email.isEmpty() && curEmail.equalsIgnoreCase(email.trim())) {
-						canDelete = true;
-					} else if (!uid.isEmpty() && uid.equals(curUser.getUid())) {
-						canDelete = true;
-					}
-				}
-				btnDelete.setVisibility(canDelete ? View.VISIBLE : View.GONE);
-				btnDelete.setOnClickListener(new View.OnClickListener() {
-					@Override
-					public void onClick(View v) {
-						showDeleteCommentConfirmDialog(commentId);
 					}
 				});
 			}
@@ -4466,6 +4671,17 @@ public class WatchActivity extends AppCompatActivity {
 						hiddenSnifferWebView.setWebChromeClient(new WebChromeClient());
 						hiddenSnifferWebView.setWebViewClient(new WebViewClient() {
 							@Override
+							public void onPageFinished(WebView view, String url) {
+								super.onPageFinished(view, url);
+								if (reqToken == extractionRequestToken && isSnifferActive && view != null) {
+									view.evaluateJavascript(
+										"(function(){try{var p=document.querySelector('[class*=\"play\"],button,video');if(p){if(p.tagName==='VIDEO'){p.muted=true;p.play().catch(function(){});}else{p.click();}}}catch(e){}})();",
+										null
+									);
+								}
+							}
+
+							@Override
 							public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
 								if (reqToken == extractionRequestToken && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request != null && request.getUrl() != null) {
 									final String reqUrl = request.getUrl().toString();
@@ -4523,7 +4739,7 @@ public class WatchActivity extends AppCompatActivity {
 									}
 								}
 							};
-							playerHandler.postDelayed(snifferTimeoutRunnable, 5500L);
+							playerHandler.postDelayed(snifferTimeoutRunnable, 9000L);
 						}
 
 						Map<String, String> extraHeaders = new HashMap<>();
@@ -5575,6 +5791,15 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onClick(View v) {
 					startBackgroundDownloadForCurrentEpisode();
+				}
+			});
+		}
+
+		if (btnActionReport != null) {
+			btnActionReport.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					showReportBottomSheet();
 				}
 			});
 		}
