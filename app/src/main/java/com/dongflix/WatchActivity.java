@@ -202,6 +202,7 @@ public class WatchActivity extends AppCompatActivity {
 	public ArrayList<String> qualityUrls = new ArrayList<>();
 
 	public String dmSessionCookie = "";
+	private int extractionRequestToken = 0;
 	private boolean isSnifferActive = false;
 	private boolean isPlayingSniffedMedia = false;
 	private String activeSnifferEmbedUrl = "";
@@ -258,6 +259,37 @@ public class WatchActivity extends AppCompatActivity {
 		initializeLogic();
 	}
 
+	private void setCenterLoadingVisible(boolean visible) {
+		if (playerLoading == null) return;
+		playerLoading.setVisibility(visible ? View.VISIBLE : View.GONE);
+		if (visible) {
+			playerLoading.bringToFront();
+		}
+	}
+
+	private void stopActivePlayerFast() {
+		if (playerHandler != null) {
+			if (progressLoop != null) playerHandler.removeCallbacks(progressLoop);
+			if (autoDowngradeRunnable != null) playerHandler.removeCallbacks(autoDowngradeRunnable);
+		}
+		final MediaPlayer stalePlayer = mediaPlayer;
+		mediaPlayer = null;
+		if (stalePlayer != null) {
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						if (stalePlayer.isPlaying()) stalePlayer.stop();
+					} catch (Exception ignored) {}
+					try {
+						stalePlayer.reset();
+						stalePlayer.release();
+					} catch (Exception ignored) {}
+				}
+			}).start();
+		}
+	}
+
 	private boolean isDailymotionUrl(String target) {
 		if (target == null) return false;
 		String lower = target.trim().toLowerCase(Locale.US);
@@ -274,15 +306,8 @@ public class WatchActivity extends AppCompatActivity {
 		if (playerHandler != null && snifferTimeoutRunnable != null) {
 			playerHandler.removeCallbacks(snifferTimeoutRunnable);
 		}
-		if (mediaPlayer != null) {
-			try {
-				if (mediaPlayer.isPlaying()) mediaPlayer.stop();
-				mediaPlayer.reset();
-				mediaPlayer.release();
-			} catch (Exception ignored) {}
-			mediaPlayer = null;
-		}
-		if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+		stopActivePlayerFast();
+		setCenterLoadingVisible(false);
 		if (btnPlay != null) {
 			btnPlay.setEnabled(true);
 			btnPlay.setAlpha(1.0f);
@@ -3846,6 +3871,9 @@ public class WatchActivity extends AppCompatActivity {
 					if (mediaPlayer != null) {
 						try { curPos = mediaPlayer.getCurrentPosition(); } catch (Exception ignored) {}
 					}
+					stopHiddenSniffer();
+					stopActivePlayerFast();
+					setCenterLoadingVisible(true);
 					extractStream(chosenName, chosenUrl, curPos);
 				}
 			}
@@ -3999,6 +4027,7 @@ public class WatchActivity extends AppCompatActivity {
 
 	@Override
 	public void onDestroy() {
+		extractionRequestToken++;
 		detachCommentsListener();
 		if (downloadProgressReceiver != null) {
 			try {
@@ -4221,6 +4250,9 @@ public class WatchActivity extends AppCompatActivity {
 			playerControlsOverlay.setVisibility(View.VISIBLE);
 			playerControlsOverlay.bringToFront();
 		}
+		if (playerLoading != null && playerLoading.getVisibility() == View.VISIBLE) {
+			playerLoading.bringToFront();
+		}
 		areControlsVisible = true;
 		updateBottomDividerState();
 		resetControlsTimer();
@@ -4232,6 +4264,9 @@ public class WatchActivity extends AppCompatActivity {
 		}
 		if (btnUnlockScreen != null) {
 			btnUnlockScreen.setVisibility(View.GONE);
+		}
+		if (playerLoading != null && playerLoading.getVisibility() == View.VISIBLE) {
+			playerLoading.bringToFront();
 		}
 		areControlsVisible = false;
 		updateBottomDividerState();
@@ -4294,7 +4329,7 @@ public class WatchActivity extends AppCompatActivity {
 					}
 				}
 
-				if (playerLoading != null) playerLoading.setVisibility(View.VISIBLE);
+				setCenterLoadingVisible(true);
 				if (btnPlay != null) {
 					btnPlay.setEnabled(false);
 					btnPlay.setAlpha(0.5f);
@@ -4302,7 +4337,7 @@ public class WatchActivity extends AppCompatActivity {
 
 				HashMap<String, Object> item = episodeList.get(targetIndex);
 				if (!item.containsKey("servers")) {
-					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					setCenterLoadingVisible(false);
 					if (btnPlay != null) {
 						btnPlay.setEnabled(true);
 						btnPlay.setAlpha(1.0f);
@@ -4341,7 +4376,7 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					}
 				} catch (Exception ignored) {
-					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					setCenterLoadingVisible(false);
 					if (btnPlay != null) {
 						btnPlay.setEnabled(true);
 						btnPlay.setAlpha(1.0f);
@@ -4350,7 +4385,7 @@ public class WatchActivity extends AppCompatActivity {
 				}
 
 				if (currentEpisodeServerUrls.isEmpty()) {
-					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					setCenterLoadingVisible(false);
 					if (btnPlay != null) {
 						btnPlay.setEnabled(true);
 						btnPlay.setAlpha(1.0f);
@@ -4397,19 +4432,16 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	private void sniffStreamForPlayer(final String embedUrl, final int seekOnReadyMs) {
+	private void sniffStreamForPlayer(final String embedUrl, final int seekOnReadyMs, final int reqToken) {
 		runOnUiThread(new Runnable() {
 			@Override
 			public void run() {
+				if (reqToken != extractionRequestToken || isFinishing() || isDestroyed()) return;
 				try {
-					if (isDailymotionUrl(embedUrl)) {
-						showSnifferPlayerInLayout(embedUrl);
-						return;
-					}
-
 					stopHiddenSniffer();
 					isSnifferActive = true;
 					activeSnifferEmbedUrl = embedUrl != null ? embedUrl.trim() : "";
+					setCenterLoadingVisible(true);
 
 					if (hiddenSnifferWebView == null && layoutPlayer != null) {
 						hiddenSnifferWebView = new WebView(WatchActivity.this);
@@ -4429,21 +4461,24 @@ public class WatchActivity extends AppCompatActivity {
 						ws.setJavaScriptEnabled(true);
 						ws.setDomStorageEnabled(true);
 						ws.setMediaPlaybackRequiresUserGesture(false);
-						ws.setUserAgentString("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+						ws.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
 
 						hiddenSnifferWebView.setWebChromeClient(new WebChromeClient());
 						hiddenSnifferWebView.setWebViewClient(new WebViewClient() {
 							@Override
 							public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-								if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request != null && request.getUrl() != null) {
+								if (reqToken == extractionRequestToken && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && request != null && request.getUrl() != null) {
 									final String reqUrl = request.getUrl().toString();
-									String low = reqUrl.toLowerCase();
-									if ((low.contains(".m3u8") || low.contains(".mp4") || low.contains("okcdn.ru"))
+									String low = reqUrl.toLowerCase(Locale.US);
+									boolean isSegment = low.endsWith(".ts") || low.contains(".ts?")
+										|| low.endsWith(".m4s") || low.contains(".m4s?")
+										|| low.contains("/seg-") || low.contains("fragment");
+									if (!isSegment && (low.contains(".m3u8") || low.contains(".mp4") || low.contains("okcdn.ru"))
 										&& !low.contains("ads") && !low.contains("analytics") && !low.contains("tracker")) {
 										runOnUiThread(new Runnable() {
 											@Override
 											public void run() {
-												if (isSnifferActive) {
+												if (reqToken == extractionRequestToken && isSnifferActive) {
 													String fallbackEmbed = activeSnifferEmbedUrl;
 													isSnifferActive = false;
 													if (playerHandler != null && snifferTimeoutRunnable != null) {
@@ -4472,13 +4507,13 @@ public class WatchActivity extends AppCompatActivity {
 							snifferTimeoutRunnable = new Runnable() {
 								@Override
 								public void run() {
-									if (isSnifferActive) {
+									if (reqToken == extractionRequestToken && isSnifferActive) {
 										String targetEmbed = activeSnifferEmbedUrl;
 										if (!targetEmbed.isEmpty()) {
 											showSnifferPlayerInLayout(targetEmbed);
 										} else {
 											stopHiddenSniffer();
-											if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+											setCenterLoadingVisible(false);
 											if (btnPlay != null) {
 												btnPlay.setEnabled(true);
 												btnPlay.setAlpha(1.0f);
@@ -4488,15 +4523,15 @@ public class WatchActivity extends AppCompatActivity {
 									}
 								}
 							};
-							playerHandler.postDelayed(snifferTimeoutRunnable, 8000L);
+							playerHandler.postDelayed(snifferTimeoutRunnable, 5500L);
 						}
 
 						Map<String, String> extraHeaders = new HashMap<>();
-						extraHeaders.put("Referer", currentStreamReferer.isEmpty() ? "https://ok.ru/" : currentStreamReferer);
+						extraHeaders.put("Referer", currentStreamReferer.isEmpty() ? "https://geo.dailymotion.com/" : currentStreamReferer);
 						hiddenSnifferWebView.loadUrl(embedUrl, extraHeaders);
 					}
 				} catch (Exception e) {
-					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					setCenterLoadingVisible(false);
 					DongflixToast.show(WatchActivity.this, "Gagal memuat stream server");
 				}
 			}
@@ -4505,12 +4540,16 @@ public class WatchActivity extends AppCompatActivity {
 
 	public void playVideoUrl(final String rawUrl, final int targetSeek) {
 		if (rawUrl == null || rawUrl.trim().isEmpty()) return;
-		if (isDailymotionUrl(rawUrl)) {
-			showSnifferPlayerInLayout(rawUrl);
-			return;
+
+		if (hiddenSnifferWebView != null && hiddenSnifferWebView.getVisibility() == View.VISIBLE) {
+			try {
+				hiddenSnifferWebView.stopLoading();
+				hiddenSnifferWebView.setVisibility(View.GONE);
+				hiddenSnifferWebView.setAlpha(0f);
+				hiddenSnifferWebView.loadUrl("about:blank");
+			} catch (Exception ignored) {}
 		}
 
-		stopHiddenSniffer();
 		if (playerTextureView != null) {
 			playerTextureView.setVisibility(View.VISIBLE);
 		}
@@ -4524,11 +4563,13 @@ public class WatchActivity extends AppCompatActivity {
 		final String cleanUrl = normalized;
 		currentPlayingUrl = cleanUrl;
 		savedSeekPosition = targetSeek;
+		final int playToken = extractionRequestToken;
 
 		runOnUiThread(new Runnable() {
 			@Override
 			public void run() {
-				if (playerLoading != null) playerLoading.setVisibility(View.VISIBLE);
+				if (playToken != extractionRequestToken || isFinishing() || isDestroyed()) return;
+				setCenterLoadingVisible(true);
 				if (btnPlay != null) {
 					btnPlay.setEnabled(false);
 					btnPlay.setAlpha(0.5f);
@@ -4541,27 +4582,21 @@ public class WatchActivity extends AppCompatActivity {
 					}
 				}
 
-				try {
-					if (mediaPlayer != null) {
-						try { mediaPlayer.stop(); } catch (Exception ignored) {}
-						try {
-							mediaPlayer.reset();
-							mediaPlayer.release();
-						} catch (Exception ignored) {}
-						mediaPlayer = null;
-					}
+				stopActivePlayerFast();
 
-					mediaPlayer = new MediaPlayer();
+				try {
+					MediaPlayer mpInstance = new MediaPlayer();
+					mediaPlayer = mpInstance;
 
 					if (playerTextureView != null && playerTextureView.isAvailable()) {
 						SurfaceTexture st = playerTextureView.getSurfaceTexture();
 						if (st != null) {
 							if (playerSurface != null) playerSurface.release();
 							playerSurface = new Surface(st);
-							mediaPlayer.setSurface(playerSurface);
+							mpInstance.setSurface(playerSurface);
 						}
 					} else if (playerSurface != null && playerSurface.isValid()) {
-						mediaPlayer.setSurface(playerSurface);
+						mpInstance.setSurface(playerSurface);
 					}
 
 					Map<String, String> headers = new HashMap<>();
@@ -4570,8 +4605,8 @@ public class WatchActivity extends AppCompatActivity {
 					if (cleanUrl.contains("ok.ru") || cleanUrl.contains("odnoklassniki") || cleanUrl.contains("okcdn")) {
 						headers.put("Referer", "https://ok.ru/");
 					} else if (cleanUrl.contains("dailymotion") || cleanUrl.contains("dmcdn")) {
-						headers.put("Referer", "https://www.dailymotion.com/");
-						headers.put("Origin", "https://www.dailymotion.com");
+						headers.put("Referer", "https://geo.dailymotion.com/");
+						headers.put("Origin", "https://geo.dailymotion.com");
 						if (dmSessionCookie != null && !dmSessionCookie.isEmpty()) {
 							headers.put("Cookie", dmSessionCookie);
 						}
@@ -4585,12 +4620,13 @@ public class WatchActivity extends AppCompatActivity {
 
 					headers.put("Accept", "*/*");
 
-					mediaPlayer.setDataSource(WatchActivity.this, Uri.parse(cleanUrl), headers);
-					mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+					mpInstance.setDataSource(WatchActivity.this, Uri.parse(cleanUrl), headers);
+					mpInstance.setAudioStreamType(AudioManager.STREAM_MUSIC);
 
-					mediaPlayer.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
+					mpInstance.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
 						@Override
 						public void onVideoSizeChanged(MediaPlayer mp, int width, int height) {
+							if (playToken != extractionRequestToken) return;
 							if (width > 0 && height > 0) {
 								currentVideoWidth = width;
 								currentVideoHeight = height;
@@ -4599,9 +4635,10 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					});
 
-					mediaPlayer.setOnBufferingUpdateListener(new MediaPlayer.OnBufferingUpdateListener() {
+					mpInstance.setOnBufferingUpdateListener(new MediaPlayer.OnBufferingUpdateListener() {
 						@Override
 						public void onBufferingUpdate(MediaPlayer mp, int percent) {
+							if (playToken != extractionRequestToken) return;
 							try {
 								int duration = mp.getDuration();
 								if (duration > 0 && playerSeekBar != null) {
@@ -4617,11 +4654,12 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					});
 
-					mediaPlayer.setOnInfoListener(new MediaPlayer.OnInfoListener() {
+					mpInstance.setOnInfoListener(new MediaPlayer.OnInfoListener() {
 						@Override
 						public boolean onInfo(MediaPlayer mp, int what, int extra) {
+							if (playToken != extractionRequestToken) return false;
 							if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
-								if (playerLoading != null) playerLoading.setVisibility(View.VISIBLE);
+								setCenterLoadingVisible(true);
 								if (btnPlay != null) {
 									btnPlay.setEnabled(false);
 									btnPlay.setAlpha(0.5f);
@@ -4634,7 +4672,7 @@ public class WatchActivity extends AppCompatActivity {
 								if (playerHandler != null && autoDowngradeRunnable != null) {
 									playerHandler.removeCallbacks(autoDowngradeRunnable);
 								}
-								if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+								setCenterLoadingVisible(false);
 								if (btnPlay != null) {
 									btnPlay.setEnabled(true);
 									btnPlay.setAlpha(1.0f);
@@ -4644,14 +4682,15 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					});
 
-					mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+					mpInstance.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
 						@Override
 						public void onPrepared(MediaPlayer mp) {
+							if (playToken != extractionRequestToken || isFinishing() || isDestroyed()) return;
 							isPlayingSniffedMedia = false;
 							if (playerHandler != null && autoDowngradeRunnable != null) {
 								playerHandler.removeCallbacks(autoDowngradeRunnable);
 							}
-							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+							setCenterLoadingVisible(false);
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
 								btnPlay.setAlpha(1.0f);
@@ -4699,9 +4738,10 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					});
 
-					mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+					mpInstance.setOnErrorListener(new MediaPlayer.OnErrorListener() {
 						@Override
 						public boolean onError(MediaPlayer mp, int what, int extra) {
+							if (playToken != extractionRequestToken || isFinishing() || isDestroyed()) return true;
 							if (playerHandler != null && autoDowngradeRunnable != null) {
 								playerHandler.removeCallbacks(autoDowngradeRunnable);
 							}
@@ -4715,7 +4755,7 @@ public class WatchActivity extends AppCompatActivity {
 								playVideoUrl(altIpfs, savedSeekPosition);
 								return true;
 							}
-							if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+							setCenterLoadingVisible(false);
 							if (btnPlay != null) {
 								btnPlay.setEnabled(true);
 								btnPlay.setAlpha(1.0f);
@@ -4726,15 +4766,16 @@ public class WatchActivity extends AppCompatActivity {
 						}
 					});
 
-					mediaPlayer.prepareAsync();
+					mpInstance.prepareAsync();
 
 				} catch (Exception e) {
+					if (playToken != extractionRequestToken) return;
 					if (isPlayingSniffedMedia && !activeSnifferEmbedUrl.isEmpty()) {
 						isPlayingSniffedMedia = false;
 						showSnifferPlayerInLayout(activeSnifferEmbedUrl);
 						return;
 					}
-					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+					setCenterLoadingVisible(false);
 					if (btnPlay != null) {
 						btnPlay.setEnabled(true);
 						btnPlay.setAlpha(1.0f);
@@ -4860,13 +4901,6 @@ public class WatchActivity extends AppCompatActivity {
 				playContainer.setLayoutParams(lp);
 			}
 
-			if (playerLoading != null) {
-				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
-				lp.width = (int) (74 * density);
-				lp.height = (int) (74 * density);
-				playerLoading.setLayoutParams(lp);
-			}
-
 			if (btnPlay != null) {
 				ViewGroup.LayoutParams lp = btnPlay.getLayoutParams();
 				lp.width = (int) (60 * density);
@@ -4957,13 +4991,6 @@ public class WatchActivity extends AppCompatActivity {
 				lp.height = (int) (64 * density);
 				lp.setMargins(gapCenterNormal, 0, gapCenterNormal, 0);
 				playContainer.setLayoutParams(lp);
-			}
-
-			if (playerLoading != null) {
-				ViewGroup.LayoutParams lp = playerLoading.getLayoutParams();
-				lp.width = (int) (64 * density);
-				lp.height = (int) (64 * density);
-				playerLoading.setLayoutParams(lp);
 			}
 
 			if (btnPlay != null) {
@@ -5585,10 +5612,15 @@ public class WatchActivity extends AppCompatActivity {
 	public void extractStream(final String server, final String targetUrl, final int seekOnReadyMs) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
 
+		final int reqToken = ++extractionRequestToken;
+		stopHiddenSniffer();
+		stopActivePlayerFast();
+		setCenterLoadingVisible(true);
+
 		StreamExtractorHelper.extract(server, targetUrl, new StreamExtractorHelper.ExtractionCallback() {
 			@Override
 			public void onSuccess(ArrayList<String> qualityLabels, ArrayList<String> streamUrls, String referer, String dmCookie) {
-				if (isFinishing() || isDestroyed()) return;
+				if (reqToken != extractionRequestToken || isFinishing() || isDestroyed()) return;
 				currentStreamReferer = referer != null ? referer : "";
 				if (dmCookie != null && !dmCookie.isEmpty()) {
 					dmSessionCookie = dmCookie;
@@ -5596,8 +5628,13 @@ public class WatchActivity extends AppCompatActivity {
 
 				qualityNames.clear();
 				qualityUrls.clear();
-				qualityNames.addAll(qualityLabels);
-				qualityUrls.addAll(streamUrls);
+				if (qualityLabels != null) qualityNames.addAll(qualityLabels);
+				if (streamUrls != null) qualityUrls.addAll(streamUrls);
+
+				if (qualityUrls.isEmpty()) {
+					setCenterLoadingVisible(false);
+					return;
+				}
 
 				isAutoQualityMode = true;
 				selectedQualityIndex = getRecommendedQualityIndex();
@@ -5608,9 +5645,9 @@ public class WatchActivity extends AppCompatActivity {
 
 			@Override
 			public void onNeedSniffer(String snifferUrl, String referer) {
-				if (isFinishing() || isDestroyed()) return;
+				if (reqToken != extractionRequestToken || isFinishing() || isDestroyed()) return;
 				currentStreamReferer = referer != null ? referer : "";
-				sniffStreamForPlayer(snifferUrl, seekOnReadyMs);
+				sniffStreamForPlayer(snifferUrl, seekOnReadyMs, reqToken);
 			}
 		});
 	}
