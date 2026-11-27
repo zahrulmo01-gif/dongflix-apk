@@ -13,8 +13,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -27,7 +25,6 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.util.Base64;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -45,7 +42,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import com.bumptech.glide.Glide;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
@@ -62,6 +58,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -85,17 +82,21 @@ public class EditProfileActivity extends AppCompatActivity {
 	private String currentUsername = "";
 	private String currentBio = "";
 	private String currentPhotoUrl = "";
+	private String currentFrameUrl = "";
+	private String currentFrameName = "Tanpa bingkai";
 	private boolean isUploadingPhoto = false;
 
-	private ImageView ivAvatarPreview;
-	private TextView tvAvatarInitial;
+	private AvatarDecorationView avatarDecorPreview;
 	private ProgressBar avatarUploadSpinner;
 	private TextView tvChangePhotoLabel;
+	private TextView tvFrameValue;
 	private TextView tvNameValue;
 	private TextView tvUsernameValue;
 	private TextView tvEmailValue;
 	private TextView tvBioValue;
 	private Typeface outfitFont;
+
+	private final ArrayList<HashMap<String, String>> availableFrames = new ArrayList<>();
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -123,6 +124,8 @@ public class EditProfileActivity extends AppCompatActivity {
 			? getIntent().getStringExtra("bio").trim() : "";
 		currentPhotoUrl = getIntent().getStringExtra("photoURL") != null
 			? getIntent().getStringExtra("photoURL").trim() : "";
+		currentFrameUrl = getIntent().getStringExtra("avatarFrame") != null
+			? getIntent().getStringExtra("avatarFrame").trim() : "";
 
 		userNodeRef = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 			.getReference("users")
@@ -131,6 +134,7 @@ public class EditProfileActivity extends AppCompatActivity {
 		buildLayout();
 		bindAllProfileFields();
 		loadLatestProfileFromFirebase();
+		loadAvailableFramesFromFirebase();
 	}
 
 	private Typeface getOutfitFont() {
@@ -183,7 +187,7 @@ public class EditProfileActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 
-		// Top Bar selaras aplikasi Dongflix & referensi Edit profil
+		// Top Bar
 		FrameLayout topBar = new FrameLayout(this);
 		topBar.setPadding((int) (14 * d), statusH + (int) (10 * d), (int) (14 * d), (int) (10 * d));
 		topBar.setLayoutParams(new LinearLayout.LayoutParams(
@@ -239,7 +243,7 @@ public class EditProfileActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		));
 
-		// Bagian Avatar Tengah + Overlay Kamera + Tombol Ubah Foto
+		// Bagian Avatar + Bingkai GIF + Tombol Ubah Foto
 		LinearLayout avatarSection = new LinearLayout(this);
 		avatarSection.setOrientation(LinearLayout.VERTICAL);
 		avatarSection.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -249,50 +253,19 @@ public class EditProfileActivity extends AppCompatActivity {
 		avSecLp.bottomMargin = (int) (22 * d);
 		avatarSection.setLayoutParams(avSecLp);
 
-		FrameLayout avatarCircleWrap = new FrameLayout(this);
-		int avSize = (int) (96 * d);
-		avatarCircleWrap.setLayoutParams(new LinearLayout.LayoutParams(avSize, avSize));
-
-		ivAvatarPreview = new ImageView(this);
-		ivAvatarPreview.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		FrameLayout avatarHolder = new FrameLayout(this);
+		avatarHolder.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		));
-		ivAvatarPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-		tvAvatarInitial = new TextView(this);
-		tvAvatarInitial.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
-		tvAvatarInitial.setGravity(Gravity.CENTER);
-		tvAvatarInitial.setTextColor(Color.WHITE);
-		tvAvatarInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 32f);
-		styleText(tvAvatarInitial);
-
-		View dimOverlay = new View(this);
-		dimOverlay.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-		));
-		GradientDrawable dimCircle = new GradientDrawable();
-		dimCircle.setShape(GradientDrawable.OVAL);
-		dimCircle.setColor(Color.parseColor("#59000000"));
-		dimOverlay.setBackground(dimCircle);
-
-		ImageView ivCameraBadge = new ImageView(this);
-		int camSz = (int) (28 * d);
-		ivCameraBadge.setLayoutParams(new FrameLayout.LayoutParams(camSz, camSz, Gravity.CENTER));
-		ivCameraBadge.setImageResource(android.R.drawable.ic_menu_camera);
-		ivCameraBadge.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+		avatarDecorPreview = new AvatarDecorationView(this, 88, false);
+		avatarHolder.addView(avatarDecorPreview);
 
 		avatarUploadSpinner = new ProgressBar(this);
 		int spSz = (int) (34 * d);
 		avatarUploadSpinner.setLayoutParams(new FrameLayout.LayoutParams(spSz, spSz, Gravity.CENTER));
 		avatarUploadSpinner.setVisibility(View.GONE);
-
-		avatarCircleWrap.addView(ivAvatarPreview);
-		avatarCircleWrap.addView(tvAvatarInitial);
-		avatarCircleWrap.addView(dimOverlay);
-		avatarCircleWrap.addView(ivCameraBadge);
-		avatarCircleWrap.addView(avatarUploadSpinner);
+		avatarHolder.addView(avatarUploadSpinner);
 
 		View.OnClickListener pickPhotoClick = new View.OnClickListener() {
 			@Override
@@ -301,7 +274,7 @@ public class EditProfileActivity extends AppCompatActivity {
 				openGalleryPicker();
 			}
 		};
-		avatarCircleWrap.setOnClickListener(pickPhotoClick);
+		avatarHolder.setOnClickListener(pickPhotoClick);
 
 		tvChangePhotoLabel = new TextView(this);
 		tvChangePhotoLabel.setText("Ubah foto");
@@ -310,16 +283,16 @@ public class EditProfileActivity extends AppCompatActivity {
 		LinearLayout.LayoutParams cpLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		cpLp.topMargin = (int) (10 * d);
+		cpLp.topMargin = (int) (8 * d);
 		tvChangePhotoLabel.setLayoutParams(cpLp);
 		styleText(tvChangePhotoLabel);
 		tvChangePhotoLabel.setOnClickListener(pickPhotoClick);
 
-		avatarSection.addView(avatarCircleWrap);
+		avatarSection.addView(avatarHolder);
 		avatarSection.addView(tvChangePhotoLabel);
 		content.addView(avatarSection);
 
-		// Kartu 1: Nama, Username, Email (hanya lihat)
+		// Kartu 1: Nama, Username, Bingkai Avatar, Email (hanya lihat)
 		LinearLayout identityCard = createSectionCard(d);
 
 		tvNameValue = new TextView(this);
@@ -361,6 +334,23 @@ public class EditProfileActivity extends AppCompatActivity {
 
 		identityCard.addView(buildRowDivider(d));
 
+		tvFrameValue = new TextView(this);
+		identityCard.addView(buildProfileFieldRow(
+			"Bingkai",
+			tvFrameValue,
+			true,
+			false,
+			d,
+			new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					openFramePickerDialog();
+				}
+			}
+		));
+
+		identityCard.addView(buildRowDivider(d));
+
 		tvEmailValue = new TextView(this);
 		identityCard.addView(buildProfileFieldRow(
 			"Email",
@@ -382,7 +372,7 @@ public class EditProfileActivity extends AppCompatActivity {
 
 		content.addView(identityCard);
 
-		// Label Seksi: Info dasar
+		// Seksi Info dasar: Bio
 		TextView tvBasicHeader = new TextView(this);
 		tvBasicHeader.setText("Info dasar");
 		tvBasicHeader.setTextColor(Color.parseColor("#94A3B8"));
@@ -397,7 +387,6 @@ public class EditProfileActivity extends AppCompatActivity {
 		styleText(tvBasicHeader);
 		content.addView(tvBasicHeader);
 
-		// Kartu 2: Bio
 		LinearLayout bioCard = createSectionCard(d);
 		tvBioValue = new TextView(this);
 		bioCard.addView(buildProfileFieldRow(
@@ -532,44 +521,30 @@ public class EditProfileActivity extends AppCompatActivity {
 				tvBioValue.setTextColor(Color.WHITE);
 			}
 		}
-		bindCircularAvatarPreview(currentPhotoUrl, currentName);
+		syncSelectedFrameLabel();
 	}
 
-	private void bindCircularAvatarPreview(String photoUrl, String displayName) {
-		float d = getResources().getDisplayMetrics().density;
-		int sizePx = (int) (96 * d);
-		String initial = (displayName != null && !displayName.trim().isEmpty())
-			? displayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
-
-		if (photoUrl != null && !photoUrl.trim().isEmpty()) {
-			String clean = photoUrl.trim();
-			if (ivAvatarPreview != null) {
-				ivAvatarPreview.setVisibility(View.VISIBLE);
-				if (clean.startsWith("data:image")) {
-					try {
-						String b64 = clean.substring(clean.indexOf(",") + 1);
-						byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
-						Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-						if (bmp != null) {
-							ivAvatarPreview.setImageBitmap(cropToCircleBitmap(bmp, sizePx));
-						}
-					} catch (Exception ignored) {}
-				} else if (!isFinishing() && !isDestroyed()) {
-					Glide.with(this).load(Uri.parse(clean)).circleCrop()
-						.placeholder(R.drawable.ic_profile).error(R.drawable.ic_profile).into(ivAvatarPreview);
+	private void syncSelectedFrameLabel() {
+		if (currentFrameUrl == null || currentFrameUrl.trim().isEmpty()) {
+			currentFrameName = "Tanpa bingkai";
+		} else {
+			boolean matched = false;
+			for (HashMap<String, String> item : availableFrames) {
+				if (currentFrameUrl.trim().equals(item.get("url"))) {
+					currentFrameName = item.get("name");
+					matched = true;
+					break;
 				}
 			}
-			if (tvAvatarInitial != null) tvAvatarInitial.setVisibility(View.GONE);
-		} else {
-			if (ivAvatarPreview != null) ivAvatarPreview.setVisibility(View.GONE);
-			if (tvAvatarInitial != null) {
-				tvAvatarInitial.setVisibility(View.VISIBLE);
-				tvAvatarInitial.setText(initial);
-				GradientDrawable circle = new GradientDrawable();
-				circle.setShape(GradientDrawable.OVAL);
-				circle.setColor(Color.parseColor("#1D4ED8"));
-				tvAvatarInitial.setBackground(circle);
+			if (!matched && (currentFrameName == null || currentFrameName.isEmpty())) {
+				currentFrameName = "Bingkai aktif";
 			}
+		}
+		if (tvFrameValue != null) {
+			tvFrameValue.setText(currentFrameName);
+		}
+		if (avatarDecorPreview != null) {
+			avatarDecorPreview.bind(currentPhotoUrl, currentName, currentFrameUrl);
 		}
 	}
 
@@ -593,12 +568,71 @@ public class EditProfileActivity extends AppCompatActivity {
 				if (snap.child("photoURL").getValue() != null) {
 					currentPhotoUrl = snap.child("photoURL").getValue().toString().trim();
 				}
+				if (snap.child("avatarFrame").getValue() != null) {
+					currentFrameUrl = snap.child("avatarFrame").getValue().toString().trim();
+				}
+				if (snap.child("avatarFrameName").getValue() != null) {
+					String fn = snap.child("avatarFrameName").getValue().toString().trim();
+					if (!fn.isEmpty()) currentFrameName = fn;
+				}
 				bindAllProfileFields();
 			}
 
 			@Override
 			public void onCancelled(@NonNull DatabaseError error) {}
 		});
+	}
+
+	private void loadAvailableFramesFromFirebase() {
+		FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+			.getReference("avatar_frames")
+			.addValueEventListener(new ValueEventListener() {
+				@Override
+				public void onDataChange(@NonNull DataSnapshot snap) {
+					if (isFinishing() || isDestroyed()) return;
+					availableFrames.clear();
+
+					HashMap<String, String> noneItem = new HashMap<>();
+					noneItem.put("name", "Tanpa bingkai");
+					noneItem.put("url", "");
+					availableFrames.add(noneItem);
+
+					if (snap.exists()) {
+						int idx = 1;
+						for (DataSnapshot child : snap.getChildren()) {
+							Object val = child.getValue();
+							String fName = "Bingkai " + idx;
+							String fUrl = "";
+
+							if (val instanceof String) {
+								fUrl = val.toString().trim();
+							} else if (val instanceof Map) {
+								Map<?, ?> m = (Map<?, ?>) val;
+								Object nObj = m.get("name") != null ? m.get("name") : m.get("title");
+								Object uObj = m.get("url") != null ? m.get("url") : (m.get("frameUrl") != null ? m.get("frameUrl") : m.get("image"));
+								if (nObj != null && !nObj.toString().trim().isEmpty()) {
+									fName = nObj.toString().trim();
+								}
+								if (uObj != null) {
+									fUrl = uObj.toString().trim();
+								}
+							}
+
+							if (!fUrl.isEmpty()) {
+								HashMap<String, String> item = new HashMap<>();
+								item.put("name", fName);
+								item.put("url", fUrl);
+								availableFrames.add(item);
+								idx++;
+							}
+						}
+					}
+					syncSelectedFrameLabel();
+				}
+
+				@Override
+				public void onCancelled(@NonNull DatabaseError error) {}
+			});
 	}
 
 	private void saveProfileFieldToFirebase(final String fieldKey, final String value) {
@@ -616,6 +650,7 @@ public class EditProfileActivity extends AppCompatActivity {
 					else if ("username".equals(fieldKey)) currentUsername = value;
 					else if ("bio".equals(fieldKey)) currentBio = value;
 					else if ("photoURL".equals(fieldKey)) currentPhotoUrl = value;
+					else if ("avatarFrame".equals(fieldKey)) currentFrameUrl = value;
 
 					bindAllProfileFields();
 					setResult(RESULT_OK);
@@ -625,6 +660,147 @@ public class EditProfileActivity extends AppCompatActivity {
 				}
 			}
 		});
+	}
+
+	private void openFramePickerDialog() {
+		if (availableFrames.size() <= 1) {
+			DongflixToast.show(this, "Daftar bingkai belum diatur di database (avatar_frames)");
+			return;
+		}
+
+		float d = getResources().getDisplayMetrics().density;
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (20 * d), (int) (18 * d), (int) (20 * d), (int) (18 * d));
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#12141A"));
+		bg.setCornerRadius(20 * d);
+		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
+		root.setBackground(bg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Pilih Bingkai Avatar");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
+		styleText(tvTitle);
+		root.addView(tvTitle);
+
+		ScrollView scroll = new ScrollView(this);
+		scroll.setVerticalScrollBarEnabled(false);
+		LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			Math.min((int) (360 * d), getResources().getDisplayMetrics().heightPixels / 2)
+		);
+		scLp.topMargin = (int) (14 * d);
+		scLp.bottomMargin = (int) (14 * d);
+		scroll.setLayoutParams(scLp);
+
+		LinearLayout listBox = new LinearLayout(this);
+		listBox.setOrientation(LinearLayout.VERTICAL);
+		scroll.addView(listBox);
+		root.addView(scroll);
+
+		for (final HashMap<String, String> item : availableFrames) {
+			final String fName = item.get("name") != null ? item.get("name") : "Bingkai";
+			final String fUrl = item.get("url") != null ? item.get("url") : "";
+			boolean selected = (fUrl.isEmpty() && currentFrameUrl.isEmpty())
+				|| (!fUrl.isEmpty() && fUrl.equals(currentFrameUrl));
+
+			LinearLayout row = new LinearLayout(this);
+			row.setOrientation(LinearLayout.HORIZONTAL);
+			row.setGravity(Gravity.CENTER_VERTICAL);
+			row.setPadding((int) (12 * d), (int) (10 * d), (int) (12 * d), (int) (10 * d));
+			LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			rLp.bottomMargin = (int) (8 * d);
+			row.setLayoutParams(rLp);
+
+			GradientDrawable rBg = new GradientDrawable();
+			rBg.setColor(selected ? Color.parseColor("#0C2438") : Color.parseColor("#181C26"));
+			rBg.setCornerRadius(14 * d);
+			rBg.setStroke(
+				Math.max(1, (int) (1 * d)),
+				selected ? Color.parseColor("#38BDF8") : Color.parseColor("#1FFFFFFF")
+			);
+			row.setBackground(rBg);
+
+			AvatarDecorationView rowPreview = new AvatarDecorationView(this, 42, false);
+			LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			pLp.rightMargin = (int) (12 * d);
+			rowPreview.setLayoutParams(pLp);
+			rowPreview.bind(currentPhotoUrl, currentName, fUrl);
+
+			TextView tvItemName = new TextView(this);
+			tvItemName.setText(fName);
+			tvItemName.setTextColor(Color.WHITE);
+			tvItemName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+			tvItemName.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+			styleText(tvItemName);
+
+			TextView tvState = new TextView(this);
+			tvState.setText(selected ? "Dipakai" : "Pilih");
+			tvState.setTextColor(selected ? Color.parseColor("#38BDF8") : Color.parseColor("#94A3B8"));
+			tvState.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+			styleText(tvState);
+
+			row.addView(rowPreview);
+			row.addView(tvItemName);
+			row.addView(tvState);
+
+			row.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					dialog.dismiss();
+					Map<String, Object> updates = new HashMap<>();
+					updates.put("avatarFrame", fUrl);
+					updates.put("avatarFrameName", fName);
+					updates.put("email", currentEmail);
+					userNodeRef.updateChildren(updates);
+
+					currentFrameUrl = fUrl;
+					currentFrameName = fName;
+					syncSelectedFrameLabel();
+					setResult(RESULT_OK);
+					DongflixToast.show(EditProfileActivity.this, "Bingkai: " + fName);
+				}
+			});
+
+			listBox.addView(row);
+		}
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("Tutup");
+		btnClose.setTextColor(Color.WHITE);
+		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setPadding((int) (18 * d), (int) (9 * d), (int) (18 * d), (int) (9 * d));
+		GradientDrawable cBg = new GradientDrawable();
+		cBg.setColor(Color.parseColor("#2563EB"));
+		cBg.setCornerRadius(100f);
+		btnClose.setBackground(cBg);
+		styleText(btnClose);
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				dialog.dismiss();
+			}
+		});
+		root.addView(btnClose);
+
+		dialog.setContentView(root);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			win.setLayout(Math.min((int) (350 * d), screenW - (int) (32 * d)), ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
 	}
 
 	private interface FieldSaveCallback {
@@ -792,7 +968,7 @@ public class EditProfileActivity extends AppCompatActivity {
 		card.addView(etUsername);
 
 		final TextView tvStatus = new TextView(this);
-		tvStatus.setText("Gunakan 3–20 karakter huruf kecil, angka, atau _");
+		tvStatus.setText("Gunakan 3–20 karakter huruf kecil, angka, titik, atau _");
 		tvStatus.setTextColor(Color.parseColor("#94A3B8"));
 		tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
 		LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(
@@ -999,7 +1175,6 @@ public class EditProfileActivity extends AppCompatActivity {
 		}
 	}
 
-	// Layar/Dialog Crop Interaktif (geser & zoom 1:1) sebelum foto diunggah ke Cloudinary
 	private void openInteractiveCropDialog(final Bitmap sourceBitmap) {
 		final float d = getResources().getDisplayMetrics().density;
 		final Dialog cropDialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
@@ -1206,22 +1381,6 @@ public class EditProfileActivity extends AppCompatActivity {
 			}
 		} catch (Exception ignored) {}
 		return "";
-	}
-
-	private Bitmap cropToCircleBitmap(Bitmap src, int sizePx) {
-		int edge = Math.min(src.getWidth(), src.getHeight());
-		Bitmap square = Bitmap.createBitmap(
-			src, (src.getWidth() - edge) / 2, (src.getHeight() - edge) / 2, edge, edge
-		);
-		Bitmap scaled = Bitmap.createScaledBitmap(square, sizePx, sizePx, true);
-		Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
-		Canvas canvas = new Canvas(out);
-		Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		Rect rect = new Rect(0, 0, sizePx, sizePx);
-		canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint);
-		paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-		canvas.drawBitmap(scaled, rect, rect, paint);
-		return out;
 	}
 
 	private static class CircleCropView extends View {
