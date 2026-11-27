@@ -98,19 +98,22 @@ public class StreamExtractorHelper {
 	}
 
 	private static void extractOkRu(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		String okPageUrl = finalTargetUrl;
-		if (okPageUrl.contains("ok.ru/videoembed/")) {
-			String vidId = okPageUrl.substring(okPageUrl.lastIndexOf("/") + 1).replaceAll("[^0-9]", "");
-			if (!vidId.isEmpty()) {
-				okPageUrl = "https://m.ok.ru/video/" + vidId;
-			}
+		String vidId = "";
+		if (finalTargetUrl.contains("ok.ru/videoembed/") || finalTargetUrl.contains("ok.ru/video/")) {
+			vidId = finalTargetUrl.substring(finalTargetUrl.lastIndexOf("/") + 1).replaceAll("[^0-9]", "");
 		}
 
-		HttpFetchResult res = fetchHttp(okPageUrl, "https://ok.ru/", false);
+		String okPageUrl = !vidId.isEmpty() ? "https://m.ok.ru/video/" + vidId : finalTargetUrl;
+		HttpFetchResult res = fetchHttp(okPageUrl, "https://ok.ru/", true);
 		String html = res.body;
 		if (html.isEmpty() && !okPageUrl.equals(finalTargetUrl)) {
-			html = fetchHttp(finalTargetUrl, "https://ok.ru/", false).body;
+			HttpFetchResult altRes = fetchHttp(finalTargetUrl, "https://ok.ru/", true);
+			html = altRes.body;
+			if (!altRes.cookie.isEmpty()) res = altRes;
 		}
+
+		ArrayList<String> tempNames = new ArrayList<>();
+		ArrayList<String> tempUrls = new ArrayList<>();
 
 		String foundOptions = "";
 		int idx = html.indexOf("data-options=");
@@ -123,65 +126,87 @@ public class StreamExtractorHelper {
 			}
 		}
 
-		ArrayList<String> tempNames = new ArrayList<>();
-		ArrayList<String> tempUrls = new ArrayList<>();
-
 		if (!foundOptions.isEmpty()) {
-			String cleanJson = foundOptions
-				.replace("&quot;", "\"")
-				.replace("&amp;", "&")
-				.replace("&#39;", "'")
-				.replace("&lt;", "<")
-				.replace("&gt;", ">");
+			try {
+				String cleanJson = foundOptions
+					.replace("&quot;", "\"")
+					.replace("&amp;", "&")
+					.replace("&#39;", "'")
+					.replace("&lt;", "<")
+					.replace("&gt;", ">");
 
-			JSONObject optJson = new JSONObject(cleanJson);
-			JSONObject metadata = null;
-			if (optJson.has("flashvars")) {
-				JSONObject fv = optJson.getJSONObject("flashvars");
-				if (fv.has("metadata")) {
-					Object mObj = fv.get("metadata");
+				JSONObject optJson = new JSONObject(cleanJson);
+				JSONObject metadata = null;
+				if (optJson.has("flashvars")) {
+					JSONObject fv = optJson.getJSONObject("flashvars");
+					if (fv.has("metadata")) {
+						Object mObj = fv.get("metadata");
+						metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
+					}
+				} else if (optJson.has("metadata")) {
+					Object mObj = optJson.get("metadata");
 					metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
 				}
-			} else if (optJson.has("metadata")) {
-				Object mObj = optJson.get("metadata");
-				metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
-			}
 
-			if (metadata != null && metadata.has("videos")) {
-				JSONArray videos = metadata.getJSONArray("videos");
-				for (int k = 0; k < videos.length(); k++) {
-					JSONObject v = videos.getJSONObject(k);
-					if (v.has("url")) {
-						String rawUrl = v.getString("url").replace("\\/", "/").replace("\\u0026", "&");
-						if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
-						String labelP = normalizeResolutionToP(v.optString("name", ""));
-						addUniqueQuality(tempNames, tempUrls, labelP, rawUrl);
+				if (metadata != null && metadata.has("videos")) {
+					JSONArray videos = metadata.getJSONArray("videos");
+					for (int k = 0; k < videos.length(); k++) {
+						JSONObject v = videos.getJSONObject(k);
+						if (v.has("url")) {
+							String rawUrl = v.getString("url").replace("\\/", "/").replace("\\u0026", "&");
+							if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
+							String labelP = normalizeResolutionToP(v.optString("name", ""));
+							addUniqueQuality(tempNames, tempUrls, labelP, rawUrl);
+						}
 					}
 				}
-			}
+			} catch (Exception ignored) {}
 		}
 
 		if (tempUrls.isEmpty() && !html.isEmpty()) {
-			String unescaped = html.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
-			Matcher mOk = Pattern.compile("(https?://[^\"'\\s<>]*(?:okcdn\\.ru|\\.mp4|\\.m3u8)[^\"'\\s<>]*)").matcher(unescaped);
-			String[] fallbackRes = {"720p", "480p", "360p", "240p"};
-			while (mOk.find()) {
-				String u = mOk.group(1);
-				if (!tempUrls.contains(u)) {
+			String unescaped = html
+				.replace("\\/", "/")
+				.replace("\\u0026", "&")
+				.replace("&quot;", "\"")
+				.replace("&amp;", "&")
+				.replace("&#39;", "'");
+
+			String[] resOrder = {"1080p", "720p", "480p", "360p", "240p"};
+			Matcher mJsonUrl = Pattern.compile("\"(?:url|hlsMasterPlaylistUrl|ondemandUrl|manifestUrl)\"\\s*:\\s*\"(https?://[^\"]+)\"").matcher(unescaped);
+			while (mJsonUrl.find()) {
+				String u = mJsonUrl.group(1).replace("\\/", "/").replace("\\u0026", "&");
+				if (u.startsWith("//")) u = "https:" + u;
+				if (!tempUrls.contains(u) && (u.contains("okcdn.ru") || u.contains(".mp4") || u.contains(".m3u8"))) {
 					String guessed = normalizeResolutionToP(u);
-					if ("720p".equals(guessed) && !tempNames.isEmpty() && tempNames.size() < fallbackRes.length) {
-						guessed = fallbackRes[tempNames.size()];
+					if ("720p".equals(guessed) && tempNames.size() < resOrder.length) {
+						guessed = resOrder[tempNames.size()];
 					}
 					addUniqueQuality(tempNames, tempUrls, guessed, u);
 				}
-				if (tempUrls.size() >= 4) break;
+				if (tempUrls.size() >= 5) break;
+			}
+
+			if (tempUrls.isEmpty()) {
+				Matcher mOk = Pattern.compile("(https?://[^\"'\\s<>\\\\]*(?:okcdn\\.ru|\\.mp4|\\.m3u8)[^\"'\\s<>\\\\]*)").matcher(unescaped);
+				while (mOk.find()) {
+					String u = mOk.group(1);
+					if (!tempUrls.contains(u)) {
+						String guessed = normalizeResolutionToP(u);
+						if ("720p".equals(guessed) && tempNames.size() < resOrder.length) {
+							guessed = resOrder[tempNames.size()];
+						}
+						addUniqueQuality(tempNames, tempUrls, guessed, u);
+					}
+					if (tempUrls.size() >= 4) break;
+				}
 			}
 		}
 
 		if (!tempUrls.isEmpty()) {
-			postSuccess(mainHandler, callback, tempNames, tempUrls, "https://ok.ru/", "");
+			postSuccess(mainHandler, callback, tempNames, tempUrls, "https://ok.ru/", res.cookie);
 		} else {
-			postSniffer(mainHandler, callback, finalTargetUrl, "https://ok.ru/");
+			String snifferTarget = !vidId.isEmpty() ? "https://m.ok.ru/video/" + vidId : finalTargetUrl;
+			postSniffer(mainHandler, callback, snifferTarget, "https://ok.ru/");
 		}
 	}
 
