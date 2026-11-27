@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import androidx.core.app.NotificationCompat;
@@ -169,7 +170,6 @@ public class DongflixDownloadManager {
 		executor.execute(new Runnable() {
 			@Override
 			public void run() {
-				FileOutputStream out = null;
 				try {
 					String lowerUrl = cleanUrl.toLowerCase(Locale.US);
 					if (lowerUrl.contains(".m3u8")) {
@@ -187,7 +187,6 @@ public class DongflixDownloadManager {
 					postSystemNotification(appCtx, taskId.hashCode(), safeTitle + " • " + safeEp, 100, true);
 					broadcastUpdate(appCtx, taskId, 100, "completed", safeSlug, safeTitle, safeEp);
 				} catch (Exception e) {
-					try { if (out != null) out.close(); } catch (Exception ignored) {}
 					try { if (targetFile.exists()) targetFile.delete(); } catch (Exception ignored) {}
 					updateTask(appCtx, taskId, 0L, 0L, 0, "failed");
 					postSystemNotification(appCtx, taskId.hashCode(), safeTitle + " • " + safeEp, 0, false);
