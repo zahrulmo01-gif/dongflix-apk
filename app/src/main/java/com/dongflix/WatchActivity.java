@@ -2,9 +2,11 @@ package com.dongflix;
 
 import android.animation.ValueAnimator;
 import android.app.Dialog;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
@@ -14,6 +16,7 @@ import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PathMeasure;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
@@ -140,6 +143,11 @@ public class WatchActivity extends AppCompatActivity {
 	private SeekBar playerSeekBar;
 	private RecyclerView recyclerEpisode, recyclerRekomendasi;
 
+	private BroadcastReceiver downloadProgressReceiver;
+	private ProgressBar downloadActionProgressRing;
+	private ImageView imageActionDownloadView;
+	private TextView textActionDownloadView;
+
 	private String currentSlug = "";
 	private String detailTitle = "";
 	private String detailSynopsis = "";
@@ -195,6 +203,8 @@ public class WatchActivity extends AppCompatActivity {
 
 	public String dmSessionCookie = "";
 	private boolean isSnifferActive = false;
+	private boolean isPlayingSniffedMedia = false;
+	private String activeSnifferEmbedUrl = "";
 	private boolean isResumingFromMiniPlayer = false;
 
 	private String pendingHistoryEpisode = "";
@@ -207,12 +217,11 @@ public class WatchActivity extends AppCompatActivity {
 
 	private DatabaseReference commentsRef;
 	private ValueEventListener commentsListener;
-		private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
+	private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
 	private final List<HashMap<String, String>> allUsersDirectory = new ArrayList<>();
 	private final ArrayList<HashMap<String, Object>> mainCommentList = new ArrayList<>();
 	private final Map<String, List<HashMap<String, Object>>> repliesByParentMap = new HashMap<>();
 	private final ArrayList<String> stickerList = new ArrayList<>();
-
 
 	private TikTokCommentAdapter activeCommentSheetAdapter;
 	private TextView activeCommentSheetHeader;
@@ -247,6 +256,224 @@ public class WatchActivity extends AppCompatActivity {
 		DongflixPlayerManager.getInstance().initWithApplication(getApplication());
 		initialize(_savedInstanceState);
 		initializeLogic();
+	}
+
+	private boolean isDailymotionUrl(String target) {
+		if (target == null) return false;
+		String lower = target.trim().toLowerCase(Locale.US);
+		return lower.contains("dailymotion.com")
+			|| lower.contains("dmcdn.net")
+			|| lower.contains("dmxleo.com")
+			|| lower.contains("dai.ly");
+	}
+
+	private void showSnifferPlayerInLayout(String embedUrl) {
+		if (embedUrl == null || embedUrl.trim().isEmpty() || layoutPlayer == null) return;
+		activeSnifferEmbedUrl = embedUrl.trim();
+		isSnifferActive = false;
+		if (playerHandler != null && snifferTimeoutRunnable != null) {
+			playerHandler.removeCallbacks(snifferTimeoutRunnable);
+		}
+		if (mediaPlayer != null) {
+			try {
+				if (mediaPlayer.isPlaying()) mediaPlayer.stop();
+				mediaPlayer.reset();
+				mediaPlayer.release();
+			} catch (Exception ignored) {}
+			mediaPlayer = null;
+		}
+		if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+		if (btnPlay != null) {
+			btnPlay.setEnabled(true);
+			btnPlay.setAlpha(1.0f);
+		}
+
+		if (hiddenSnifferWebView == null) {
+			hiddenSnifferWebView = new WebView(WatchActivity.this);
+			layoutPlayer.addView(hiddenSnifferWebView, 0);
+		}
+
+		hiddenSnifferWebView.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT,
+			ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		hiddenSnifferWebView.setAlpha(1f);
+		hiddenSnifferWebView.setVisibility(View.VISIBLE);
+		hiddenSnifferWebView.bringToFront();
+		if (playerControlsOverlay != null) {
+			playerControlsOverlay.bringToFront();
+		}
+
+		WebSettings ws = hiddenSnifferWebView.getSettings();
+		ws.setJavaScriptEnabled(true);
+		ws.setDomStorageEnabled(true);
+		ws.setMediaPlaybackRequiresUserGesture(false);
+		ws.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+
+		Map<String, String> headers = new HashMap<>();
+		headers.put("Referer", "https://geo.dailymotion.com/");
+		hiddenSnifferWebView.loadUrl(activeSnifferEmbedUrl, headers);
+	}
+
+	private String getCurrentEpisodeLabelForDownload() {
+		String epLabel = "EP " + (currentEpisodeIndex + 1);
+		if (episodeList != null && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.size()) {
+			Object epObj = episodeList.get(currentEpisodeIndex).get("episode");
+			if (epObj != null && !epObj.toString().trim().isEmpty()) {
+				epLabel = "EP " + epObj.toString().replace("Ep ", "").replace("Eps ", "").trim();
+			}
+		}
+		return epLabel;
+	}
+
+	private String getCurrentTitleForDownload() {
+		if (!detailTitle.isEmpty()) return detailTitle;
+		if (textJudul != null && !textJudul.getText().toString().trim().isEmpty()) {
+			return textJudul.getText().toString().trim();
+		}
+		return currentSlug;
+	}
+
+	private String getActiveEpisodeTaskId() {
+		return DongflixDownloadManager.computeTaskId(
+			getCurrentTitleForDownload(),
+			getCurrentEpisodeLabelForDownload()
+		);
+	}
+
+	private void initDownloadButtonRing() {
+		if (btnActionDownload == null) return;
+		downloadActionProgressRing = findViewById(R.id.downloadActionProgressRing);
+		imageActionDownloadView = findViewById(R.id.imageActionDownload);
+		textActionDownloadView = findViewById(R.id.textActionDownload);
+
+		if (downloadActionProgressRing != null) {
+			final float d = getResources().getDisplayMetrics().density;
+			downloadActionProgressRing.setMax(100);
+			downloadActionProgressRing.setProgressDrawable(new Drawable() {
+				private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+				private final Paint fgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+				private final RectF oval = new RectF();
+
+				{
+					bgPaint.setColor(Color.parseColor("#263B82F6"));
+					bgPaint.setStyle(Paint.Style.STROKE);
+					bgPaint.setStrokeWidth(2.2f * d);
+
+					fgPaint.setColor(Color.parseColor("#3B82F6"));
+					fgPaint.setStyle(Paint.Style.STROKE);
+					fgPaint.setStrokeWidth(2.4f * d);
+					fgPaint.setStrokeCap(Paint.Cap.ROUND);
+				}
+
+				@Override
+				public void draw(@NonNull Canvas canvas) {
+					Rect b = getBounds();
+					if (b.width() <= 0 || b.height() <= 0) return;
+					float pad = 1.5f * d;
+					float radius = Math.min(b.height() * 0.5f, 24f * d);
+					oval.set(b.left + pad, b.top + pad, b.right - pad, b.bottom - pad);
+					canvas.drawRoundRect(oval, radius, radius, bgPaint);
+
+					int max = Math.max(1, downloadActionProgressRing.getMax());
+					int cur = Math.max(0, Math.min(max, downloadActionProgressRing.getProgress()));
+					if (cur > 0) {
+						Path path = new Path();
+						path.addRoundRect(oval, radius, radius, Path.Direction.CW);
+						PathMeasure pm = new PathMeasure(path, false);
+						float totalLen = pm.getLength();
+						Path subPath = new Path();
+						pm.getSegment(0f, totalLen * (cur / (float) max), subPath, true);
+						canvas.drawPath(subPath, fgPaint);
+					}
+				}
+
+				@Override public void setAlpha(int alpha) { bgPaint.setAlpha(alpha); fgPaint.setAlpha(alpha); }
+				@Override public void setColorFilter(ColorFilter cf) { fgPaint.setColorFilter(cf); }
+				@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+			});
+		}
+
+		if (downloadProgressReceiver == null) {
+			downloadProgressReceiver = new BroadcastReceiver() {
+				@Override
+				public void onReceive(Context context, Intent intent) {
+					if (intent == null || isFinishing() || isDestroyed()) return;
+					if (!DongflixDownloadManager.ACTION_DOWNLOAD_PROGRESS.equals(intent.getAction())) return;
+					String updatedTaskId = intent.getStringExtra("task_id");
+					if (updatedTaskId != null && updatedTaskId.equals(getActiveEpisodeTaskId())) {
+						refreshDownloadButtonForCurrentEpisode();
+					}
+				}
+			};
+		}
+	}
+
+	private void refreshDownloadButtonForCurrentEpisode() {
+		if (btnActionDownload == null) return;
+		if (downloadActionProgressRing == null && findViewById(R.id.downloadActionProgressRing) != null) {
+			initDownloadButtonRing();
+		}
+
+		String activeTaskId = getActiveEpisodeTaskId();
+		HashMap<String, Object> task = DongflixDownloadManager.getInstance().getTaskById(this, activeTaskId);
+		String status = (task != null && task.get("status") != null) ? String.valueOf(task.get("status")) : "";
+		int progress = (task != null && task.get("progress") != null) ? (int) parseLongSafe(task.get("progress"), 0L) : 0;
+
+		if ("downloading".equals(status)) {
+			btnActionDownload.setEnabled(false);
+			btnActionDownload.setAlpha(0.85f);
+			if (downloadActionProgressRing != null) {
+				downloadActionProgressRing.setVisibility(View.VISIBLE);
+				downloadActionProgressRing.setProgress(Math.max(2, Math.min(100, progress)));
+				downloadActionProgressRing.invalidate();
+			}
+			if (imageActionDownloadView != null) {
+				imageActionDownloadView.clearColorFilter();
+			}
+			if (textActionDownloadView != null) {
+				textActionDownloadView.setText(progress + "%");
+				textActionDownloadView.setTextColor(Color.parseColor("#60A5FA"));
+			}
+		} else if ("completed".equals(status)) {
+			btnActionDownload.setEnabled(false);
+			btnActionDownload.setAlpha(1.0f);
+			if (downloadActionProgressRing != null) {
+				downloadActionProgressRing.setVisibility(View.GONE);
+				downloadActionProgressRing.setProgress(100);
+			}
+			if (imageActionDownloadView != null) {
+				int checkId = getResources().getIdentifier("ic_check", "drawable", getPackageName());
+				if (checkId != 0) {
+					imageActionDownloadView.setImageResource(checkId);
+				} else {
+					imageActionDownloadView.setImageResource(android.R.drawable.checkbox_on_background);
+				}
+				imageActionDownloadView.setColorFilter(Color.parseColor("#22C55E"), PorterDuff.Mode.SRC_IN);
+			}
+			if (textActionDownloadView != null) {
+				textActionDownloadView.setText("Downloaded");
+				textActionDownloadView.setTextColor(Color.parseColor("#22C55E"));
+			}
+		} else {
+			btnActionDownload.setEnabled(true);
+			btnActionDownload.setAlpha(1.0f);
+			if (downloadActionProgressRing != null) {
+				downloadActionProgressRing.setVisibility(View.GONE);
+				downloadActionProgressRing.setProgress(0);
+			}
+			if (imageActionDownloadView != null) {
+				int dlId = getResources().getIdentifier("ic_download", "drawable", getPackageName());
+				if (dlId != 0) {
+					imageActionDownloadView.setImageResource(dlId);
+				}
+				imageActionDownloadView.clearColorFilter();
+			}
+			if (textActionDownloadView != null) {
+				textActionDownloadView.setText("Download");
+				textActionDownloadView.setTextColor(Color.WHITE);
+			}
+		}
 	}
 
 	private Typeface getOutfitTypeface() {
@@ -751,31 +978,38 @@ public class WatchActivity extends AppCompatActivity {
 	}
 
 	private void startBackgroundDownloadForCurrentEpisode() {
+		String activeTaskId = getActiveEpisodeTaskId();
+		HashMap<String, Object> existing = DongflixDownloadManager.getInstance().getTaskById(this, activeTaskId);
+		if (existing != null) {
+			String st = String.valueOf(existing.get("status"));
+			if ("downloading".equals(st)) {
+				DongflixToast.show(this, "Episode ini sedang diunduh");
+				refreshDownloadButtonForCurrentEpisode();
+				return;
+			}
+			if ("completed".equals(st)) {
+				DongflixToast.show(this, "Episode ini sudah diunduh");
+				refreshDownloadButtonForCurrentEpisode();
+				return;
+			}
+		}
+
 		if (currentPlayingUrl == null || currentPlayingUrl.trim().isEmpty()) {
 			DongflixToast.show(this, "Stream video belum siap untuk diunduh");
 			return;
-		}
-		String titleToSave = !detailTitle.isEmpty()
-			? detailTitle
-			: (textJudul != null && !textJudul.getText().toString().trim().isEmpty()
-				? textJudul.getText().toString().trim() : currentSlug);
-
-		String epLabel = "EP " + (currentEpisodeIndex + 1);
-		if (episodeList != null && currentEpisodeIndex >= 0 && currentEpisodeIndex < episodeList.size()) {
-			Object epObj = episodeList.get(currentEpisodeIndex).get("episode");
-			if (epObj != null && !epObj.toString().trim().isEmpty()) {
-				String rawEp = epObj.toString().replace("Ep ", "").replace("Eps ", "").trim();
-				epLabel = "EP " + rawEp;
-			}
 		}
 
 		DongflixToast.show(this, "Unduhan berjalan di latar belakang");
 		DongflixDownloadManager.getInstance().startDownload(
 			this,
-			titleToSave,
-			epLabel,
-			currentPlayingUrl.trim()
+			getCurrentTitleForDownload(),
+			getCurrentEpisodeLabelForDownload(),
+			currentPlayingUrl.trim(),
+			currentSlug,
+			currentStreamReferer,
+			dmSessionCookie
 		);
+		refreshDownloadButtonForCurrentEpisode();
 	}
 
 	private void setupCommentSection() {
@@ -2256,6 +2490,8 @@ public class WatchActivity extends AppCompatActivity {
 		recyclerEpisode = findViewById(R.id.recyclerEpisode);
 		recyclerRekomendasi = findViewById(R.id.recyclerRekomendasi);
 
+		initDownloadButtonRing();
+
 		_req_watch_request_listener = new RequestNetwork.RequestListener() {
 			@Override
 			public void onResponse(String _param1, String _param2, HashMap<String, Object> _param3) {
@@ -2306,6 +2542,7 @@ public class WatchActivity extends AppCompatActivity {
 					}
 				}
 				updateEpisodeNavButtons();
+				refreshDownloadButtonForCurrentEpisode();
 			} else {
 				tryStartEpisodeFromHistoryIfReady();
 			}
@@ -2375,6 +2612,7 @@ public class WatchActivity extends AppCompatActivity {
 						DongflixPlayerManager mgr = DongflixPlayerManager.getInstance();
 						mgr.activeTitle = detailTitle;
 						mgr.activeCoverUrl = detailCover;
+						refreshDownloadButtonForCurrentEpisode();
 						break;
 					}
 				}
@@ -2653,6 +2891,7 @@ public class WatchActivity extends AppCompatActivity {
 		setupCommentSection();
 		updateBottomDividerState();
 		loadUsersAndStickersFromFirebase();
+		refreshDownloadButtonForCurrentEpisode();
 
 		if (recyclerEpisode != null) {
 			recyclerEpisode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
@@ -2708,6 +2947,7 @@ public class WatchActivity extends AppCompatActivity {
 			} else {
 				req_watch.startRequestNetwork("GET", CATALOG_URL + "?slug=" + currentSlug, "slug", _req_watch_request_listener);
 			}
+			refreshDownloadButtonForCurrentEpisode();
 		} else {
 			mgr.stopAndCloseEverything(this);
 			startLoadingShimmer();
@@ -2967,6 +3207,7 @@ public class WatchActivity extends AppCompatActivity {
 			recyclerEpisode.scrollToPosition(currentEpisodeIndex);
 		}
 		updateEpisodeNavButtons();
+		refreshDownloadButtonForCurrentEpisode();
 	}
 
 	private boolean isLandscapeOrFullscreen() {
@@ -3759,6 +4000,12 @@ public class WatchActivity extends AppCompatActivity {
 	@Override
 	public void onDestroy() {
 		detachCommentsListener();
+		if (downloadProgressReceiver != null) {
+			try {
+				unregisterReceiver(downloadProgressReceiver);
+			} catch (Exception ignored) {}
+			downloadProgressReceiver = null;
+		}
 		DongflixToast.dismissCurrent();
 		if (shimmerAnimator != null) {
 			shimmerAnimator.cancel();
@@ -3821,6 +4068,17 @@ public class WatchActivity extends AppCompatActivity {
 	@Override
 	public void onResume() {
 		super.onResume();
+		if (downloadProgressReceiver != null) {
+			try {
+				ContextCompat.registerReceiver(
+					this,
+					downloadProgressReceiver,
+					new IntentFilter(DongflixDownloadManager.ACTION_DOWNLOAD_PROGRESS),
+					ContextCompat.RECEIVER_NOT_EXPORTED
+				);
+			} catch (Exception ignored) {}
+		}
+		refreshDownloadButtonForCurrentEpisode();
 		if (isFullscreen) {
 			applyFullscreenSystemUi(true);
 			adjustVideoAspectRatio();
@@ -4024,6 +4282,7 @@ public class WatchActivity extends AppCompatActivity {
 		currentEpisodeIndex = targetIndex;
 		savedSeekPosition = Math.max(0, initialSeekMs);
 		updateEpisodeNavButtons();
+		refreshDownloadButtonForCurrentEpisode();
 
 		runOnUiThread(new Runnable() {
 			@Override
@@ -4124,12 +4383,15 @@ public class WatchActivity extends AppCompatActivity {
 
 	private void stopHiddenSniffer() {
 		isSnifferActive = false;
+		activeSnifferEmbedUrl = "";
 		if (playerHandler != null && snifferTimeoutRunnable != null) {
 			playerHandler.removeCallbacks(snifferTimeoutRunnable);
 		}
 		if (hiddenSnifferWebView != null) {
 			try {
 				hiddenSnifferWebView.stopLoading();
+				hiddenSnifferWebView.setVisibility(View.GONE);
+				hiddenSnifferWebView.setAlpha(0f);
 				hiddenSnifferWebView.loadUrl("about:blank");
 			} catch (Exception ignored) {}
 		}
@@ -4140,8 +4402,14 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void run() {
 				try {
+					if (isDailymotionUrl(embedUrl)) {
+						showSnifferPlayerInLayout(embedUrl);
+						return;
+					}
+
 					stopHiddenSniffer();
 					isSnifferActive = true;
+					activeSnifferEmbedUrl = embedUrl != null ? embedUrl.trim() : "";
 
 					if (hiddenSnifferWebView == null && layoutPlayer != null) {
 						hiddenSnifferWebView = new WebView(WatchActivity.this);
@@ -4153,6 +4421,10 @@ public class WatchActivity extends AppCompatActivity {
 					}
 
 					if (hiddenSnifferWebView != null) {
+						hiddenSnifferWebView.setLayoutParams(new FrameLayout.LayoutParams(1, 1));
+						hiddenSnifferWebView.setAlpha(0f);
+						hiddenSnifferWebView.setVisibility(View.INVISIBLE);
+
 						WebSettings ws = hiddenSnifferWebView.getSettings();
 						ws.setJavaScriptEnabled(true);
 						ws.setDomStorageEnabled(true);
@@ -4172,7 +4444,13 @@ public class WatchActivity extends AppCompatActivity {
 											@Override
 											public void run() {
 												if (isSnifferActive) {
-													stopHiddenSniffer();
+													String fallbackEmbed = activeSnifferEmbedUrl;
+													isSnifferActive = false;
+													if (playerHandler != null && snifferTimeoutRunnable != null) {
+														playerHandler.removeCallbacks(snifferTimeoutRunnable);
+													}
+													isPlayingSniffedMedia = true;
+													activeSnifferEmbedUrl = fallbackEmbed;
 													qualityNames.clear();
 													qualityUrls.clear();
 													qualityNames.add(StreamExtractorHelper.normalizeResolutionToP(reqUrl));
@@ -4195,13 +4473,18 @@ public class WatchActivity extends AppCompatActivity {
 								@Override
 								public void run() {
 									if (isSnifferActive) {
-										stopHiddenSniffer();
-										if (playerLoading != null) playerLoading.setVisibility(View.GONE);
-										if (btnPlay != null) {
-											btnPlay.setEnabled(true);
-											btnPlay.setAlpha(1.0f);
+										String targetEmbed = activeSnifferEmbedUrl;
+										if (!targetEmbed.isEmpty()) {
+											showSnifferPlayerInLayout(targetEmbed);
+										} else {
+											stopHiddenSniffer();
+											if (playerLoading != null) playerLoading.setVisibility(View.GONE);
+											if (btnPlay != null) {
+												btnPlay.setEnabled(true);
+												btnPlay.setAlpha(1.0f);
+											}
+											DongflixToast.show(WatchActivity.this, "Stream tidak ditemukan, coba server lain");
 										}
-										DongflixToast.show(WatchActivity.this, "Stream tidak ditemukan, coba server lain");
 									}
 								}
 							};
@@ -4222,6 +4505,10 @@ public class WatchActivity extends AppCompatActivity {
 
 	public void playVideoUrl(final String rawUrl, final int targetSeek) {
 		if (rawUrl == null || rawUrl.trim().isEmpty()) return;
+		if (isDailymotionUrl(rawUrl)) {
+			showSnifferPlayerInLayout(rawUrl);
+			return;
+		}
 
 		stopHiddenSniffer();
 		if (playerTextureView != null) {
@@ -4360,6 +4647,7 @@ public class WatchActivity extends AppCompatActivity {
 					mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
 						@Override
 						public void onPrepared(MediaPlayer mp) {
+							isPlayingSniffedMedia = false;
 							if (playerHandler != null && autoDowngradeRunnable != null) {
 								playerHandler.removeCallbacks(autoDowngradeRunnable);
 							}
@@ -4417,6 +4705,11 @@ public class WatchActivity extends AppCompatActivity {
 							if (playerHandler != null && autoDowngradeRunnable != null) {
 								playerHandler.removeCallbacks(autoDowngradeRunnable);
 							}
+							if (isPlayingSniffedMedia && !activeSnifferEmbedUrl.isEmpty()) {
+								isPlayingSniffedMedia = false;
+								showSnifferPlayerInLayout(activeSnifferEmbedUrl);
+								return true;
+							}
 							if (cleanUrl.contains("ipfs.io/ipfs/")) {
 								String altIpfs = cleanUrl.replace("https://ipfs.io/ipfs/", "https://dweb.link/ipfs/");
 								playVideoUrl(altIpfs, savedSeekPosition);
@@ -4436,6 +4729,11 @@ public class WatchActivity extends AppCompatActivity {
 					mediaPlayer.prepareAsync();
 
 				} catch (Exception e) {
+					if (isPlayingSniffedMedia && !activeSnifferEmbedUrl.isEmpty()) {
+						isPlayingSniffedMedia = false;
+						showSnifferPlayerInLayout(activeSnifferEmbedUrl);
+						return;
+					}
 					if (playerLoading != null) playerLoading.setVisibility(View.GONE);
 					if (btnPlay != null) {
 						btnPlay.setEnabled(true);
