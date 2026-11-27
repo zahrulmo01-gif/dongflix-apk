@@ -887,7 +887,6 @@ public class WatchActivity extends AppCompatActivity {
 				float t = b.top;
 
 				if (type == 0) {
-					// Reply arrow
 					path.reset();
 					path.moveTo(l + w * 0.44f, t + h * 0.28f);
 					path.lineTo(l + w * 0.24f, t + h * 0.46f);
@@ -900,7 +899,6 @@ public class WatchActivity extends AppCompatActivity {
 					path.quadTo(l + w * 0.76f, t + h * 0.46f, l + w * 0.76f, t + h * 0.70f);
 					canvas.drawPath(path, strokePaint);
 				} else if (type == 1) {
-					// Edit pencil
 					path.reset();
 					path.moveTo(l + w * 0.28f, t + h * 0.72f);
 					path.lineTo(l + w * 0.32f, t + h * 0.56f);
@@ -910,14 +908,12 @@ public class WatchActivity extends AppCompatActivity {
 					path.close();
 					canvas.drawPath(path, strokePaint);
 				} else if (type == 2) {
-					// Copy
 					float r = w * 0.08f;
 					RectF backRect = new RectF(l + w * 0.26f, t + h * 0.24f, l + w * 0.62f, t + h * 0.62f);
 					canvas.drawRoundRect(backRect, r, r, strokePaint);
 					RectF frontRect = new RectF(l + w * 0.38f, t + h * 0.36f, l + w * 0.74f, t + h * 0.74f);
 					canvas.drawRoundRect(frontRect, r, r, strokePaint);
 				} else if (type == 3) {
-					// Warning triangle
 					path.reset();
 					path.moveTo(l + w * 0.50f, t + h * 0.22f);
 					path.lineTo(l + w * 0.78f, t + h * 0.74f);
@@ -927,7 +923,6 @@ public class WatchActivity extends AppCompatActivity {
 					canvas.drawLine(l + w * 0.50f, t + h * 0.42f, l + w * 0.50f, t + h * 0.56f, strokePaint);
 					canvas.drawCircle(l + w * 0.50f, t + h * 0.65f, Math.max(1.3f, strokePx * 0.65f), fillPaint);
 				} else {
-					// Trash delete
 					canvas.drawLine(l + w * 0.26f, t + h * 0.32f, l + w * 0.74f, t + h * 0.32f, strokePaint);
 					canvas.drawLine(l + w * 0.42f, t + h * 0.24f, l + w * 0.58f, t + h * 0.24f, strokePaint);
 					RectF body = new RectF(l + w * 0.32f, t + h * 0.32f, l + w * 0.68f, t + h * 0.75f);
@@ -1272,7 +1267,6 @@ public class WatchActivity extends AppCompatActivity {
 		mainCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#334155"));
 		mainCard.setBackground(mainCardBg);
 
-		// 1. Balas
 		LinearLayout rowReply = buildChatStyleActionRow(
 			"Balas",
 			Color.WHITE,
@@ -1293,7 +1287,6 @@ public class WatchActivity extends AppCompatActivity {
 		mainCard.addView(rowReply);
 
 		if (isOwnComment) {
-			// Divider
 			View div1 = new View(this);
 			LinearLayout.LayoutParams div1Lp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
@@ -1303,7 +1296,6 @@ public class WatchActivity extends AppCompatActivity {
 			div1.setBackgroundColor(Color.parseColor("#334155"));
 			mainCard.addView(div1);
 
-			// 2. Edit komentar (hanya untuk komentar sendiri)
 			LinearLayout rowEdit = buildChatStyleActionRow(
 				"Edit komentar",
 				Color.WHITE,
@@ -1322,7 +1314,6 @@ public class WatchActivity extends AppCompatActivity {
 			mainCard.addView(rowEdit);
 		}
 
-		// Divider
 		View div2 = new View(this);
 		LinearLayout.LayoutParams div2Lp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
@@ -1332,7 +1323,6 @@ public class WatchActivity extends AppCompatActivity {
 		div2.setBackgroundColor(Color.parseColor("#334155"));
 		mainCard.addView(div2);
 
-		// Salin komentar
 		LinearLayout rowCopy = buildChatStyleActionRow(
 			"Salin komentar",
 			Color.WHITE,
@@ -1355,7 +1345,6 @@ public class WatchActivity extends AppCompatActivity {
 		mainCard.addView(rowCopy);
 
 		if (!isOwnComment) {
-			// Divider
 			View div3 = new View(this);
 			LinearLayout.LayoutParams div3Lp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
@@ -1365,7 +1354,6 @@ public class WatchActivity extends AppCompatActivity {
 			div3.setBackgroundColor(Color.parseColor("#334155"));
 			mainCard.addView(div3);
 
-			// Laporkan komentar (hanya untuk komentar orang lain)
 			LinearLayout rowReport = buildChatStyleActionRow(
 				"Laporkan komentar",
 				Color.WHITE,
@@ -1389,7 +1377,6 @@ public class WatchActivity extends AppCompatActivity {
 
 		root.addView(mainCard);
 
-		// Kartu merah terpisah untuk Hapus: muncul untuk komentar sendiri ATAU jika admin pada komentar orang lain
 		if (isOwnComment || isAdminUser) {
 			LinearLayout deleteCard = buildChatStyleActionRow(
 				"Hapus",
