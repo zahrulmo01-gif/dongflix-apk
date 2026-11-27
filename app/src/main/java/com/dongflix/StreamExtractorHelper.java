@@ -3,13 +3,13 @@ package com.dongflix;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.webkit.WebResourceResponse;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -226,12 +226,45 @@ public class StreamExtractorHelper {
 				}
 			}
 
-			if (dailyId.isEmpty()) {
-				postSniffer(mainHandler, callback, finalTargetUrl, "https://geo.dailymotion.com/");
-				return;
+			String geoUrl = !dailyId.isEmpty()
+				? "https://geo.dailymotion.com/player/" + playerId + ".html?video=" + Uri.encode(dailyId)
+				: finalTargetUrl;
+
+			if (!dailyId.isEmpty()) {
+				String metaUrl = "https://www.dailymotion.com/player/metadata/video/" + Uri.encode(dailyId);
+				HttpFetchResult metaRes = fetchHttp(metaUrl, "https://geo.dailymotion.com/", true);
+				if (metaRes.body != null && !metaRes.body.trim().isEmpty()) {
+					ArrayList<String> names = new ArrayList<>();
+					ArrayList<String> urls = new ArrayList<>();
+
+					JSONObject root = new JSONObject(metaRes.body);
+					JSONObject qualitiesObj = root.optJSONObject("qualities");
+					if (qualitiesObj != null) {
+						Iterator<String> keys = qualitiesObj.keys();
+						while (keys.hasNext()) {
+							String qKey = keys.next();
+							JSONArray arr = qualitiesObj.optJSONArray(qKey);
+							if (arr == null) continue;
+							for (int i = 0; i < arr.length(); i++) {
+								JSONObject item = arr.optJSONObject(i);
+								if (item == null) continue;
+								String m3u8Url = item.optString("url", "").replace("\\/", "/");
+								if (!m3u8Url.isEmpty()) {
+									if (m3u8Url.startsWith("//")) m3u8Url = "https:" + m3u8Url;
+									String label = "auto".equalsIgnoreCase(qKey) ? "720p" : normalizeResolutionToP(qKey);
+									addUniqueQuality(names, urls, label, m3u8Url);
+								}
+							}
+						}
+					}
+
+					if (!urls.isEmpty()) {
+						postSuccess(mainHandler, callback, names, urls, "https://geo.dailymotion.com/", metaRes.cookie);
+						return;
+					}
+				}
 			}
 
-			String geoUrl = "https://geo.dailymotion.com/player/" + playerId + ".html?video=" + Uri.encode(dailyId);
 			postSniffer(mainHandler, callback, geoUrl, "https://geo.dailymotion.com/");
 		} catch (Exception e) {
 			postSniffer(mainHandler, callback, finalTargetUrl, "https://geo.dailymotion.com/");
