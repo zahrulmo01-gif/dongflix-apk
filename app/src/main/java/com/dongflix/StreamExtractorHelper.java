@@ -1,767 +1,619 @@
 package com.dongflix;
 
+import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.webkit.CookieManager;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ProgressBar;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentManager;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
-public class StreamExtractorHelper {
+public class WatchActivity extends AppCompatActivity implements SurfaceHolder.Callback {
 
-	public interface ExtractionCallback {
-		void onSuccess(ArrayList<String> qualityLabels, ArrayList<String> streamUrls, String referer, String dmCookie);
-		void onNeedSniffer(String snifferUrl, String referer);
-	}
+	public static final String EXTRA_SERVER = "server";
+	public static final String EXTRA_VIDEO_URL = "video_url";
+	public static final String EXTRA_TITLE = "title";
 
-	public static String normalizeResolutionToP(String raw) {
-		if (raw == null) return "720p";
-		String s = raw.trim().toLowerCase(Locale.US);
-		if (s.isEmpty()) return "720p";
+	private FrameLayout playerContainer;
+	private SurfaceView surfaceView;
+	private SurfaceHolder surfaceHolder;
+	private WebView snifferWebView;
+	private ProgressBar loadingProgressBar;
+	private TextView tvStatus;
+	private TextView tvQualityBadge;
+	private TextView tvCurrentTime;
+	private TextView tvTotalTime;
+	private SeekBar seekBar;
+	private ImageButton btnPlayPause;
+	private ImageButton btnFullscreen;
+	private ImageButton btnQuality;
 
-		if (s.equals("mobile") || s.equals("lowest")) return "144p";
-		if (s.equals("low")) return "360p";
-		if (s.equals("medium") || s.equals("sd") || s.equals("standard")) return "480p";
-		if (s.equals("high") || s.equals("hd")) return "720p";
-		if (s.equals("full") || s.equals("fullhd") || s.equals("full hd") || s.equals("fhd")) return "1080p";
-		if (s.equals("2k") || s.equals("qhd")) return "1440p";
-		if (s.equals("4k") || s.equals("uhd")) return "2160p";
+	private MediaPlayer mediaPlayer;
+	private boolean isSurfaceReady = false;
+	private boolean isPrepared = false;
+	private boolean isFullscreen = false;
+	private boolean isSniffCompleted = false;
 
-		Matcher m = Pattern.compile("(2160|1440|1080|720|540|480|380|360|240|144)").matcher(s);
-		if (m.find()) {
-			String num = m.group(1);
-			if ("380".equals(num)) num = "360";
-			return num + "p";
-		}
+	private String currentServer = "";
+	private String currentSourceUrl = "";
+	private String activeReferer = "";
+	private String activeCookie = "";
 
-		String digitsOnly = s.replaceAll("[^0-9]", "");
-		if (!digitsOnly.isEmpty()) {
-			try {
-				int val = Integer.parseInt(digitsOnly);
-				if (val >= 144 && val <= 4320) {
-					return val + "p";
-				}
-			} catch (Exception ignored) {}
-		}
+	private ArrayList<String> availableQualities = new ArrayList<>();
+	private ArrayList<String> availableStreamUrls = new ArrayList<>();
+	private int selectedQualityIndex = 0;
 
-		return "720p";
-	}
+	private final Handler uiHandler = new Handler(Looper.getMainLooper());
+	private final Handler sniffTimeoutHandler = new Handler(Looper.getMainLooper());
 
-	public static void extract(final String server, final String targetUrl, final ExtractionCallback callback) {
-		if (targetUrl == null || targetUrl.trim().isEmpty() || callback == null) return;
-
-		String cleanUrl = targetUrl.trim();
-		if (cleanUrl.startsWith("//")) {
-			cleanUrl = "https:" + cleanUrl;
-		} else if (!cleanUrl.startsWith("http")) {
-			cleanUrl = "https://" + cleanUrl;
-		}
-
-		final String finalTargetUrl = cleanUrl;
-		final String serverKey = (server != null) ? server.trim().toLowerCase(Locale.US) : "";
-		final String lowerUrl = finalTargetUrl.toLowerCase(Locale.US);
-		final Handler mainHandler = new Handler(Looper.getMainLooper());
-
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
+	private final Runnable progressRunnable = new Runnable() {
+		@Override
+		public void run() {
+			if (mediaPlayer != null && isPrepared) {
 				try {
-					if (serverKey.contains("ok") || serverKey.contains("odnoklassniki") || lowerUrl.contains("ok.ru")) {
-						extractOkRu(finalTargetUrl, mainHandler, callback);
-					} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly") || lowerUrl.contains("dongflix-dailymotion")) {
-						extractDailymotion(finalTargetUrl, mainHandler, callback);
-					} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
-						extractDtube(finalTargetUrl, mainHandler, callback);
-					} else if (serverKey.contains("rumble") || lowerUrl.contains("rumble.com")) {
-						extractRumble(finalTargetUrl, mainHandler, callback);
-					} else if (serverKey.contains("odysee") || lowerUrl.contains("odysee.com") || lowerUrl.contains("odycdn.com")) {
-						extractOdysee(finalTargetUrl, mainHandler, callback);
-					} else {
-						extractGeneric(finalTargetUrl, lowerUrl, mainHandler, callback);
-					}
-				} catch (Exception e) {
-					postSniffer(mainHandler, callback, finalTargetUrl, finalTargetUrl);
-				}
-			}
-		}).start();
-	}
-
-	private static void extractOkRu(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		String okPageUrl = finalTargetUrl;
-		if (okPageUrl.contains("ok.ru/videoembed/")) {
-			String vidId = okPageUrl.substring(okPageUrl.lastIndexOf("/") + 1).replaceAll("[^0-9]", "");
-			if (!vidId.isEmpty()) {
-				okPageUrl = "https://m.ok.ru/video/" + vidId;
-			}
-		}
-
-		HttpFetchResult res = fetchHttp(okPageUrl, "https://ok.ru/", false);
-		String html = res.body;
-		if (html.isEmpty() && !okPageUrl.equals(finalTargetUrl)) {
-			html = fetchHttp(finalTargetUrl, "https://ok.ru/", false).body;
-		}
-
-		String foundOptions = "";
-		int idx = html.indexOf("data-options=");
-		if (idx != -1) {
-			int qStart = idx + 13;
-			char quote = html.charAt(qStart);
-			int qEnd = html.indexOf(quote, qStart + 1);
-			if (qEnd != -1) {
-				foundOptions = html.substring(qStart + 1, qEnd);
-			}
-		}
-
-		ArrayList<String> tempNames = new ArrayList<>();
-		ArrayList<String> tempUrls = new ArrayList<>();
-
-		if (!foundOptions.isEmpty()) {
-			String cleanJson = foundOptions
-				.replace("&quot;", "\"")
-				.replace("&amp;", "&")
-				.replace("&#39;", "'")
-				.replace("&lt;", "<")
-				.replace("&gt;", ">");
-
-			JSONObject optJson = new JSONObject(cleanJson);
-			JSONObject metadata = null;
-			if (optJson.has("flashvars")) {
-				JSONObject fv = optJson.getJSONObject("flashvars");
-				if (fv.has("metadata")) {
-					Object mObj = fv.get("metadata");
-					metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
-				}
-			} else if (optJson.has("metadata")) {
-				Object mObj = optJson.get("metadata");
-				metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
-			}
-
-			if (metadata != null && metadata.has("videos")) {
-				JSONArray videos = metadata.getJSONArray("videos");
-				for (int k = 0; k < videos.length(); k++) {
-					JSONObject v = videos.getJSONObject(k);
-					if (v.has("url")) {
-						String rawUrl = v.getString("url").replace("\\/", "/").replace("\\u0026", "&");
-						if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
-						String labelP = normalizeResolutionToP(v.optString("name", ""));
-						addUniqueQuality(tempNames, tempUrls, labelP, rawUrl);
-					}
-				}
-			}
-		}
-
-		if (tempUrls.isEmpty() && !html.isEmpty()) {
-			String unescaped = html.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
-			Matcher mOk = Pattern.compile("(https?://[^\"'\\s<>]*(?:okcdn\\.ru|\\.mp4|\\.m3u8)[^\"'\\s<>]*)").matcher(unescaped);
-			String[] fallbackRes = {"720p", "480p", "360p", "240p"};
-			while (mOk.find()) {
-				String u = mOk.group(1);
-				if (!tempUrls.contains(u)) {
-					String guessed = normalizeResolutionToP(u);
-					if ("720p".equals(guessed) && !tempNames.isEmpty() && tempNames.size() < fallbackRes.length) {
-						guessed = fallbackRes[tempNames.size()];
-					}
-					addUniqueQuality(tempNames, tempUrls, guessed, u);
-				}
-				if (tempUrls.size() >= 4) break;
-			}
-		}
-
-		if (!tempUrls.isEmpty()) {
-			postSuccess(mainHandler, callback, tempNames, tempUrls, "https://ok.ru/", "");
-		} else {
-			postSniffer(mainHandler, callback, finalTargetUrl, "https://ok.ru/");
-		}
-	}
-
-	private static void extractDailymotion(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) {
-		try {
-			String dailyId = "";
-			String playerId = "xid0t";
-			Uri parsedUri = Uri.parse(finalTargetUrl);
-
-			if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
-				dailyId = parsedUri.getQueryParameter("id");
-			} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
-				dailyId = parsedUri.getQueryParameter("video");
-			} else if (finalTargetUrl.contains("/video/")) {
-				String[] parts = finalTargetUrl.split("/video/");
-				if (parts.length > 1) dailyId = parts[1].split("[?&#_]")[0];
-			} else if (finalTargetUrl.contains("dai.ly/")) {
-				String[] parts = finalTargetUrl.split("dai.ly/");
-				if (parts.length > 1) dailyId = parts[1].split("[?&#]")[0];
-			} else {
-				String cPath = finalTargetUrl.split("\\?")[0];
-				dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
-			}
-
-			String path = parsedUri.getPath();
-			if (path != null && path.contains("/player/")) {
-				String afterPlayer = path.substring(path.indexOf("/player/") + 8);
-				if (afterPlayer.endsWith(".html")) {
-					afterPlayer = afterPlayer.substring(0, afterPlayer.length() - 5);
-				}
-				if (!afterPlayer.trim().isEmpty()) {
-					playerId = afterPlayer.trim();
-				}
-			}
-
-			if (dailyId == null || dailyId.trim().isEmpty()) {
-				postSniffer(mainHandler, callback, finalTargetUrl, "https://geo.dailymotion.com/");
-				return;
-			}
-
-			String cleanDmId = dailyId.trim();
-			String geoEmbedUrl = "https://geo.dailymotion.com/player/" + playerId + ".html?video=" + cleanDmId;
-			String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + cleanDmId
-				+ "?embedder=" + Uri.encode(geoEmbedUrl) + "&app=com.dailymotion.neon";
-
-			HttpFetchResult res = fetchHttp(dmApiUrl, geoEmbedUrl, true);
-			ArrayList<String> dmNames = new ArrayList<>();
-			ArrayList<String> dmUrls = new ArrayList<>();
-
-			if (res.body != null && !res.body.trim().isEmpty()) {
-				JSONObject metaObj = new JSONObject(res.body);
-				if (metaObj.has("qualities")) {
-					JSONObject qualities = metaObj.getJSONObject("qualities");
-					String[] checkKeys = new String[]{"1080", "720", "480", "380", "240", "144"};
-
-					for (String qKey : checkKeys) {
-						if (qualities.has(qKey)) {
-							JSONArray qArr = qualities.optJSONArray(qKey);
-							if (qArr != null) {
-								String chosenUrl = "";
-								for (int idx = 0; idx < qArr.length(); idx++) {
-									JSONObject itemQ = qArr.getJSONObject(idx);
-									String mime = itemQ.optString("type", "");
-									String u = itemQ.optString("url", "");
-									if (!u.isEmpty() && mime.contains("mp4")) {
-										chosenUrl = u;
-										break;
-									}
-								}
-								if (chosenUrl.isEmpty() && qArr.length() > 0) {
-									chosenUrl = qArr.getJSONObject(0).optString("url", "");
-								}
-								if (!chosenUrl.isEmpty()) {
-									addUniqueQuality(dmNames, dmUrls, normalizeResolutionToP(qKey), chosenUrl);
-								}
-							}
+					if (mediaPlayer.isPlaying()) {
+						int pos = mediaPlayer.getCurrentPosition();
+						int dur = mediaPlayer.getDuration();
+						if (dur > 0) {
+							seekBar.setMax(dur);
+							seekBar.setProgress(pos);
+							tvCurrentTime.setText(formatDurationMs(pos));
+							tvTotalTime.setText(formatDurationMs(dur));
 						}
 					}
-
-					if (dmUrls.isEmpty() && qualities.has("auto")) {
-						JSONArray autoArr = qualities.optJSONArray("auto");
-						if (autoArr != null && autoArr.length() > 0) {
-							String autoUrl = autoArr.getJSONObject(0).optString("url", "");
-							if (!autoUrl.isEmpty()) {
-								addUniqueQuality(dmNames, dmUrls, "720p", autoUrl);
-							}
-						}
-					}
-				}
+				} catch (Exception ignored) {}
 			}
-
-			if (!dmUrls.isEmpty()) {
-				postSuccess(mainHandler, callback, dmNames, dmUrls, geoEmbedUrl, res.cookie);
-			} else {
-				postSniffer(mainHandler, callback, geoEmbedUrl, "https://geo.dailymotion.com/");
-			}
-		} catch (Exception e) {
-			Uri parsed = Uri.parse(finalTargetUrl);
-			String fallbackId = parsed.getQueryParameter("id");
-			if (fallbackId == null || fallbackId.trim().isEmpty()) {
-				fallbackId = parsed.getQueryParameter("video");
-			}
-			String snifferTarget = (fallbackId != null && !fallbackId.trim().isEmpty())
-				? "https://geo.dailymotion.com/player/xid0t.html?video=" + fallbackId.trim()
-				: finalTargetUrl;
-			postSniffer(mainHandler, callback, snifferTarget, "https://geo.dailymotion.com/");
+			uiHandler.postDelayed(this, 500);
 		}
-	}
+	};
 
-	private static void extractDtube(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) {
-		try {
-			ArrayList<String> names = new ArrayList<>();
-			ArrayList<String> urls = new ArrayList<>();
-
-			Uri uri = Uri.parse(finalTargetUrl);
-			String vParam = uri.getQueryParameter("v");
-			String videoId = (vParam != null && !vParam.trim().isEmpty()) ? vParam.trim() : "";
-
-			Pattern pDirectQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
-			Matcher mDirectQm = pDirectQm.matcher(finalTargetUrl);
-			if (mDirectQm.find()) {
-				addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mDirectQm.group(1));
-			}
-
-			if (urls.isEmpty() && finalTargetUrl.contains("/v/")) {
-				String afterV = finalTargetUrl.substring(finalTargetUrl.indexOf("/v/") + 3).split("[?#]")[0];
-				String[] parts = afterV.split("/");
-				if (parts.length >= 2) {
-					String author = parts[0].trim();
-					String permlink = parts[1].trim();
-					String rpcBody = "{\"jsonrpc\":\"2.0\",\"method\":\"condenser_api.get_content\",\"params\":[\"" + author + "\",\"" + permlink + "\"],\"id\":1}";
-					String rpcRes = postJsonHttp("https://api.hive.blog", rpcBody);
-					JSONObject rpcJson = new JSONObject(rpcRes);
-					if (rpcJson.has("result")) {
-						JSONObject resObj = rpcJson.getJSONObject("result");
-						String metaStr = resObj.optString("json_metadata", "");
-						if (!metaStr.isEmpty()) {
-							JSONObject metaJson = new JSONObject(metaStr);
-							if (metaJson.has("video")) {
-								JSONObject videoObj = metaJson.getJSONObject("video");
-								if (videoObj.has("files")) {
-									JSONObject filesObj = videoObj.getJSONObject("files");
-									if (filesObj.has("ipfs")) {
-										JSONObject ipfsObj = filesObj.getJSONObject("ipfs");
-										if (ipfsObj.has("vid")) {
-											JSONObject vidObj = ipfsObj.getJSONObject("vid");
-											String[] keys = {"1080", "720", "480", "360", "240", "src"};
-											for (String k : keys) {
-												String hash = vidObj.optString(k, "");
-												if (!hash.isEmpty()) {
-													addUniqueQuality(names, urls, normalizeResolutionToP(k), "https://dweb.link/ipfs/" + hash);
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-			if (urls.isEmpty() && !videoId.isEmpty()) {
-				String[] apiCandidates = {
-					"https://api.d.tube/v/" + videoId,
-					"https://d.tube/api/v/" + videoId,
-					"https://emb.d.tube/#!/" + videoId
-				};
-				for (String apiUrl : apiCandidates) {
-					try {
-						String body = fetchHttp(apiUrl, "https://d.tube/", false).body;
-						if (body == null || body.trim().isEmpty()) continue;
-						String unescaped = body.replace("\\/", "/").replace("\\u0026", "&");
-
-						Matcher mMedia = Pattern.compile("(https?://[^\"'\\s<>]+\\.(?:mp4|m3u8)[^\"'\\s<>]*)").matcher(unescaped);
-						while (mMedia.find()) {
-							String mediaUrl = mMedia.group(1);
-							addUniqueQuality(names, urls, normalizeResolutionToP(mediaUrl), mediaUrl);
-							if (urls.size() >= 3) break;
-						}
-
-						if (urls.isEmpty()) {
-							Matcher mQm = pDirectQm.matcher(unescaped);
-							if (mQm.find()) {
-								addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mQm.group(1));
-							}
-						}
-						if (!urls.isEmpty()) break;
-					} catch (Exception ignored) {}
-				}
-			}
-
-			if (urls.isEmpty()) {
-				String html = fetchHttp(finalTargetUrl, "https://emb.d.tube/", false).body;
-				if (html != null && !html.isEmpty()) {
-					String unescaped = html.replace("\\/", "/").replace("\\u0026", "&");
-					Matcher mMedia = Pattern.compile("(https?://[^\"'\\s<>]+\\.(?:mp4|m3u8)[^\"'\\s<>]*)").matcher(unescaped);
-					while (mMedia.find()) {
-						String mediaUrl = mMedia.group(1);
-						addUniqueQuality(names, urls, normalizeResolutionToP(mediaUrl), mediaUrl);
-						if (urls.size() >= 3) break;
-					}
-					if (urls.isEmpty()) {
-						Matcher mQm = pDirectQm.matcher(unescaped);
-						if (mQm.find()) {
-							addUniqueQuality(names, urls, "720p", "https://dweb.link/ipfs/" + mQm.group(1));
-						}
-					}
-				}
-			}
-
-			if (!urls.isEmpty()) {
-				postSuccess(mainHandler, callback, names, urls, "https://emb.d.tube/", "");
-			} else {
-				String snifferUrl = !videoId.isEmpty()
-					? "https://emb.d.tube/#!/" + videoId
-					: finalTargetUrl;
-				postSniffer(mainHandler, callback, snifferUrl, "https://emb.d.tube/");
-			}
-		} catch (Exception e) {
-			postSniffer(mainHandler, callback, finalTargetUrl, "https://emb.d.tube/");
-		}
-	}
-
-	private static void extractRumble(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		String embedId = "";
-		if (finalTargetUrl.contains("/embed/")) {
-			String[] parts = finalTargetUrl.split("/embed/");
-			if (parts.length > 1) embedId = parts[1].split("[/?#]")[0];
-		}
-
-		ArrayList<String> rNames = new ArrayList<>();
-		ArrayList<String> rUrls = new ArrayList<>();
-
-		if (embedId.isEmpty()) {
-			String pageHtml = fetchHttp(finalTargetUrl, "https://rumble.com/", false).body;
-			Matcher mEmbed = Pattern.compile("rumble\\.com/embed/([a-zA-Z0-9]+)").matcher(pageHtml);
-			if (mEmbed.find()) {
-				embedId = mEmbed.group(1);
+	private final Runnable sniffTimeoutRunnable = new Runnable() {
+		@Override
+		public void run() {
+			if (!isSniffCompleted && !isFinishing() && !isDestroyed()) {
+				tvStatus.setText("Stream tidak merespons, coba ganti server.");
+				setLoading(false);
 			}
 		}
+	};
 
-		if (!embedId.isEmpty()) {
-			String apiUrl = "https://rumble.com/embedJS/u3/?request=video&ver=2&v=" + embedId;
-			String jsonStr = fetchHttp(apiUrl, "https://rumble.com/", false).body;
-			JSONObject rootObj = new JSONObject(jsonStr);
+	@Override
+	protected void onCreate(@Nullable Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_watch);
 
-			if (rootObj.has("ua")) {
-				JSONObject uaObj = rootObj.getJSONObject("ua");
-				String[] resKeys = new String[]{"1080", "720", "480", "360", "240"};
+		initViews();
+		setupMediaControls();
+		setupSnifferWebView();
 
-				if (uaObj.has("mp4")) {
-					JSONObject mp4Obj = uaObj.getJSONObject("mp4");
-					for (String rk : resKeys) {
-						if (mp4Obj.has(rk)) {
-							String u = mp4Obj.getJSONObject(rk).optString("url");
-							if (!u.isEmpty()) {
-								addUniqueQuality(rNames, rUrls, normalizeResolutionToP(rk), u);
-							}
-						}
-					}
-				}
-
-				if (rUrls.isEmpty()) {
-					for (String rk : resKeys) {
-						if (uaObj.has(rk)) {
-							JSONObject resObj = uaObj.optJSONObject(rk);
-							if (resObj != null) {
-								String u = resObj.optString("url");
-								if (!u.isEmpty()) {
-									addUniqueQuality(rNames, rUrls, normalizeResolutionToP(rk), u);
-								}
-							}
-						}
-					}
-				}
-
-				if (rUrls.isEmpty() && uaObj.has("hls")) {
-					JSONObject hlsObj = uaObj.getJSONObject("hls");
-					if (hlsObj.has("auto")) {
-						String u = hlsObj.getJSONObject("auto").optString("url");
-						if (!u.isEmpty()) {
-							addUniqueQuality(rNames, rUrls, "720p", u);
-						}
-					}
-				}
-			}
+		Intent intent = getIntent();
+		if (intent != null) {
+			currentServer = safeTrim(intent.getStringExtra(EXTRA_SERVER));
+			currentSourceUrl = safeTrim(intent.getStringExtra(EXTRA_VIDEO_URL));
 		}
 
-		if (rUrls.isEmpty()) {
-			String html = fetchHttp(finalTargetUrl, "https://rumble.com/", false).body;
-			Matcher mMp4 = Pattern.compile("(https?://[a-zA-Z0-9.-]+\\.rumble\\.com/[^\"'\\s]+\\.mp4)").matcher(html);
-			if (mMp4.find()) {
-				String u = mMp4.group(1);
-				addUniqueQuality(rNames, rUrls, normalizeResolutionToP(u), u);
-			}
-		}
-
-		if (!rUrls.isEmpty()) {
-			postSuccess(mainHandler, callback, rNames, rUrls, "https://rumble.com/", "");
-		} else {
-			postSniffer(mainHandler, callback, finalTargetUrl, "https://rumble.com/");
-		}
-	}
-
-	private static void extractOdysee(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		String streamOdysee = "";
-		if (finalTargetUrl.contains("odycdn.com") && (finalTargetUrl.contains(".mp4") || finalTargetUrl.contains(".m3u8") || finalTargetUrl.contains("/streams/"))) {
-			streamOdysee = finalTargetUrl;
-		} else if (finalTargetUrl.contains("signature=")) {
-			Uri uri = Uri.parse(finalTargetUrl);
-			String sig = uri.getQueryParameter("signature");
-			String sigTs = uri.getQueryParameter("signature_ts");
-			String path = uri.getPath();
-			if (path != null && path.contains("/embed/")) {
-				String cleanClaim = path.replace("/$/embed/", "").replace("/embed/", "");
-				streamOdysee = "https://player.odycdn.com/api/v4/streams/free/" + cleanClaim + "/" + sig + "/" + sigTs;
-			}
-		}
-
-		if (streamOdysee.isEmpty()) {
-			String html = fetchHttp(finalTargetUrl, "https://odysee.com/", false).body;
-			Matcher mOdy = Pattern.compile("(https?://player\\.odycdn\\.com/api/v4/streams/[^\"'\\s]+)").matcher(html);
-			if (mOdy.find()) {
-				streamOdysee = mOdy.group(1).replace("\\/", "/");
-			} else {
-				Matcher mMedia = Pattern.compile("(https?://[^\"'\\s]+\\.(?:mp4|m3u8)[^\"'\\s]*)").matcher(html);
-				if (mMedia.find()) {
-					streamOdysee = mMedia.group(1).replace("\\/", "/");
-				}
-			}
-		}
-
-		if (streamOdysee.isEmpty() && finalTargetUrl.contains("/embed/")) {
-			String afterEmbed = finalTargetUrl.substring(finalTargetUrl.indexOf("/embed/") + 7).split("[?#]")[0];
-			String lbryUri = "lbry://" + afterEmbed.replace("/", "#");
-			String lbryReq = "{\"method\":\"get\",\"params\":{\"uri\":\"" + lbryUri + "\"}}";
-			String lbryRes = postJsonHttp("https://api.na-backend.odysee.com/api/v1/proxy", lbryReq);
-			JSONObject lbryJson = new JSONObject(lbryRes);
-			if (lbryJson.has("result")) {
-				streamOdysee = lbryJson.getJSONObject("result").optString("streaming_url", "");
-			}
-		}
-
-		if (!streamOdysee.isEmpty()) {
-			ArrayList<String> names = new ArrayList<>();
-			ArrayList<String> urls = new ArrayList<>();
-			addUniqueQuality(names, urls, normalizeResolutionToP(streamOdysee), streamOdysee);
-			postSuccess(mainHandler, callback, names, urls, "https://odysee.com/", "");
-		} else {
-			postSniffer(mainHandler, callback, finalTargetUrl, "https://odysee.com/");
-		}
-	}
-
-	private static void extractGeneric(String finalTargetUrl, String lowerUrl, Handler mainHandler, ExtractionCallback callback) throws Exception {
-		if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m3u8")) {
-			ArrayList<String> names = new ArrayList<>();
-			ArrayList<String> urls = new ArrayList<>();
-			addUniqueQuality(names, urls, normalizeResolutionToP(finalTargetUrl), finalTargetUrl);
-			postSuccess(mainHandler, callback, names, urls, finalTargetUrl, "");
+		if (currentSourceUrl.isEmpty()) {
+			tvStatus.setText("URL video kosong.");
+			Toast.makeText(this, "URL video tidak ditemukan", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
-		String refererToUse = finalTargetUrl;
-		String html = fetchHttp(finalTargetUrl, finalTargetUrl, false).body;
-		String unpacked = unpackDeanEdwards(html);
-		String combinedSource = html + "\n" + unpacked;
-		String streamFound = "";
-
-		Matcher mSource = Pattern.compile("<(?:source|video)[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(combinedSource);
-		if (mSource.find()) {
-			streamFound = mSource.group(1).replace("&amp;", "&");
-		}
-
-		if (streamFound.isEmpty()) {
-			Matcher mMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE).matcher(combinedSource);
-			if (mMedia.find()) {
-				streamFound = mMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
-			}
-		}
-
-		if (streamFound.isEmpty()) {
-			Matcher mIframe = Pattern.compile("<iframe[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE).matcher(combinedSource);
-			if (mIframe.find()) {
-				String innerUrl = mIframe.group(1).replace("&amp;", "&");
-				refererToUse = innerUrl;
-				String innerHtml = fetchHttp(innerUrl, finalTargetUrl, false).body;
-				String innerUnpacked = unpackDeanEdwards(innerHtml);
-				String innerCombined = innerHtml + "\n" + innerUnpacked;
-				Matcher mInnerMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE).matcher(innerCombined);
-				if (mInnerMedia.find()) {
-					streamFound = mInnerMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
-				}
-			}
-		}
-
-		if (!streamFound.isEmpty()) {
-			ArrayList<String> names = new ArrayList<>();
-			ArrayList<String> urls = new ArrayList<>();
-			addUniqueQuality(names, urls, normalizeResolutionToP(streamFound), streamFound);
-			postSuccess(mainHandler, callback, names, urls, refererToUse, "");
-		} else {
-			postSniffer(mainHandler, callback, finalTargetUrl, refererToUse);
-		}
+		startExtraction(currentServer, currentSourceUrl);
 	}
 
-	private static void addUniqueQuality(ArrayList<String> names, ArrayList<String> urls, String label, String url) {
-		if (url == null || url.trim().isEmpty()) return;
-		String cleanLabel = normalizeResolutionToP(label);
-		int existingIdx = names.indexOf(cleanLabel);
-		if (existingIdx >= 0) {
-			urls.set(existingIdx, url);
-		} else {
-			names.add(cleanLabel);
-			urls.add(url);
-		}
+	private void initViews() {
+		playerContainer = findViewById(R.id.playerContainer);
+		surfaceView = findViewById(R.id.surfaceView);
+		snifferWebView = findViewById(R.id.snifferWebView);
+		loadingProgressBar = findViewById(R.id.loadingProgressBar);
+		tvStatus = findViewById(R.id.tvStatus);
+		tvQualityBadge = findViewById(R.id.tvQualityBadge);
+		tvCurrentTime = findViewById(R.id.tvCurrentTime);
+		tvTotalTime = findViewById(R.id.tvTotalTime);
+		seekBar = findViewById(R.id.seekBar);
+		btnPlayPause = findViewById(R.id.btnPlayPause);
+		btnFullscreen = findViewById(R.id.btnFullscreen);
+		btnQuality = findViewById(R.id.btnQuality);
+
+		surfaceHolder = surfaceView.getHolder();
+		surfaceHolder.addCallback(this);
 	}
 
-	private static void postSuccess(
-		Handler handler,
-		final ExtractionCallback callback,
-		final ArrayList<String> names,
-		final ArrayList<String> urls,
-		final String referer,
-		final String cookie
-	) {
-		handler.post(new Runnable() {
+	private void setupMediaControls() {
+		btnPlayPause.setOnClickListener(new View.OnClickListener() {
 			@Override
-			public void run() {
-				callback.onSuccess(names, urls, referer, cookie);
-			}
-		});
-	}
-
-	private static void postSniffer(
-		Handler handler,
-		final ExtractionCallback callback,
-		final String snifferUrl,
-		final String referer
-	) {
-		handler.post(new Runnable() {
-			@Override
-			public void run() {
-				callback.onNeedSniffer(snifferUrl, referer);
-			}
-		});
-	}
-
-	private static class HttpFetchResult {
-		final String body;
-		final String cookie;
-		HttpFetchResult(String body, String cookie) {
-			this.body = body;
-			this.cookie = cookie;
-		}
-	}
-
-	private static HttpFetchResult fetchHttp(String targetUrl, String referer, boolean saveDmCookie) throws Exception {
-		String currentUrl = targetUrl;
-		HttpURLConnection conn = null;
-		String collectedCookie = "";
-
-		for (int redirectCount = 0; redirectCount < 6; redirectCount++) {
-			URL url = new URL(currentUrl);
-			conn = (HttpURLConnection) url.openConnection();
-			conn.setRequestMethod("GET");
-			conn.setConnectTimeout(10000);
-			conn.setReadTimeout(10000);
-			conn.setInstanceFollowRedirects(false);
-			conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-			conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8");
-			conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9,id;q=0.8");
-			conn.setRequestProperty("Sec-Fetch-Dest", "iframe");
-			conn.setRequestProperty("Sec-Fetch-Mode", "navigate");
-			if (referer != null && !referer.isEmpty()) {
-				conn.setRequestProperty("Referer", referer);
-			}
-
-			if (saveDmCookie) {
-				Map<String, List<String>> headerFields = conn.getHeaderFields();
-				List<String> cookiesHeader = headerFields.get("Set-Cookie");
-				if (cookiesHeader != null && !cookiesHeader.isEmpty()) {
-					StringBuilder cookieSb = new StringBuilder();
-					for (String c : cookiesHeader) {
-						String mainPart = c.split(";")[0];
-						if (cookieSb.length() > 0) cookieSb.append("; ");
-						cookieSb.append(mainPart);
+			public void onClick(View v) {
+				if (mediaPlayer == null || !isPrepared) return;
+				try {
+					if (mediaPlayer.isPlaying()) {
+						mediaPlayer.pause();
+						btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+					} else {
+						mediaPlayer.start();
+						btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+						uiHandler.post(progressRunnable);
 					}
-					collectedCookie = cookieSb.toString();
+				} catch (Exception ignored) {}
+			}
+		});
+
+		btnFullscreen.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				toggleFullscreen();
+			}
+		});
+
+		btnQuality.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (availableStreamUrls.size() <= 1) {
+					Toast.makeText(WatchActivity.this, "Hanya tersedia 1 kualitas", Toast.LENGTH_SHORT).show();
+					return;
 				}
+				selectedQualityIndex = (selectedQualityIndex + 1) % availableStreamUrls.size();
+				String nextLabel = StreamExtractorHelper.normalizeResolutionToP(availableQualities.get(selectedQualityIndex));
+				String nextUrl = availableStreamUrls.get(selectedQualityIndex);
+				tvQualityBadge.setText(nextLabel);
+				playStreamUrl(nextUrl, activeReferer, activeCookie);
 			}
+		});
 
-			int code = conn.getResponseCode();
-			if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM
-				|| code == HttpURLConnection.HTTP_SEE_OTHER || code == 307 || code == 308) {
-				String loc = conn.getHeaderField("Location");
-				conn.disconnect();
-				if (loc == null || loc.isEmpty()) break;
-				if (loc.startsWith("//")) loc = "https:" + loc;
-				else if (loc.startsWith("/")) loc = url.getProtocol() + "://" + url.getHost() + loc;
-				currentUrl = loc;
-				continue;
-			}
-			break;
-		}
-
-		if (conn == null) return new HttpFetchResult("", collectedCookie);
-		int respCode = conn.getResponseCode();
-		if (respCode < 200 || respCode >= 300) {
-			conn.disconnect();
-			return new HttpFetchResult("", collectedCookie);
-		}
-
-		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = reader.readLine()) != null) {
-			sb.append(line).append("\n");
-		}
-		reader.close();
-		conn.disconnect();
-		return new HttpFetchResult(sb.toString(), collectedCookie);
-	}
-
-	private static String postJsonHttp(String apiUrl, String jsonPayload) throws Exception {
-		URL url = new URL(apiUrl);
-		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-		conn.setRequestMethod("POST");
-		conn.setConnectTimeout(10000);
-		conn.setReadTimeout(10000);
-		conn.setDoOutput(true);
-		conn.setRequestProperty("Content-Type", "application/json");
-		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
-
-		OutputStream os = conn.getOutputStream();
-		os.write(jsonPayload.getBytes("UTF-8"));
-		os.flush();
-		os.close();
-
-		int respCode = conn.getResponseCode();
-		if (respCode < 200 || respCode >= 300) {
-			conn.disconnect();
-			return "";
-		}
-
-		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = reader.readLine()) != null) {
-			sb.append(line);
-		}
-		reader.close();
-		conn.disconnect();
-		return sb.toString();
-	}
-
-	private static String unpackDeanEdwards(String html) {
-		try {
-			Pattern p = Pattern.compile("eval\\(function\\(p,a,c,k,e,[dr]\\)\\{.*?\\}\\('(.*?)',(\\d+),(\\d+),'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL);
-			Matcher m = p.matcher(html);
-			if (m.find()) {
-				String payload = m.group(1);
-				int radix = Integer.parseInt(m.group(2));
-				String[] symtab = m.group(4).split("\\|");
-
-				Pattern wordPat = Pattern.compile("\\b\\w+\\b");
-				Matcher wm = wordPat.matcher(payload);
-				StringBuffer sb = new StringBuffer();
-				while (wm.find()) {
-					String word = wm.group();
+		seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+			@Override
+			public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+				if (fromUser && mediaPlayer != null && isPrepared) {
 					try {
-						int idx = Integer.parseInt(word, radix);
-						if (idx >= 0 && idx < symtab.length && !symtab[idx].isEmpty()) {
-							wm.appendReplacement(sb, Matcher.quoteReplacement(symtab[idx]));
-						}
+						mediaPlayer.seekTo(progress);
+						tvCurrentTime.setText(formatDurationMs(progress));
 					} catch (Exception ignored) {}
 				}
-				wm.appendTail(sb);
-				return sb.toString();
 			}
-		} catch (Exception ignored) {}
-		return "";
+
+			@Override
+			public void onStartTrackingTouch(SeekBar seekBar) {}
+
+			@Override
+			public void onStopTrackingTouch(SeekBar seekBar) {}
+		});
+	}
+
+	@SuppressLint("SetJavaScriptEnabled")
+	private void setupSnifferWebView() {
+		if (snifferWebView == null) return;
+		WebSettings settings = snifferWebView.getSettings();
+		settings.setJavaScriptEnabled(true);
+		settings.setDomStorageEnabled(true);
+		settings.setDatabaseEnabled(true);
+		settings.setAllowFileAccess(false);
+		settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+		settings.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+			settings.setMediaPlaybackRequiresUserGesture(false);
+		}
+
+		CookieManager cookieManager = CookieManager.getInstance();
+		cookieManager.setAcceptCookie(true);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			cookieManager.setAcceptThirdPartyCookies(snifferWebView, true);
+		}
+
+		snifferWebView.setWebViewClient(new WebViewClient() {
+			@Override
+			public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+				String reqUrl = (request != null && request.getUrl() != null) ? request.getUrl().toString() : "";
+				if (handlePotentialStreamUrl(reqUrl)) {
+					return true;
+				}
+				return false;
+			}
+
+			@Override
+			@SuppressWarnings("deprecation")
+			public boolean shouldOverrideUrlLoading(WebView view, String url) {
+				if (handlePotentialStreamUrl(url)) {
+					return true;
+				}
+				return false;
+			}
+
+			@Override
+			public void onLoadResource(WebView view, String url) {
+				super.onLoadResource(view, url);
+				handlePotentialStreamUrl(url);
+			}
+
+			@Override
+			public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+				if (request != null && request.getUrl() != null) {
+					handlePotentialStreamUrl(request.getUrl().toString());
+				}
+				return super.shouldInterceptRequest(view, request);
+			}
+
+			@Override
+			public void onPageFinished(WebView view, String url) {
+				super.onPageFinished(view, url);
+				String autoPlayJs = "(function(){" +
+					"try{" +
+					"var vids=document.querySelectorAll('video');" +
+					"for(var i=0;i<vids.length;i++){" +
+					"if(vids[i].src){window.AndroidSniffer&&window.AndroidSniffer.onMediaFound(vids[i].src);}" +
+					"vids[i].muted=true;vids[i].play().catch(function(){});" +
+					"}" +
+					"}catch(e){}" +
+					"})();";
+				view.evaluateJavascript(autoPlayJs, null);
+			}
+		});
+
+		snifferWebView.addJavascriptInterface(new SnifferBridge(), "AndroidSniffer");
+	}
+
+	private class SnifferBridge {
+		@android.webkit.JavascriptInterface
+		public void onMediaFound(final String foundUrl) {
+			uiHandler.post(new Runnable() {
+				@Override
+				public void run() {
+					handlePotentialStreamUrl(foundUrl);
+				}
+			});
+		}
+	}
+
+	private boolean handlePotentialStreamUrl(String candidateUrl) {
+		if (isSniffCompleted || isFinishing() || isDestroyed() || candidateUrl == null) return false;
+		String trimmed = candidateUrl.trim();
+		if (trimmed.isEmpty() || !trimmed.startsWith("http")) return false;
+
+		String lower = trimmed.toLowerCase(Locale.US);
+		boolean looksLikeMedia = lower.contains(".m3u8") || lower.contains(".mp4");
+		boolean isPlaylistOrSegment = lower.contains(".ts") || lower.contains(".m4s") || lower.contains("seg-");
+
+		if (looksLikeMedia && !isPlaylistOrSegment) {
+			isSniffCompleted = true;
+			sniffTimeoutHandler.removeCallbacks(sniffTimeoutRunnable);
+			stopSnifferWebView();
+
+			availableQualities.clear();
+			availableStreamUrls.clear();
+			String resLabel = StreamExtractorHelper.normalizeResolutionToP(trimmed);
+			availableQualities.add(resLabel);
+			availableStreamUrls.add(trimmed);
+			selectedQualityIndex = 0;
+
+			activeCookie = CookieManager.getInstance().getCookie(trimmed);
+			if (activeCookie == null) activeCookie = "";
+
+			tvQualityBadge.setText(resLabel);
+			playStreamUrl(trimmed, activeReferer, activeCookie);
+			return true;
+		}
+		return false;
+	}
+
+	public void startExtraction(String server, String videoUrl) {
+		isSniffCompleted = false;
+		availableQualities.clear();
+		availableStreamUrls.clear();
+		selectedQualityIndex = 0;
+		activeReferer = "";
+		activeCookie = "";
+
+		setLoading(true);
+		tvStatus.setText("Memuat sumber video...");
+
+		StreamExtractorHelper.extract(server, videoUrl, new StreamExtractorHelper.ExtractionCallback() {
+			@Override
+			public void onSuccess(ArrayList<String> qualityLabels, ArrayList<String> streamUrls, String referer, String dmCookie) {
+				if (isFinishing() || isDestroyed()) return;
+				isSniffCompleted = true;
+				sniffTimeoutHandler.removeCallbacks(sniffTimeoutRunnable);
+				stopSnifferWebView();
+
+				availableQualities.clear();
+				availableStreamUrls.clear();
+
+				if (streamUrls != null && !streamUrls.isEmpty()) {
+					for (int i = 0; i < streamUrls.size(); i++) {
+						String u = streamUrls.get(i);
+						if (u != null && !u.trim().isEmpty()) {
+							String rawLabel = (qualityLabels != null && i < qualityLabels.size()) ? qualityLabels.get(i) : u;
+							availableQualities.add(StreamExtractorHelper.normalizeResolutionToP(rawLabel));
+							availableStreamUrls.add(u.trim());
+						}
+					}
+				}
+
+				activeReferer = safeTrim(referer);
+				activeCookie = safeTrim(dmCookie);
+
+				if (availableStreamUrls.isEmpty()) {
+					tvStatus.setText("Stream tidak ditemukan.");
+					setLoading(false);
+					return;
+				}
+
+				selectedQualityIndex = 0;
+				tvQualityBadge.setText(availableQualities.get(0));
+				playStreamUrl(availableStreamUrls.get(0), activeReferer, activeCookie);
+			}
+
+			@Override
+			public void onNeedSniffer(String snifferUrl, String referer) {
+				if (isFinishing() || isDestroyed()) return;
+				isSniffCompleted = false;
+				activeReferer = safeTrim(referer);
+				tvStatus.setText("Menyiapkan player...");
+				setLoading(true);
+
+				if (snifferWebView != null) {
+					snifferWebView.stopLoading();
+					Map<String, String> headers = new HashMap<>();
+					if (!activeReferer.isEmpty()) {
+						headers.put("Referer", activeReferer);
+					}
+					if (!headers.isEmpty()) {
+						snifferWebView.loadUrl(snifferUrl, headers);
+					} else {
+						snifferWebView.loadUrl(snifferUrl);
+					}
+				}
+
+				sniffTimeoutHandler.removeCallbacks(sniffTimeoutRunnable);
+				sniffTimeoutHandler.postDelayed(sniffTimeoutRunnable, 20000);
+			}
+		});
+	}
+
+	private void playStreamUrl(String streamUrl, String referer, String cookie) {
+		if (streamUrl == null || streamUrl.trim().isEmpty()) return;
+		releaseMediaPlayer();
+		isPrepared = false;
+		setLoading(true);
+		tvStatus.setText("Menghubungkan ke stream...");
+
+		try {
+			mediaPlayer = new MediaPlayer();
+			Map<String, String> headers = new HashMap<>();
+			headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+			if (referer != null && !referer.trim().isEmpty()) {
+				headers.put("Referer", referer.trim());
+			}
+			if (cookie != null && !cookie.trim().isEmpty()) {
+				headers.put("Cookie", cookie.trim());
+			}
+
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				mediaPlayer.setDataSource(this, Uri.parse(streamUrl.trim()), headers);
+			} else {
+				mediaPlayer.setDataSource(streamUrl.trim());
+			}
+
+			if (isSurfaceReady && surfaceHolder != null) {
+				mediaPlayer.setDisplay(surfaceHolder);
+			}
+
+			mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+				@Override
+				public void onPrepared(MediaPlayer mp) {
+					if (isFinishing() || isDestroyed()) return;
+					isPrepared = true;
+					setLoading(false);
+					tvStatus.setText("");
+					seekBar.setMax(mp.getDuration());
+					tvTotalTime.setText(formatDurationMs(mp.getDuration()));
+					mp.start();
+					btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+					uiHandler.removeCallbacks(progressRunnable);
+					uiHandler.post(progressRunnable);
+				}
+			});
+
+			mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+				@Override
+				public boolean onError(MediaPlayer mp, int what, int extra) {
+					if (isFinishing() || isDestroyed()) return true;
+					isPrepared = false;
+					setLoading(false);
+					tvStatus.setText("Gagal memutar stream (" + what + "/" + extra + ")");
+					return true;
+				}
+			});
+
+			mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+				@Override
+				public void onCompletion(MediaPlayer mp) {
+					btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+				}
+			});
+
+			mediaPlayer.prepareAsync();
+		} catch (Exception e) {
+			setLoading(false);
+			tvStatus.setText("Error memuat pemutar video.");
+		}
+	}
+
+	private void stopSnifferWebView() {
+		if (snifferWebView != null) {
+			try {
+				snifferWebView.stopLoading();
+				snifferWebView.loadUrl("about:blank");
+			} catch (Exception ignored) {}
+		}
+	}
+
+	private void releaseMediaPlayer() {
+		uiHandler.removeCallbacks(progressRunnable);
+		if (mediaPlayer != null) {
+			try {
+				if (mediaPlayer.isPlaying()) {
+					mediaPlayer.stop();
+				}
+			} catch (Exception ignored) {}
+			try {
+				mediaPlayer.reset();
+				mediaPlayer.release();
+			} catch (Exception ignored) {}
+			mediaPlayer = null;
+		}
+		isPrepared = false;
+	}
+
+	private void setLoading(boolean loading) {
+		if (loadingProgressBar != null) {
+			loadingProgressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
+		}
+	}
+
+	private void toggleFullscreen() {
+		isFullscreen = !isFullscreen;
+		if (isFullscreen) {
+			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+			getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+			if (getSupportActionBar() != null) {
+				getSupportActionBar().hide();
+			}
+			if (playerContainer != null) {
+				ViewGroup.LayoutParams lp = playerContainer.getLayoutParams();
+				lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+				lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+				playerContainer.setLayoutParams(lp);
+			}
+		} else {
+			exitFullscreenLayout();
+		}
+	}
+
+	private void exitFullscreenLayout() {
+		isFullscreen = false;
+		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+		getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+		if (getSupportActionBar() != null) {
+			getSupportActionBar().show();
+		}
+		if (playerContainer != null) {
+			ViewGroup.LayoutParams lp = playerContainer.getLayoutParams();
+			lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+			lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+			playerContainer.setLayoutParams(lp);
+		}
+	}
+
+	@Override
+	public void onBackPressed() {
+		if (isFullscreen) {
+			exitFullscreenLayout();
+			return;
+		}
+		FragmentManager fm = getSupportFragmentManager();
+		if (!fm.isDestroyed() && fm.getBackStackEntryCount() > 0) {
+			fm.popBackStackImmediate();
+			return;
+		}
+		super.onBackPressed();
+	}
+
+	@Override
+	public void onConfigurationChanged(Configuration newConfig) {
+		super.onConfigurationChanged(newConfig);
+	}
+
+	@Override
+	public void surfaceCreated(SurfaceHolder holder) {
+		surfaceHolder = holder;
+		isSurfaceReady = true;
+		if (mediaPlayer != null) {
+			try {
+				mediaPlayer.setDisplay(surfaceHolder);
+			} catch (Exception ignored) {}
+		}
+	}
+
+	@Override
+	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+		surfaceHolder = holder;
+		isSurfaceReady = true;
+	}
+
+	@Override
+	public void surfaceDestroyed(SurfaceHolder holder) {
+		isSurfaceReady = false;
+		if (mediaPlayer != null) {
+			try {
+				mediaPlayer.setDisplay(null);
+			} catch (Exception ignored) {}
+		}
+	}
+
+	@Override
+	protected void onPause() {
+		super.onPause();
+		if (mediaPlayer != null && isPrepared) {
+			try {
+				if (mediaPlayer.isPlaying()) {
+					mediaPlayer.pause();
+					btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+				}
+			} catch (Exception ignored) {}
+		}
+		uiHandler.removeCallbacks(progressRunnable);
+	}
+
+	@Override
+	protected void onDestroy() {
+		uiHandler.removeCallbacksAndMessages(null);
+		sniffTimeoutHandler.removeCallbacksAndMessages(null);
+		releaseMediaPlayer();
+		if (snifferWebView != null) {
+			try {
+				snifferWebView.stopLoading();
+				snifferWebView.removeJavascriptInterface("AndroidSniffer");
+				snifferWebView.setWebViewClient(null);
+				snifferWebView.destroy();
+			} catch (Exception ignored) {}
+			snifferWebView = null;
+		}
+		super.onDestroy();
+	}
+
+	private static String safeTrim(String s) {
+		return (s == null) ? "" : s.trim();
+	}
+
+	private static String formatDurationMs(int ms) {
+		if (ms <= 0) return "00:00";
+		int totalSec = ms / 1000;
+		int mins = totalSec / 60;
+		int secs = totalSec % 60;
+		return String.format(Locale.US, "%02d:%02d", mins, secs);
 	}
 }
