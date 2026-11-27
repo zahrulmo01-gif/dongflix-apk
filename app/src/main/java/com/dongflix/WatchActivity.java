@@ -207,9 +207,12 @@ public class WatchActivity extends AppCompatActivity {
 
 	private DatabaseReference commentsRef;
 	private ValueEventListener commentsListener;
-	private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
+		private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
 	private final List<HashMap<String, String>> allUsersDirectory = new ArrayList<>();
+	private final ArrayList<HashMap<String, Object>> mainCommentList = new ArrayList<>();
+	private final Map<String, List<HashMap<String, Object>>> repliesByParentMap = new HashMap<>();
 	private final ArrayList<String> stickerList = new ArrayList<>();
+
 
 	private TikTokCommentAdapter activeCommentSheetAdapter;
 	private TextView activeCommentSheetHeader;
