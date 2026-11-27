@@ -1,6 +1,8 @@
 package com.dongflix;
 
 import android.animation.ValueAnimator;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -26,6 +28,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
+import android.view.WindowManager;
 import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -319,6 +322,22 @@ public class NotificationActivity extends AppCompatActivity {
 		startShimmer();
 	}
 
+	private void showClearAllNotificationsDialog() {
+		if (notifRef == null || isFinishing() || isDestroyed()) return;
+		new AlertDialog.Builder(this)
+			.setTitle("Hapus Semua Notifikasi")
+			.setMessage("Hapus semua notifikasi yang ada?")
+			.setPositiveButton("Hapus", new DialogInterface.OnClickListener() {
+				@Override
+				public void onClick(DialogInterface dialog, int which) {
+					notifRef.removeValue();
+					DongflixToast.show(NotificationActivity.this, "Semua notifikasi dihapus");
+				}
+			})
+			.setNegativeButton("Batal", null)
+			.show();
+	}
+
 	private void buildLayout() {
 		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -478,10 +497,7 @@ public class NotificationActivity extends AppCompatActivity {
 		clearBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				if (notifRef != null) {
-					notifRef.removeValue();
-					DongflixToast.show(NotificationActivity.this, "Semua notifikasi dihapus");
-				}
+				showClearAllNotificationsDialog();
 			}
 		});
 
