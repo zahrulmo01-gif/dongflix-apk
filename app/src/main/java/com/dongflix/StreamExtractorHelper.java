@@ -187,7 +187,9 @@ public class StreamExtractorHelper {
 	private static void extractDailymotion(String finalTargetUrl, Handler mainHandler, ExtractionCallback callback) {
 		try {
 			String dailyId = "";
+			String playerId = "xid0t";
 			Uri parsedUri = Uri.parse(finalTargetUrl);
+
 			if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
 				dailyId = parsedUri.getQueryParameter("id");
 			} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
@@ -203,17 +205,28 @@ public class StreamExtractorHelper {
 				dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
 			}
 
+			String path = parsedUri.getPath();
+			if (path != null && path.contains("/player/")) {
+				String afterPlayer = path.substring(path.indexOf("/player/") + 8);
+				if (afterPlayer.endsWith(".html")) {
+					afterPlayer = afterPlayer.substring(0, afterPlayer.length() - 5);
+				}
+				if (!afterPlayer.trim().isEmpty()) {
+					playerId = afterPlayer.trim();
+				}
+			}
+
 			if (dailyId == null || dailyId.trim().isEmpty()) {
-				postSniffer(mainHandler, callback, finalTargetUrl, "https://www.dailymotion.com/");
+				postSniffer(mainHandler, callback, finalTargetUrl, "https://geo.dailymotion.com/");
 				return;
 			}
 
 			String cleanDmId = dailyId.trim();
-			String embedFallbackUrl = "https://geo.dailymotion.com/player.html?video=" + cleanDmId;
+			String geoEmbedUrl = "https://geo.dailymotion.com/player/" + playerId + ".html?video=" + cleanDmId;
 			String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + cleanDmId
-				+ "?embedder=" + Uri.encode(embedFallbackUrl) + "&app=com.dailymotion.neon";
+				+ "?embedder=" + Uri.encode(geoEmbedUrl) + "&app=com.dailymotion.neon";
 
-			HttpFetchResult res = fetchHttp(dmApiUrl, embedFallbackUrl, true);
+			HttpFetchResult res = fetchHttp(dmApiUrl, geoEmbedUrl, true);
 			ArrayList<String> dmNames = new ArrayList<>();
 			ArrayList<String> dmUrls = new ArrayList<>();
 
@@ -260,16 +273,20 @@ public class StreamExtractorHelper {
 			}
 
 			if (!dmUrls.isEmpty()) {
-				postSuccess(mainHandler, callback, dmNames, dmUrls, "https://www.dailymotion.com/", res.cookie);
+				postSuccess(mainHandler, callback, dmNames, dmUrls, geoEmbedUrl, res.cookie);
 			} else {
-				postSniffer(mainHandler, callback, embedFallbackUrl, "https://www.dailymotion.com/");
+				postSniffer(mainHandler, callback, geoEmbedUrl, "https://geo.dailymotion.com/");
 			}
 		} catch (Exception e) {
-			String fallbackId = Uri.parse(finalTargetUrl).getQueryParameter("id");
+			Uri parsed = Uri.parse(finalTargetUrl);
+			String fallbackId = parsed.getQueryParameter("id");
+			if (fallbackId == null || fallbackId.trim().isEmpty()) {
+				fallbackId = parsed.getQueryParameter("video");
+			}
 			String snifferTarget = (fallbackId != null && !fallbackId.trim().isEmpty())
-				? "https://geo.dailymotion.com/player.html?video=" + fallbackId.trim()
+				? "https://geo.dailymotion.com/player/xid0t.html?video=" + fallbackId.trim()
 				: finalTargetUrl;
-			postSniffer(mainHandler, callback, snifferTarget, "https://www.dailymotion.com/");
+			postSniffer(mainHandler, callback, snifferTarget, "https://geo.dailymotion.com/");
 		}
 	}
 
