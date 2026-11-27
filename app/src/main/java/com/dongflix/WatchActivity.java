@@ -92,11 +92,6 @@ import com.google.firebase.database.Transaction;
 import com.google.firebase.database.ValueEventListener;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -110,8 +105,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -216,8 +209,6 @@ public class WatchActivity extends AppCompatActivity {
 	private ValueEventListener commentsListener;
 	private final Map<String, HashMap<String, String>> userProfileMap = new HashMap<>();
 	private final List<HashMap<String, String>> allUsersDirectory = new ArrayList<>();
-	private final ArrayList<HashMap<String, Object>> mainCommentList = new ArrayList<>();
-	private final Map<String, List<HashMap<String, Object>>> repliesByParentMap = new HashMap<>();
 	private final ArrayList<String> stickerList = new ArrayList<>();
 
 	private TikTokCommentAdapter activeCommentSheetAdapter;
@@ -516,6 +507,7 @@ public class WatchActivity extends AppCompatActivity {
 					String username = child.child("username").getValue() != null ? child.child("username").getValue().toString().trim() : "";
 					String name = child.child("name").getValue() != null ? child.child("name").getValue().toString().trim() : "";
 					String photo = child.child("photoURL").getValue() != null ? child.child("photoURL").getValue().toString().trim() : "";
+					String frame = child.child("avatarFrame").getValue() != null ? child.child("avatarFrame").getValue().toString().trim() : "";
 					long exp = parseLongSafe(child.child("exp").getValue(), 0L);
 
 					String fallbackUser = !username.isEmpty() ? username
@@ -528,11 +520,16 @@ public class WatchActivity extends AppCompatActivity {
 					profile.put("username", fallbackUser);
 					profile.put("name", displayName);
 					profile.put("photoURL", photo);
+					profile.put("avatarFrame", frame);
 					profile.put("exp", String.valueOf(exp));
 
 					userProfileMap.put(key, profile);
 					if (!email.isEmpty()) {
 						userProfileMap.put(email.toLowerCase(Locale.US).replace(".", ","), profile);
+					}
+					String uidVal = child.child("uid").getValue() != null ? child.child("uid").getValue().toString().trim() : "";
+					if (!uidVal.isEmpty()) {
+						userProfileMap.put(uidVal, profile);
 					}
 
 					String dedupKey = fallbackUser.toLowerCase(Locale.US);
@@ -594,6 +591,7 @@ public class WatchActivity extends AppCompatActivity {
 		fallback.put("username", derived);
 		fallback.put("name", derived);
 		fallback.put("photoURL", "");
+		fallback.put("avatarFrame", "");
 		fallback.put("exp", "0");
 		return fallback;
 	}
@@ -776,6 +774,7 @@ public class WatchActivity extends AppCompatActivity {
 			currentPlayingUrl.trim()
 		);
 	}
+
 	private void setupCommentSection() {
 		if (btnCommentSection == null) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -1300,25 +1299,16 @@ public class WatchActivity extends AppCompatActivity {
 			: new HashMap<String, String>();
 		String myName = myProf.get("name") != null ? myProf.get("name") : "U";
 		String myPhoto = myProf.get("photoURL") != null ? myProf.get("photoURL") : "";
+		String myFrame = myProf.get("avatarFrame") != null ? myProf.get("avatarFrame") : "";
 
-		ImageView ivMyAvatar = new ImageView(this);
-		LinearLayout.LayoutParams myAvLp = new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d));
+		AvatarDecorationView myAvatarDecor = new AvatarDecorationView(this, 32, false);
+		LinearLayout.LayoutParams myAvLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
 		myAvLp.rightMargin = (int) (10 * d);
-		ivMyAvatar.setLayoutParams(myAvLp);
-		ivMyAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-		TextView tvMyInitial = new TextView(this);
-		LinearLayout.LayoutParams myIniLp = new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d));
-		myIniLp.rightMargin = (int) (10 * d);
-		tvMyInitial.setLayoutParams(myIniLp);
-		tvMyInitial.setGravity(Gravity.CENTER);
-		tvMyInitial.setTextColor(Color.WHITE);
-		tvMyInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-		tvMyInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-
-		bindAvatarOrInitial(ivMyAvatar, tvMyInitial, myPhoto, myName);
-		bottomBar.addView(ivMyAvatar);
-		bottomBar.addView(tvMyInitial);
+		myAvatarDecor.setLayoutParams(myAvLp);
+		myAvatarDecor.bind(myPhoto, myName, myFrame);
+		bottomBar.addView(myAvatarDecor);
 
 		LinearLayout inputPill = new LinearLayout(this);
 		inputPill.setOrientation(LinearLayout.HORIZONTAL);
@@ -1724,6 +1714,8 @@ public class WatchActivity extends AppCompatActivity {
 			LinearLayout card = new LinearLayout(parent.getContext());
 			card.setOrientation(LinearLayout.HORIZONTAL);
 			card.setGravity(Gravity.TOP);
+			card.setClipChildren(false);
+			card.setClipToPadding(false);
 			RecyclerView.LayoutParams cardLp = new RecyclerView.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
@@ -1731,22 +1723,13 @@ public class WatchActivity extends AppCompatActivity {
 			card.setLayoutParams(cardLp);
 			card.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
 
-			ImageView avatar = new ImageView(parent.getContext());
-			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
-			avLp.rightMargin = (int) (10 * d);
-			avatar.setLayoutParams(avLp);
-			avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			avatar.setTag("avatar");
-
-			TextView tvInitial = new TextView(parent.getContext());
-			LinearLayout.LayoutParams iniLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
-			iniLp.rightMargin = (int) (10 * d);
-			tvInitial.setLayoutParams(iniLp);
-			tvInitial.setGravity(Gravity.CENTER);
-			tvInitial.setTextColor(Color.WHITE);
-			tvInitial.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-			tvInitial.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvInitial.setTag("initial");
+			AvatarDecorationView avatarDecor = new AvatarDecorationView(parent.getContext(), 34, false);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			avLp.rightMargin = (int) (8 * d);
+			avatarDecor.setLayoutParams(avLp);
+			avatarDecor.setTag("avatar_decor");
 
 			LinearLayout col = new LinearLayout(parent.getContext());
 			col.setOrientation(LinearLayout.VERTICAL);
@@ -1904,6 +1887,7 @@ public class WatchActivity extends AppCompatActivity {
 
 			LinearLayout repliesContainer = new LinearLayout(parent.getContext());
 			repliesContainer.setOrientation(LinearLayout.VERTICAL);
+			repliesContainer.setClipChildren(false);
 			repliesContainer.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 			repliesContainer.setTag("replies_container");
 
@@ -1917,8 +1901,7 @@ public class WatchActivity extends AppCompatActivity {
 			col.addView(toggleRow);
 			col.addView(repliesWrapper);
 
-			card.addView(avatar);
-			card.addView(tvInitial);
+			card.addView(avatarDecor);
 			card.addView(col);
 			return new ViewHolder(card);
 		}
@@ -1938,13 +1921,13 @@ public class WatchActivity extends AppCompatActivity {
 			final String mentionHandle = prof.get("username") != null && !prof.get("username").isEmpty()
 				? prof.get("username") : displayName;
 			String photoUrl = prof.get("photoURL");
+			String frameUrl = prof.get("avatarFrame");
 			long exp = parseLongSafe(prof.get("exp"), 0L);
 			boolean isAdmin = !email.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(email.trim());
 			int level = calculateLevel(exp);
 
 			float d = holder.itemView.getResources().getDisplayMetrics().density;
-			ImageView avatar = holder.itemView.findViewWithTag("avatar");
-			TextView tvInitial = holder.itemView.findViewWithTag("initial");
+			AvatarDecorationView avatarDecor = holder.itemView.findViewWithTag("avatar_decor");
 			TextView tvName = holder.itemView.findViewWithTag("name");
 			TextView tvAdminBadge = holder.itemView.findViewWithTag("admin_badge");
 			TextView tvLevelBadge = holder.itemView.findViewWithTag("level_badge");
@@ -1959,7 +1942,9 @@ public class WatchActivity extends AppCompatActivity {
 			View repliesWrapper = holder.itemView.findViewWithTag("replies_wrapper");
 			LinearLayout repliesContainer = holder.itemView.findViewWithTag("replies_container");
 
-			bindAvatarOrInitial(avatar, tvInitial, photoUrl, displayName);
+			if (avatarDecor != null) {
+				avatarDecor.bind(photoUrl, displayName, frameUrl);
+			}
 
 			if (tvName != null) {
 				tvName.setText(displayName);
@@ -2086,6 +2071,7 @@ public class WatchActivity extends AppCompatActivity {
 			HashMap<String, String> rProf = resolveUserProfile(rEmail, rUid);
 			String rName = rProf.get("name");
 			String rPhoto = rProf.get("photoURL");
+			String rFrame = rProf.get("avatarFrame");
 			long rExp = parseLongSafe(rProf.get("exp"), 0L);
 			boolean rAdmin = !rEmail.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(rEmail.trim());
 			int rLevel = calculateLevel(rExp);
@@ -2093,6 +2079,7 @@ public class WatchActivity extends AppCompatActivity {
 			LinearLayout row = new LinearLayout(ctx);
 			row.setOrientation(LinearLayout.HORIZONTAL);
 			row.setGravity(Gravity.TOP);
+			row.setClipChildren(false);
 			LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 			);
@@ -2100,22 +2087,13 @@ public class WatchActivity extends AppCompatActivity {
 			row.setLayoutParams(lp);
 			row.setPadding((int) (2 * d), (int) (2 * d), (int) (2 * d), (int) (2 * d));
 
-			ImageView av = new ImageView(ctx);
-			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams((int) (24 * d), (int) (24 * d));
-			avLp.rightMargin = (int) (8 * d);
-			av.setLayoutParams(avLp);
-			av.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-			TextView avIni = new TextView(ctx);
-			LinearLayout.LayoutParams iniLp = new LinearLayout.LayoutParams((int) (24 * d), (int) (24 * d));
-			iniLp.rightMargin = (int) (8 * d);
-			avIni.setLayoutParams(iniLp);
-			avIni.setGravity(Gravity.CENTER);
-			avIni.setTextColor(Color.WHITE);
-			avIni.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-			avIni.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-
-			bindAvatarOrInitial(av, avIni, rPhoto, rName);
+			AvatarDecorationView replyAvatarDecor = new AvatarDecorationView(ctx, 24, false);
+			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			avLp.rightMargin = (int) (7 * d);
+			replyAvatarDecor.setLayoutParams(avLp);
+			replyAvatarDecor.bind(rPhoto, rName, rFrame);
 
 			LinearLayout col = new LinearLayout(ctx);
 			col.setOrientation(LinearLayout.VERTICAL);
@@ -2200,8 +2178,7 @@ public class WatchActivity extends AppCompatActivity {
 			col.addView(ivS);
 			col.addView(tvT);
 
-			row.addView(av);
-			row.addView(avIni);
+			row.addView(replyAvatarDecor);
 			row.addView(col);
 			return row;
 		}
@@ -2706,7 +2683,10 @@ public class WatchActivity extends AppCompatActivity {
 				currentEpisodeServerUrls = new ArrayList<>(mgr.activeServerUrls);
 			}
 			if (!mgr.activeQualityNames.isEmpty()) {
-				qualityNames = new ArrayList<>(mgr.activeQualityNames);
+				qualityNames.clear();
+				for (String q : mgr.activeQualityNames) {
+					qualityNames.add(StreamExtractorHelper.normalizeResolutionToP(q));
+				}
 				qualityUrls = new ArrayList<>(mgr.activeQualityUrls);
 				updateQualityBadgeText();
 			}
@@ -3195,7 +3175,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		root.addView(buildAdaptiveHeader("Pengaturan Pemutaran", dialogHolder));
 
-		String currentQualityLabel = (btnQuality != null) ? btnQuality.getText().toString() : "Auto";
+		String currentQualityLabel = (btnQuality != null) ? btnQuality.getText().toString() : "Auto (720p)";
 		String currentSpeedLabel = (Math.abs(currentPlaybackSpeed - 1.0f) < 0.01f) ? "Normal" : currentPlaybackSpeed + "x";
 		String currentServerLabel = (textActionServer != null) ? textActionServer.getText().toString() : "Default";
 
@@ -3635,25 +3615,20 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		ArrayList<String> titles = new ArrayList<>();
-		String currentActiveRes = qualityNames.get(selectedQualityIndex);
-
-		if (currentActiveRes.equalsIgnoreCase("Auto") || currentActiveRes.equalsIgnoreCase("Default")) {
-			titles.add("Auto");
-		} else {
-			titles.add("Auto (" + currentActiveRes.toLowerCase() + ")");
-		}
+		String currentActiveRes = StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(selectedQualityIndex));
+		titles.add("Auto (" + currentActiveRes + ")");
 
 		for (String q : qualityNames) {
-			if (!q.equalsIgnoreCase("Auto")) {
-				titles.add(q.toLowerCase());
+			String normP = StreamExtractorHelper.normalizeResolutionToP(q);
+			if (!titles.contains(normP)) {
+				titles.add(normP);
 			}
 		}
 
 		int activeSheetIdx = 0;
 		if (!isAutoQualityMode) {
-			String chosenLabel = qualityNames.get(selectedQualityIndex).toLowerCase();
 			for (int i = 1; i < titles.size(); i++) {
-				if (titles.get(i).equalsIgnoreCase(chosenLabel)) {
+				if (titles.get(i).equalsIgnoreCase(currentActiveRes)) {
 					activeSheetIdx = i;
 					break;
 				}
@@ -3691,7 +3666,7 @@ public class WatchActivity extends AppCompatActivity {
 						String targetRes = finalTitles.get(which);
 						int realIdx = 0;
 						for (int k = 0; k < qualityNames.size(); k++) {
-							if (qualityNames.get(k).equalsIgnoreCase(targetRes)) {
+							if (StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(k)).equalsIgnoreCase(targetRes)) {
 								realIdx = k;
 								break;
 							}
@@ -3906,14 +3881,10 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		} catch (Exception ignored) {}
 
-		for (int i = 0; i < qualityNames.size(); i++) {
-			if (qualityNames.get(i).equalsIgnoreCase("Auto")) return i;
-		}
-
 		int bestIdx = 0;
 		int smallestDiff = Integer.MAX_VALUE;
 		for (int i = 0; i < qualityNames.size(); i++) {
-			String numStr = qualityNames.get(i).replaceAll("[^0-9]", "");
+			String numStr = StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(i)).replaceAll("[^0-9]", "");
 			if (!numStr.isEmpty()) {
 				int resVal = Integer.parseInt(numStr);
 				int diff = Math.abs(resVal - targetHeight);
@@ -3930,7 +3901,7 @@ public class WatchActivity extends AppCompatActivity {
 		if (!isAutoQualityMode || qualityNames == null || qualityNames.size() <= 1) return;
 
 		int currentRes = 9999;
-		String curNum = qualityNames.get(selectedQualityIndex).replaceAll("[^0-9]", "");
+		String curNum = StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(selectedQualityIndex)).replaceAll("[^0-9]", "");
 		if (!curNum.isEmpty()) currentRes = Integer.parseInt(curNum);
 
 		int lowerIdx = -1;
@@ -3938,7 +3909,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		for (int i = 0; i < qualityNames.size(); i++) {
 			if (i == selectedQualityIndex) continue;
-			String numStr = qualityNames.get(i).replaceAll("[^0-9]", "");
+			String numStr = StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(i)).replaceAll("[^0-9]", "");
 			if (!numStr.isEmpty()) {
 				int resVal = Integer.parseInt(numStr);
 				if (resVal < currentRes && resVal > closestLowerRes) {
@@ -3957,22 +3928,19 @@ public class WatchActivity extends AppCompatActivity {
 				} catch (Exception ignored) {}
 			}
 			updateQualityBadgeText();
-			DongflixToast.show(WatchActivity.this, "Jaringan lambat, otomatis ke " + qualityNames.get(lowerIdx));
+			String nextLabel = StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(lowerIdx));
+			DongflixToast.show(WatchActivity.this, "Jaringan lambat, otomatis ke " + nextLabel);
 			playVideoUrl(qualityUrls.get(lowerIdx), currentPos);
 		}
 	}
 
 	public void updateQualityBadgeText() {
 		if (btnQuality == null || qualityNames.isEmpty()) return;
+		String activeRes = StreamExtractorHelper.normalizeResolutionToP(qualityNames.get(selectedQualityIndex));
 		if (isAutoQualityMode) {
-			String activeRes = qualityNames.get(selectedQualityIndex);
-			if (activeRes.equalsIgnoreCase("Auto") || activeRes.equalsIgnoreCase("Default")) {
-				btnQuality.setText("Auto");
-			} else {
-				btnQuality.setText("Auto (" + activeRes + ")");
-			}
+			btnQuality.setText("Auto (" + activeRes + ")");
 		} else {
-			btnQuality.setText(qualityNames.get(selectedQualityIndex));
+			btnQuality.setText(activeRes);
 		}
 	}
 
@@ -4164,7 +4132,6 @@ public class WatchActivity extends AppCompatActivity {
 		}
 	}
 
-	// Sniffer tersembunyi di belakang player agar OK.ru / server embed tetap masuk ke native MediaPlayer tanpa menimpa layar
 	private void sniffStreamForPlayer(final String embedUrl, final int seekOnReadyMs) {
 		runOnUiThread(new Runnable() {
 			@Override
@@ -4205,7 +4172,7 @@ public class WatchActivity extends AppCompatActivity {
 													stopHiddenSniffer();
 													qualityNames.clear();
 													qualityUrls.clear();
-													qualityNames.add("Auto");
+													qualityNames.add(StreamExtractorHelper.normalizeResolutionToP(reqUrl));
 													qualityUrls.add(reqUrl);
 													isAutoQualityMode = true;
 													selectedQualityIndex = 0;
@@ -4231,7 +4198,7 @@ public class WatchActivity extends AppCompatActivity {
 											btnPlay.setEnabled(true);
 											btnPlay.setAlpha(1.0f);
 										}
-										DongflixToast.show(WatchActivity.this, "Stream OK.ru tidak ditemukan, coba server lain");
+										DongflixToast.show(WatchActivity.this, "Stream tidak ditemukan, coba server lain");
 									}
 								}
 							};
@@ -4239,7 +4206,7 @@ public class WatchActivity extends AppCompatActivity {
 						}
 
 						Map<String, String> extraHeaders = new HashMap<>();
-						extraHeaders.put("Referer", "https://ok.ru/");
+						extraHeaders.put("Referer", currentStreamReferer.isEmpty() ? "https://ok.ru/" : currentStreamReferer);
 						hiddenSnifferWebView.loadUrl(embedUrl, extraHeaders);
 					}
 				} catch (Exception e) {
@@ -5310,119 +5277,6 @@ public class WatchActivity extends AppCompatActivity {
 		updateEpisodeNavButtons();
 	}
 
-	private String fetchHttpString(String targetUrl, String referer, boolean saveDmCookie) throws Exception {
-		String currentUrl = targetUrl;
-		HttpURLConnection conn = null;
-
-		for (int redirectCount = 0; redirectCount < 6; redirectCount++) {
-			URL url = new URL(currentUrl);
-			conn = (HttpURLConnection) url.openConnection();
-			conn.setRequestMethod("GET");
-			conn.setConnectTimeout(10000);
-			conn.setReadTimeout(10000);
-			conn.setInstanceFollowRedirects(false);
-			conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-			conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8");
-			conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9,id;q=0.8");
-			conn.setRequestProperty("Sec-Fetch-Dest", "iframe");
-			conn.setRequestProperty("Sec-Fetch-Mode", "navigate");
-			if (referer != null && !referer.isEmpty()) {
-				conn.setRequestProperty("Referer", referer);
-			}
-
-			if (saveDmCookie) {
-				Map<String, List<String>> headerFields = conn.getHeaderFields();
-				List<String> cookiesHeader = headerFields.get("Set-Cookie");
-				if (cookiesHeader != null && !cookiesHeader.isEmpty()) {
-					StringBuilder cookieSb = new StringBuilder();
-					for (String c : cookiesHeader) {
-						String mainPart = c.split(";")[0];
-						if (cookieSb.length() > 0) cookieSb.append("; ");
-						cookieSb.append(mainPart);
-					}
-					dmSessionCookie = cookieSb.toString();
-				}
-			}
-
-			int code = conn.getResponseCode();
-			if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_SEE_OTHER || code == 307 || code == 308) {
-				String loc = conn.getHeaderField("Location");
-				conn.disconnect();
-				if (loc == null || loc.isEmpty()) break;
-				if (loc.startsWith("//")) loc = "https:" + loc;
-				else if (loc.startsWith("/")) loc = url.getProtocol() + "://" + url.getHost() + loc;
-				currentUrl = loc;
-				continue;
-			}
-			break;
-		}
-
-		if (conn == null) return "";
-		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = reader.readLine()) != null) {
-			sb.append(line).append("\n");
-		}
-		reader.close();
-		conn.disconnect();
-		return sb.toString();
-	}
-
-	private String postJsonHttp(String apiUrl, String jsonPayload) throws Exception {
-		URL url = new URL(apiUrl);
-		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-		conn.setRequestMethod("POST");
-		conn.setConnectTimeout(10000);
-		conn.setReadTimeout(10000);
-		conn.setDoOutput(true);
-		conn.setRequestProperty("Content-Type", "application/json");
-		conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
-
-		OutputStream os = conn.getOutputStream();
-		os.write(jsonPayload.getBytes("UTF-8"));
-		os.flush();
-		os.close();
-
-		BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-		StringBuilder sb = new StringBuilder();
-		String line;
-		while ((line = reader.readLine()) != null) {
-			sb.append(line);
-		}
-		reader.close();
-		conn.disconnect();
-		return sb.toString();
-	}
-
-	private String unpackDeanEdwards(String html) {
-		try {
-			Pattern p = Pattern.compile("eval\\(function\\(p,a,c,k,e,[dr]\\)\\{.*?\\}\\('(.*?)',(\\d+),(\\d+),'(.*?)'\\.split\\('\\|'\\)", Pattern.DOTALL);
-			Matcher m = p.matcher(html);
-			if (m.find()) {
-				String payload = m.group(1);
-				int radix = Integer.parseInt(m.group(2));
-				String[] symtab = m.group(4).split("\\|");
-
-				Pattern wordPat = Pattern.compile("\\b\\w+\\b");
-				Matcher wm = wordPat.matcher(payload);
-				StringBuffer sb = new StringBuffer();
-				while (wm.find()) {
-					String word = wm.group();
-					try {
-						int idx = Integer.parseInt(word, radix);
-						if (idx >= 0 && idx < symtab.length && !symtab[idx].isEmpty()) {
-							wm.appendReplacement(sb, Matcher.quoteReplacement(symtab[idx]));
-						}
-					} catch (Exception ignored) {}
-				}
-				wm.appendTail(sb);
-				return sb.toString();
-			}
-		} catch (Exception ignored) {}
-		return "";
-	}
-
 	public void extractStream(final String server, final String targetUrl) {
 		extractStream(server, targetUrl, 0);
 	}
@@ -5430,566 +5284,34 @@ public class WatchActivity extends AppCompatActivity {
 	public void extractStream(final String server, final String targetUrl, final int seekOnReadyMs) {
 		if (targetUrl == null || targetUrl.trim().isEmpty()) return;
 
-		String cleanUrl = targetUrl.trim();
-		if (cleanUrl.startsWith("//")) {
-			cleanUrl = "https:" + cleanUrl;
-		} else if (!cleanUrl.startsWith("http")) {
-			cleanUrl = "https://" + cleanUrl;
-		}
-		final String finalTargetUrl = cleanUrl;
-		final String serverKey = (server != null) ? server.trim().toLowerCase() : "";
-		final String lowerUrl = finalTargetUrl.toLowerCase();
-		currentStreamReferer = finalTargetUrl;
-
-		if (serverKey.contains("ok") || serverKey.contains("odnoklassniki") || lowerUrl.contains("ok.ru")) {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						String okPageUrl = finalTargetUrl;
-						if (okPageUrl.contains("ok.ru/videoembed/")) {
-							String vidId = okPageUrl.substring(okPageUrl.lastIndexOf("/") + 1).replaceAll("[^0-9]", "");
-							if (!vidId.isEmpty()) {
-								okPageUrl = "https://m.ok.ru/video/" + vidId;
-							}
-						}
-
-						String html = fetchHttpString(okPageUrl, "https://ok.ru/", false);
-						if (html.isEmpty() && !okPageUrl.equals(finalTargetUrl)) {
-							html = fetchHttpString(finalTargetUrl, "https://ok.ru/", false);
-						}
-
-						String foundOptions = "";
-						int idx = html.indexOf("data-options=");
-						if (idx != -1) {
-							int qStart = idx + 13;
-							char quote = html.charAt(qStart);
-							int qEnd = html.indexOf(quote, qStart + 1);
-							if (qEnd != -1) {
-								foundOptions = html.substring(qStart + 1, qEnd);
-							}
-						}
-
-						final ArrayList<String> tempNames = new ArrayList<>();
-						final ArrayList<String> tempUrls = new ArrayList<>();
-
-						if (!foundOptions.isEmpty()) {
-							String cleanJson = foundOptions
-								.replace("&quot;", "\"")
-								.replace("&amp;", "&")
-								.replace("&#39;", "'")
-								.replace("&lt;", "<")
-								.replace("&gt;", ">");
-
-							JSONObject optJson = new JSONObject(cleanJson);
-							JSONObject metadata = null;
-							if (optJson.has("flashvars")) {
-								JSONObject fv = optJson.getJSONObject("flashvars");
-								if (fv.has("metadata")) {
-									Object mObj = fv.get("metadata");
-									metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
-								}
-							} else if (optJson.has("metadata")) {
-								Object mObj = optJson.get("metadata");
-								metadata = (mObj instanceof JSONObject) ? (JSONObject) mObj : new JSONObject(mObj.toString());
-							}
-
-							if (metadata != null && metadata.has("videos")) {
-								JSONArray videos = metadata.getJSONArray("videos");
-								for (int k = 0; k < videos.length(); k++) {
-									JSONObject v = videos.getJSONObject(k);
-									if (v.has("url")) {
-										String rawUrl = v.getString("url").replace("\\/", "/").replace("\\u0026", "&");
-										if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
-										String rName = v.optString("name", "Resolusi " + (k + 1)).toUpperCase();
-
-										if (rName.equalsIgnoreCase("mobile")) rName = "144P";
-										if (rName.equalsIgnoreCase("lowest")) rName = "240P";
-										if (rName.equalsIgnoreCase("low")) rName = "360P";
-										if (rName.equalsIgnoreCase("medium")) rName = "480P";
-										if (rName.equalsIgnoreCase("high")) rName = "720P";
-										if (rName.equalsIgnoreCase("hd")) rName = "1080P";
-
-										tempNames.add(rName);
-										tempUrls.add(rawUrl);
-									}
-								}
-							}
-						}
-
-						if (tempUrls.isEmpty() && !html.isEmpty()) {
-							String unescaped = html.replace("\\/", "/").replace("\\u0026", "&").replace("&amp;", "&");
-							Matcher mOk = Pattern.compile("(https?://[^\"'\\s<>]*(?:okcdn\\.ru|\\.mp4|\\.m3u8)[^\"'\\s<>]*)").matcher(unescaped);
-							while (mOk.find()) {
-								String u = mOk.group(1);
-								if (!tempUrls.contains(u)) {
-									tempNames.add("Resolusi " + (tempUrls.size() + 1));
-									tempUrls.add(u);
-								}
-								if (tempUrls.size() >= 4) break;
-							}
-						}
-
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (!tempUrls.isEmpty()) {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.addAll(tempNames);
-									qualityUrls.addAll(tempUrls);
-
-									isAutoQualityMode = true;
-									selectedQualityIndex = getRecommendedQualityIndex();
-									updateQualityBadgeText();
-
-									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
-								} else {
-									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-								}
-							}
-						});
-					} catch (Exception e) {
-						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-					}
+		StreamExtractorHelper.extract(server, targetUrl, new StreamExtractorHelper.ExtractionCallback() {
+			@Override
+			public void onSuccess(ArrayList<String> qualityLabels, ArrayList<String> streamUrls, String referer, String dmCookie) {
+				if (isFinishing() || isDestroyed()) return;
+				currentStreamReferer = referer != null ? referer : "";
+				if (dmCookie != null && !dmCookie.isEmpty()) {
+					dmSessionCookie = dmCookie;
 				}
-			}).start();
 
-		} else if (serverKey.contains("daily") || lowerUrl.contains("dailymotion") || lowerUrl.contains("dai.ly")) {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						String dailyId = "";
-						Uri parsedUri = Uri.parse(finalTargetUrl);
-						if (parsedUri.getQueryParameter("id") != null && !parsedUri.getQueryParameter("id").isEmpty()) {
-							dailyId = parsedUri.getQueryParameter("id");
-						} else if (parsedUri.getQueryParameter("video") != null && !parsedUri.getQueryParameter("video").isEmpty()) {
-							dailyId = parsedUri.getQueryParameter("video");
-						} else if (finalTargetUrl.contains("/video/")) {
-							String[] parts = finalTargetUrl.split("/video/");
-							if (parts.length > 1) dailyId = parts[1].split("[?&#_]")[0];
-						} else if (finalTargetUrl.contains("dai.ly/")) {
-							String[] parts = finalTargetUrl.split("dai.ly/");
-							if (parts.length > 1) dailyId = parts[1].split("[?&#]")[0];
-						} else {
-							String cPath = finalTargetUrl.split("\\?")[0];
-							dailyId = cPath.substring(cPath.lastIndexOf('/') + 1);
-						}
+				qualityNames.clear();
+				qualityUrls.clear();
+				qualityNames.addAll(qualityLabels);
+				qualityUrls.addAll(streamUrls);
 
-						if (dailyId == null || dailyId.trim().isEmpty()) {
-							throw new Exception("ID Dailymotion kosong");
-						}
+				isAutoQualityMode = true;
+				selectedQualityIndex = getRecommendedQualityIndex();
+				updateQualityBadgeText();
 
-						final String cleanDmId = dailyId.trim();
-						String dmApiUrl = "https://www.dailymotion.com/player/metadata/video/" + cleanDmId + "?embedder=https%3A%2F%2Fwww.dailymotion.com%2F&app=com.dailymotion.neon";
-						String resBody = fetchHttpString(dmApiUrl, "https://www.dailymotion.com/", true);
+				playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
+			}
 
-						final ArrayList<String> dmNames = new ArrayList<>();
-						final ArrayList<String> dmUrls = new ArrayList<>();
-
-						if (!resBody.isEmpty()) {
-							JSONObject metaObj = new JSONObject(resBody);
-							if (metaObj.has("qualities")) {
-								JSONObject qualities = metaObj.getJSONObject("qualities");
-								String[] checkKeys = new String[]{"1080", "720", "480", "380", "240", "auto"};
-
-								for (String qKey : checkKeys) {
-									if (qualities.has(qKey)) {
-										JSONArray qArr = qualities.optJSONArray(qKey);
-										if (qArr != null) {
-											String chosenUrl = "";
-											for (int idx = 0; idx < qArr.length(); idx++) {
-												JSONObject itemQ = qArr.getJSONObject(idx);
-												String mime = itemQ.optString("type", "");
-												String u = itemQ.optString("url", "");
-												if (!u.isEmpty() && mime.contains("mp4")) {
-													chosenUrl = u;
-													break;
-												}
-											}
-											if (chosenUrl.isEmpty() && qArr.length() > 0) {
-												chosenUrl = qArr.getJSONObject(0).optString("url", "");
-											}
-											if (!chosenUrl.isEmpty()) {
-												String label = qKey.equalsIgnoreCase("auto") ? "Auto" : qKey + "P";
-												dmNames.add(label);
-												dmUrls.add(chosenUrl);
-											}
-										}
-									}
-								}
-							}
-						}
-
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (!dmUrls.isEmpty()) {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.addAll(dmNames);
-									qualityUrls.addAll(dmUrls);
-
-									isAutoQualityMode = true;
-									selectedQualityIndex = getRecommendedQualityIndex();
-									updateQualityBadgeText();
-
-									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
-								} else {
-									sniffStreamForPlayer("https://geo.dailymotion.com/player.html?video=" + cleanDmId, seekOnReadyMs);
-								}
-							}
-						});
-					} catch (Exception e) {
-						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-					}
-				}
-			}).start();
-
-		} else if (serverKey.contains("d-tube") || serverKey.contains("dtube") || lowerUrl.contains("d.tube")) {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						String streamFound = "";
-
-						Pattern pDirectQm = Pattern.compile("(Qm[a-zA-Z0-9]{44})");
-						Matcher mDirectQm = pDirectQm.matcher(finalTargetUrl);
-						if (mDirectQm.find()) {
-							streamFound = "https://dweb.link/ipfs/" + mDirectQm.group(1);
-						}
-
-						if (streamFound.isEmpty() && finalTargetUrl.contains("/v/")) {
-							String afterV = finalTargetUrl.substring(finalTargetUrl.indexOf("/v/") + 3).split("[?#]")[0];
-							String[] parts = afterV.split("/");
-							if (parts.length >= 2) {
-								String author = parts[0].trim();
-								String permlink = parts[1].trim();
-								String rpcBody = "{\"jsonrpc\":\"2.0\",\"method\":\"condenser_api.get_content\",\"params\":[\"" + author + "\",\"" + permlink + "\"],\"id\":1}";
-								String rpcRes = postJsonHttp("https://api.hive.blog", rpcBody);
-								JSONObject rpcJson = new JSONObject(rpcRes);
-								if (rpcJson.has("result")) {
-									JSONObject resObj = rpcJson.getJSONObject("result");
-									String metaStr = resObj.optString("json_metadata", "");
-									if (!metaStr.isEmpty()) {
-										JSONObject metaJson = new JSONObject(metaStr);
-										if (metaJson.has("video")) {
-											JSONObject videoObj = metaJson.getJSONObject("video");
-											if (videoObj.has("files")) {
-												JSONObject filesObj = videoObj.getJSONObject("files");
-												if (filesObj.has("ipfs")) {
-													JSONObject ipfsObj = filesObj.getJSONObject("ipfs");
-													if (ipfsObj.has("vid")) {
-														JSONObject vidObj = ipfsObj.getJSONObject("vid");
-														String hash = vidObj.optString("720", vidObj.optString("480", vidObj.optString("src", "")));
-														if (!hash.isEmpty()) {
-															streamFound = "https://dweb.link/ipfs/" + hash;
-														}
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-
-						if (streamFound.isEmpty()) {
-							String html = fetchHttpString(finalTargetUrl, "https://emb.d.tube/", false);
-							Matcher mQm = pDirectQm.matcher(html);
-							if (mQm.find()) {
-								streamFound = "https://dweb.link/ipfs/" + mQm.group(1);
-							}
-						}
-
-						final String finalDtubeUrl = streamFound;
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (!finalDtubeUrl.isEmpty()) {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.add("Default");
-									qualityUrls.add(finalDtubeUrl);
-									isAutoQualityMode = true;
-									selectedQualityIndex = 0;
-									updateQualityBadgeText();
-
-									playVideoUrl(finalDtubeUrl, seekOnReadyMs);
-								} else {
-									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-								}
-							}
-						});
-					} catch (Exception e) {
-						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-					}
-				}
-			}).start();
-
-		} else if (serverKey.contains("rumble") || lowerUrl.contains("rumble.com")) {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						String embedId = "";
-						if (finalTargetUrl.contains("/embed/")) {
-							String[] parts = finalTargetUrl.split("/embed/");
-							if (parts.length > 1) embedId = parts[1].split("[/?#]")[0];
-						}
-
-						final ArrayList<String> rNames = new ArrayList<>();
-						final ArrayList<String> rUrls = new ArrayList<>();
-
-						if (embedId.isEmpty()) {
-							String pageHtml = fetchHttpString(finalTargetUrl, "https://rumble.com/", false);
-							Pattern pEmbed = Pattern.compile("rumble\\.com/embed/([a-zA-Z0-9]+)");
-							Matcher mEmbed = pEmbed.matcher(pageHtml);
-							if (mEmbed.find()) {
-								embedId = mEmbed.group(1);
-							}
-						}
-
-						if (!embedId.isEmpty()) {
-							String apiUrl = "https://rumble.com/embedJS/u3/?request=video&ver=2&v=" + embedId;
-							String jsonStr = fetchHttpString(apiUrl, "https://rumble.com/", false);
-							JSONObject rootObj = new JSONObject(jsonStr);
-
-							if (rootObj.has("ua")) {
-								JSONObject uaObj = rootObj.getJSONObject("ua");
-								String[] resKeys = new String[]{"1080", "720", "480", "360", "240"};
-
-								if (uaObj.has("mp4")) {
-									JSONObject mp4Obj = uaObj.getJSONObject("mp4");
-									for (String rk : resKeys) {
-										if (mp4Obj.has(rk)) {
-											String u = mp4Obj.getJSONObject(rk).optString("url");
-											if (!u.isEmpty()) {
-												rNames.add(rk + "P");
-												rUrls.add(u);
-											}
-										}
-									}
-								}
-
-								if (rUrls.isEmpty()) {
-									for (String rk : resKeys) {
-										if (uaObj.has(rk)) {
-											JSONObject resObj = uaObj.getJSONObject(rk);
-											if (resObj != null) {
-												String u = resObj.optString("url");
-												if (!u.isEmpty()) {
-													rNames.add(rk + "P");
-													rUrls.add(u);
-												}
-											}
-										}
-									}
-								}
-
-								if (rUrls.isEmpty() && uaObj.has("hls")) {
-									JSONObject hlsObj = uaObj.getJSONObject("hls");
-									if (hlsObj.has("auto")) {
-										String u = hlsObj.getJSONObject("auto").optString("url");
-										if (!u.isEmpty()) {
-											rNames.add("Auto");
-											rUrls.add(u);
-										}
-									}
-								}
-							}
-						}
-
-						if (rUrls.isEmpty()) {
-							String html = fetchHttpString(finalTargetUrl, "https://rumble.com/", false);
-							Pattern pMp4 = Pattern.compile("(https?://[a-zA-Z0-9.-]+\\.rumble\\.com/[^\"'\\s]+\\.mp4)");
-							Matcher mMp4 = pMp4.matcher(html);
-							if (mMp4.find()) {
-								rNames.add("Default");
-								rUrls.add(mMp4.group(1));
-							}
-						}
-
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (!rUrls.isEmpty()) {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.addAll(rNames);
-									qualityUrls.addAll(rUrls);
-
-									isAutoQualityMode = true;
-									selectedQualityIndex = getRecommendedQualityIndex();
-									updateQualityBadgeText();
-
-									playVideoUrl(qualityUrls.get(selectedQualityIndex), seekOnReadyMs);
-								} else {
-									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-								}
-							}
-						});
-					} catch (Exception e) {
-						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-					}
-				}
-			}).start();
-
-		} else if (serverKey.contains("odysee") || lowerUrl.contains("odysee.com") || lowerUrl.contains("odycdn.com")) {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						String streamOdysee = "";
-						if (finalTargetUrl.contains("odycdn.com") && (finalTargetUrl.contains(".mp4") || finalTargetUrl.contains(".m3u8") || finalTargetUrl.contains("/streams/"))) {
-							streamOdysee = finalTargetUrl;
-						} else if (finalTargetUrl.contains("signature=")) {
-							Uri uri = Uri.parse(finalTargetUrl);
-							String sig = uri.getQueryParameter("signature");
-							String sigTs = uri.getQueryParameter("signature_ts");
-							String path = uri.getPath();
-							if (path != null && path.contains("/embed/")) {
-								String cleanClaim = path.replace("/$/embed/", "").replace("/embed/", "");
-								streamOdysee = "https://player.odycdn.com/api/v4/streams/free/" + cleanClaim + "/" + sig + "/" + sigTs;
-							}
-						}
-
-						if (streamOdysee.isEmpty()) {
-							String html = fetchHttpString(finalTargetUrl, "https://odysee.com/", false);
-							Pattern pOdy = Pattern.compile("(https?://player\\.odycdn\\.com/api/v4/streams/[^\"'\\s]+)");
-							Matcher mOdy = pOdy.matcher(html);
-							if (mOdy.find()) {
-								streamOdysee = mOdy.group(1).replace("\\/", "/");
-							} else {
-								Pattern pMedia = Pattern.compile("(https?://[^\"'\\s]+\\.(?:mp4|m3u8)[^\"'\\s]*)");
-								Matcher mMedia = pMedia.matcher(html);
-								if (mMedia.find()) {
-									streamOdysee = mMedia.group(1).replace("\\/", "/");
-								}
-							}
-						}
-
-						if (streamOdysee.isEmpty() && finalTargetUrl.contains("/embed/")) {
-							String afterEmbed = finalTargetUrl.substring(finalTargetUrl.indexOf("/embed/") + 7).split("[?#]")[0];
-							String lbryUri = "lbry://" + afterEmbed.replace("/", "#");
-							String lbryReq = "{\"method\":\"get\",\"params\":{\"uri\":\"" + lbryUri + "\"}}";
-							String lbryRes = postJsonHttp("https://api.na-backend.odysee.com/api/v1/proxy", lbryReq);
-							JSONObject lbryJson = new JSONObject(lbryRes);
-							if (lbryJson.has("result")) {
-								streamOdysee = lbryJson.getJSONObject("result").optString("streaming_url", "");
-							}
-						}
-
-						final String finalOdyUrl = streamOdysee;
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (!finalOdyUrl.isEmpty()) {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.add("Default");
-									qualityUrls.add(finalOdyUrl);
-									isAutoQualityMode = true;
-									selectedQualityIndex = 0;
-									updateQualityBadgeText();
-
-									playVideoUrl(finalOdyUrl, seekOnReadyMs);
-								} else {
-									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-								}
-							}
-						});
-					} catch (Exception e) {
-						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-					}
-				}
-			}).start();
-
-		} else {
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						if (lowerUrl.contains(".mp4") || lowerUrl.contains(".m3u8")) {
-							new Handler(Looper.getMainLooper()).post(new Runnable() {
-								@Override
-								public void run() {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.add("Default");
-									qualityUrls.add(finalTargetUrl);
-									isAutoQualityMode = true;
-									selectedQualityIndex = 0;
-									updateQualityBadgeText();
-
-									playVideoUrl(finalTargetUrl, seekOnReadyMs);
-								}
-							});
-							return;
-						}
-
-						String html = fetchHttpString(finalTargetUrl, finalTargetUrl, false);
-						String unpacked = unpackDeanEdwards(html);
-						String combinedSource = html + "\n" + unpacked;
-						String streamFound = "";
-
-						Pattern pSource = Pattern.compile("<(?:source|video)[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-						Matcher mSource = pSource.matcher(combinedSource);
-						if (mSource.find()) {
-							streamFound = mSource.group(1).replace("&amp;", "&");
-						}
-
-						if (streamFound.isEmpty()) {
-							Pattern pMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE);
-							Matcher mMedia = pMedia.matcher(combinedSource);
-							if (mMedia.find()) {
-								streamFound = mMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
-							}
-						}
-
-						if (streamFound.isEmpty()) {
-							Pattern pIframe = Pattern.compile("<iframe[^>]+src=[\"'](https?://[^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-							Matcher mIframe = pIframe.matcher(combinedSource);
-							if (mIframe.find()) {
-								String innerUrl = mIframe.group(1).replace("&amp;", "&");
-								currentStreamReferer = innerUrl;
-								String innerHtml = fetchHttpString(innerUrl, finalTargetUrl, false);
-								String innerUnpacked = unpackDeanEdwards(innerHtml);
-								String innerCombined = innerHtml + "\n" + innerUnpacked;
-								Pattern pInnerMedia = Pattern.compile("(https?:\\\\?/\\\\?/[^\"'\\s<>]+\\.(?:m3u8|mp4)[^\"'\\s<>]*)", Pattern.CASE_INSENSITIVE);
-								Matcher mInnerMedia = pInnerMedia.matcher(innerCombined);
-								if (mInnerMedia.find()) {
-									streamFound = mInnerMedia.group(1).replace("\\/", "/").replace("\\u0026", "&");
-								}
-							}
-						}
-
-						final String finalGenericUrl = streamFound;
-						new Handler(Looper.getMainLooper()).post(new Runnable() {
-							@Override
-							public void run() {
-								if (!finalGenericUrl.isEmpty()) {
-									qualityNames.clear();
-									qualityUrls.clear();
-									qualityNames.add("Default");
-									qualityUrls.add(finalGenericUrl);
-									isAutoQualityMode = true;
-									selectedQualityIndex = 0;
-									updateQualityBadgeText();
-
-									playVideoUrl(finalGenericUrl, seekOnReadyMs);
-								} else {
-									sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-								}
-							}
-						});
-					} catch (Exception e) {
-						sniffStreamForPlayer(finalTargetUrl, seekOnReadyMs);
-					}
-				}
-			}).start();
-		}
+			@Override
+			public void onNeedSniffer(String snifferUrl, String referer) {
+				if (isFinishing() || isDestroyed()) return;
+				currentStreamReferer = referer != null ? referer : "";
+				sniffStreamForPlayer(snifferUrl, seekOnReadyMs);
+			}
+		});
 	}
 
 	public class ShimmerEpisodeAdapter extends RecyclerView.Adapter<ShimmerEpisodeAdapter.ViewHolder> {
