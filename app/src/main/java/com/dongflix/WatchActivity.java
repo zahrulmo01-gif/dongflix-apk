@@ -239,8 +239,9 @@ public class WatchActivity extends AppCompatActivity {
 		void onStickerPicked(String url);
 	}
 
-	private interface OnReplyClickListener {
+	private interface OnCommentActionListener {
 		void onReplyRequested(String parentCommentId, String mentionTag);
+		void onEditRequested(String commentId, String oldText);
 	}
 
 	private interface OnSheetItemClickListener {
@@ -534,7 +535,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable sheetBg = new GradientDrawable();
 		sheetBg.setColor(Color.parseColor("#0B0D11"));
 		sheetBg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
-		sheetBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
 		root.setBackground(sheetBg);
 
 		View handle = new View(this);
@@ -605,7 +605,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable customBoxBg = new GradientDrawable();
 		customBoxBg.setColor(Color.parseColor("#181B22"));
 		customBoxBg.setCornerRadius(14 * d);
-		customBoxBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
 		customBox.setBackground(customBoxBg);
 
 		final EditText etCustomReason = new EditText(this);
@@ -633,13 +632,7 @@ public class WatchActivity extends AppCompatActivity {
 
 					GradientDrawable rowBg = new GradientDrawable();
 					rowBg.setCornerRadius(12 * d);
-					if (active) {
-						rowBg.setColor(Color.parseColor("#181C26"));
-						rowBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
-					} else {
-						rowBg.setColor(Color.parseColor("#12141A"));
-						rowBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-					}
+					rowBg.setColor(active ? Color.parseColor("#181C26") : Color.parseColor("#12141A"));
 					row.setBackground(rowBg);
 
 					lbl.setTextColor(active ? Color.WHITE : Color.parseColor("#E5E7EB"));
@@ -654,8 +647,7 @@ public class WatchActivity extends AppCompatActivity {
 					} else {
 						GradientDrawable cBg = new GradientDrawable();
 						cBg.setShape(GradientDrawable.OVAL);
-						cBg.setColor(Color.TRANSPARENT);
-						cBg.setStroke(Math.max(1, (int) (1.5f * d)), Color.parseColor("#475569"));
+						cBg.setColor(Color.parseColor("#1E222B"));
 						badge.setBackground(cBg);
 						badge.setText("");
 					}
@@ -729,7 +721,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable cancelBg = new GradientDrawable();
 		cancelBg.setColor(Color.parseColor("#181B22"));
 		cancelBg.setCornerRadius(1000f);
-		cancelBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
 		btnCancel.setBackground(cancelBg);
 		btnCancel.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -792,42 +783,15 @@ public class WatchActivity extends AppCompatActivity {
 		sheet.show();
 	}
 
-	private void sendReportToTelegramBot(final String reason, final String extraNote) {
+	private void dispatchTelegramMessage(final String fullMessage) {
 		DongflixToast.show(this, "Mengirim laporan...");
-
-		final String reporterEmail = getReporterEmail();
-		final String titleStr = getCurrentTitleForDownload();
-		final String epStr = getCurrentEpisodeLabelForDownload();
-		final String serverStr = (textActionServer != null && !textActionServer.getText().toString().trim().isEmpty())
-			? textActionServer.getText().toString().trim()
-			: "Default";
-		final String urlStr = (currentPlayingUrl != null && !currentPlayingUrl.trim().isEmpty())
-			? currentPlayingUrl.trim()
-			: (currentEpisodeServerUrls != null && selectedServerIndex >= 0 && selectedServerIndex < currentEpisodeServerUrls.size()
-				? currentEpisodeServerUrls.get(selectedServerIndex) : "-");
-
-		final StringBuilder msg = new StringBuilder();
-		msg.append("LAPORAN EPISODE DONGFLIX\n");
-		msg.append("- Email Pelapor: ").append(reporterEmail).append("\n");
-		msg.append("- Judul: ").append(titleStr).append("\n");
-		msg.append("- Slug: ").append(currentSlug.isEmpty() ? "-" : currentSlug).append("\n");
-		msg.append("- Episode: ").append(epStr).append("\n");
-		msg.append("- Server: ").append(serverStr).append("\n");
-		msg.append("- Alasan: ").append(reason).append("\n");
-		if (!extraNote.isEmpty()) {
-			msg.append("- Detail: ").append(extraNote).append("\n");
-		}
-		if (!urlStr.isEmpty() && !"-".equals(urlStr)) {
-			msg.append("- URL: ").append(urlStr);
-		}
-
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
 				boolean ok = false;
 				HttpURLConnection conn = null;
 				try {
-					String encodedText = URLEncoder.encode(msg.toString(), "UTF-8");
+					String encodedText = URLEncoder.encode(fullMessage, "UTF-8");
 					String apiUrl = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN
 						+ "/sendMessage?chat_id=" + URLEncoder.encode(TELEGRAM_CHAT_ID, "UTF-8")
 						+ "&text=" + encodedText;
@@ -858,6 +822,62 @@ public class WatchActivity extends AppCompatActivity {
 				});
 			}
 		}).start();
+	}
+
+	private void sendReportToTelegramBot(final String reason, final String extraNote) {
+		final String reporterEmail = getReporterEmail();
+		final String titleStr = getCurrentTitleForDownload();
+		final String epStr = getCurrentEpisodeLabelForDownload();
+		final String serverStr = (textActionServer != null && !textActionServer.getText().toString().trim().isEmpty())
+			? textActionServer.getText().toString().trim()
+			: "Default";
+		final String urlStr = (currentPlayingUrl != null && !currentPlayingUrl.trim().isEmpty())
+			? currentPlayingUrl.trim()
+			: (currentEpisodeServerUrls != null && selectedServerIndex >= 0 && selectedServerIndex < currentEpisodeServerUrls.size()
+				? currentEpisodeServerUrls.get(selectedServerIndex) : "-");
+
+		final StringBuilder msg = new StringBuilder();
+		msg.append("🚩 LAPORAN EPISODE DONGFLIX\n\n");
+		msg.append("📧 Email Pelapor: ").append(reporterEmail).append("\n");
+		msg.append("🎬 Judul: ").append(titleStr).append("\n");
+		msg.append("🔗 Slug: ").append(currentSlug.isEmpty() ? "-" : currentSlug).append("\n");
+		msg.append("📺 Episode: ").append(epStr).append("\n");
+		msg.append("🖥 Server: ").append(serverStr).append("\n");
+		msg.append("⚠️ Alasan: ").append(reason).append("\n");
+		if (!extraNote.isEmpty()) {
+			msg.append("📝 Detail: ").append(extraNote).append("\n");
+		}
+		if (!urlStr.isEmpty() && !"-".equals(urlStr)) {
+			msg.append("🌐 URL: ").append(urlStr);
+		}
+
+		dispatchTelegramMessage(msg.toString());
+	}
+
+	private void sendCommentReportToTelegramBot(
+		final String commentId,
+		final String authorName,
+		final String authorEmail,
+		final String commentText,
+		final String stickerUrl
+	) {
+		final String reporterEmail = getReporterEmail();
+		final String titleStr = getCurrentTitleForDownload();
+
+		final StringBuilder msg = new StringBuilder();
+		msg.append("💬 LAPORAN KOMENTAR DONGFLIX\n\n");
+		msg.append("📧 Email Pelapor: ").append(reporterEmail).append("\n");
+		msg.append("🎬 Judul Donghua: ").append(titleStr).append("\n");
+		msg.append("🔗 Slug: ").append(currentSlug.isEmpty() ? "-" : currentSlug).append("\n");
+		msg.append("🆔 ID Komentar: ").append(commentId.isEmpty() ? "-" : commentId).append("\n");
+		msg.append("👤 Penulis Komentar: ").append(authorName == null || authorName.isEmpty() ? "-" : authorName).append("\n");
+		msg.append("📩 Email Penulis: ").append(authorEmail == null || authorEmail.isEmpty() ? "-" : authorEmail).append("\n");
+		msg.append("💭 Isi Komentar: ").append(commentText == null || commentText.trim().isEmpty() ? "(Hanya Stiker)" : commentText.trim());
+		if (stickerUrl != null && !stickerUrl.trim().isEmpty()) {
+			msg.append("\n🖼 Stiker: ").append(stickerUrl.trim());
+		}
+
+		dispatchTelegramMessage(msg.toString());
 	}
 
 	private Drawable createActionMenuIcon(final int type, final int iconColor, final float strokePx) {
@@ -976,133 +996,6 @@ public class WatchActivity extends AppCompatActivity {
 		return row;
 	}
 
-	private void showEditCommentDialog(final String commentId, final String oldText) {
-		if (commentId == null || commentId.trim().isEmpty() || currentSlug.isEmpty()) return;
-		final float d = getResources().getDisplayMetrics().density;
-
-		final Dialog dialog = new Dialog(this);
-		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-		LinearLayout card = new LinearLayout(this);
-		card.setOrientation(LinearLayout.VERTICAL);
-		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
-
-		GradientDrawable cardBg = new GradientDrawable();
-		cardBg.setColor(Color.parseColor("#12141A"));
-		cardBg.setCornerRadius(20 * d);
-		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
-		card.setBackground(cardBg);
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Edit komentar");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f);
-		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		card.addView(tvTitle);
-
-		final EditText etEdit = new EditText(this);
-		etEdit.setText(oldText != null ? oldText : "");
-		etEdit.setSelection(etEdit.getText().length());
-		etEdit.setHint("Tulis komentar...");
-		etEdit.setHintTextColor(Color.parseColor("#8E8E93"));
-		etEdit.setTextColor(Color.WHITE);
-		etEdit.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		etEdit.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		etEdit.setMinLines(2);
-		etEdit.setMaxLines(5);
-		etEdit.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
-		LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		editLp.topMargin = (int) (12 * d);
-		editLp.bottomMargin = (int) (18 * d);
-		etEdit.setLayoutParams(editLp);
-		GradientDrawable editBg = new GradientDrawable();
-		editBg.setColor(Color.parseColor("#181B22"));
-		editBg.setCornerRadius(14 * d);
-		editBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-		etEdit.setBackground(editBg);
-		card.addView(etEdit);
-
-		LinearLayout btnRow = new LinearLayout(this);
-		btnRow.setOrientation(LinearLayout.HORIZONTAL);
-		btnRow.setGravity(Gravity.END);
-		btnRow.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		));
-
-		TextView btnCancel = new TextView(this);
-		btnCancel.setText("Batal");
-		btnCancel.setTextColor(Color.parseColor("#CBD5E1"));
-		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnCancel.setGravity(Gravity.CENTER);
-		btnCancel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
-		LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		cancelLp.rightMargin = (int) (10 * d);
-		btnCancel.setLayoutParams(cancelLp);
-		GradientDrawable cancelBg = new GradientDrawable();
-		cancelBg.setColor(Color.parseColor("#181C26"));
-		cancelBg.setCornerRadius(100f);
-		cancelBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1FFFFFFF"));
-		btnCancel.setBackground(cancelBg);
-		btnCancel.setOnClickListener(new View.OnClickListener() {
-			@Override public void onClick(View v) { dialog.dismiss(); }
-		});
-
-		TextView btnSave = new TextView(this);
-		btnSave.setText("Simpan");
-		btnSave.setTextColor(Color.WHITE);
-		btnSave.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnSave.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnSave.setGravity(Gravity.CENTER);
-		btnSave.setPadding((int) (20 * d), (int) (10 * d), (int) (20 * d), (int) (10 * d));
-		GradientDrawable saveBg = new GradientDrawable();
-		saveBg.setColor(Color.parseColor("#2563EB"));
-		saveBg.setCornerRadius(100f);
-		btnSave.setBackground(saveBg);
-		btnSave.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				String updated = etEdit.getText().toString().trim();
-				if (updated.isEmpty()) {
-					DongflixToast.show(WatchActivity.this, "Komentar tidak boleh kosong");
-					return;
-				}
-				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
-				Map<String, Object> upd = new HashMap<>();
-				upd.put("text", updated);
-				upd.put("edited", true);
-				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
-					.getReference("comments")
-					.child(cleanKey)
-					.child(commentId)
-					.updateChildren(upd);
-				dialog.dismiss();
-				DongflixToast.show(WatchActivity.this, "Komentar diperbarui");
-			}
-		});
-
-		btnRow.addView(btnCancel);
-		btnRow.addView(btnSave);
-		card.addView(btnRow);
-
-		dialog.setContentView(card);
-		Window win = dialog.getWindow();
-		if (win != null) {
-			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-			win.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
-			int screenW = getResources().getDisplayMetrics().widthPixels;
-			int dialogW = isLandscapeOrFullscreen()
-				? Math.min((int) (360 * d), screenW - (int) (48 * d))
-				: Math.min((int) (340 * d), screenW - (int) (36 * d));
-			win.setLayout(dialogW, ViewGroup.LayoutParams.WRAP_CONTENT);
-		}
-		dialog.show();
-	}
-
 	private void showDeleteCommentConfirmDialog(final String commentId) {
 		if (commentId == null || commentId.trim().isEmpty() || currentSlug.isEmpty()) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -1117,7 +1010,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable cardBg = new GradientDrawable();
 		cardBg.setColor(Color.parseColor("#12141A"));
 		cardBg.setCornerRadius(20 * d);
-		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
 		card.setBackground(cardBg);
 
 		TextView tvTitle = new TextView(this);
@@ -1162,7 +1054,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable cancelBg = new GradientDrawable();
 		cancelBg.setColor(Color.parseColor("#181C26"));
 		cancelBg.setCornerRadius(100f);
-		cancelBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1FFFFFFF"));
 		btnCancel.setBackground(cancelBg);
 		btnCancel.setOnClickListener(new View.OnClickListener() {
 			@Override public void onClick(View v) { dialog.dismiss(); }
@@ -1216,7 +1107,8 @@ public class WatchActivity extends AppCompatActivity {
 		final String authorName,
 		final String mentionHandle,
 		final String commentText,
-		final OnReplyClickListener replyListener
+		final String stickerUrl,
+		final OnCommentActionListener actionListener
 	) {
 		final float d = getResources().getDisplayMetrics().density;
 		final BottomSheetDialog sheet = new BottomSheetDialog(this);
@@ -1235,14 +1127,16 @@ public class WatchActivity extends AppCompatActivity {
 			}
 		}
 
+		final boolean isStickerOnly = (commentText == null || commentText.trim().isEmpty())
+			&& (stickerUrl != null && !stickerUrl.trim().isEmpty());
+
 		LinearLayout root = new LinearLayout(this);
 		root.setOrientation(LinearLayout.VERTICAL);
 		root.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (18 * d));
 
 		GradientDrawable bg = new GradientDrawable();
-		bg.setColor(Color.parseColor("#181C26"));
+		bg.setColor(Color.parseColor("#0B0D11"));
 		bg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
-		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#26334D"));
 		root.setBackground(bg);
 
 		View handle = new View(this);
@@ -1251,7 +1145,7 @@ public class WatchActivity extends AppCompatActivity {
 		handleLp.bottomMargin = (int) (14 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#64748B"));
+		handleBg.setColor(Color.parseColor("#1E222B"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
@@ -1262,102 +1156,114 @@ public class WatchActivity extends AppCompatActivity {
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		));
 		GradientDrawable mainCardBg = new GradientDrawable();
-		mainCardBg.setColor(Color.parseColor("#252D40"));
+		mainCardBg.setColor(Color.parseColor("#12141A"));
 		mainCardBg.setCornerRadius(16 * d);
-		mainCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#334155"));
 		mainCard.setBackground(mainCardBg);
+
+		int visibleRowCount = 0;
 
 		LinearLayout rowReply = buildChatStyleActionRow(
 			"Balas",
 			Color.WHITE,
-			Color.parseColor("#3B4D70"),
+			Color.parseColor("#1C2538"),
 			0,
-			Color.parseColor("#93C5FD"),
+			Color.parseColor("#60A5FA"),
 			d
 		);
 		rowReply.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				sheet.dismiss();
-				if (replyListener != null) {
-					replyListener.onReplyRequested(commentId, mentionHandle);
+				if (actionListener != null) {
+					actionListener.onReplyRequested(commentId, mentionHandle);
 				}
 			}
 		});
 		mainCard.addView(rowReply);
+		visibleRowCount++;
 
-		if (isOwnComment) {
-			View div1 = new View(this);
-			LinearLayout.LayoutParams div1Lp = new LinearLayout.LayoutParams(
+		if (isOwnComment && !isStickerOnly) {
+			View divEdit = new View(this);
+			LinearLayout.LayoutParams divEditLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
 			);
-			div1Lp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
-			div1.setLayoutParams(div1Lp);
-			div1.setBackgroundColor(Color.parseColor("#334155"));
-			mainCard.addView(div1);
+			divEditLp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
+			divEdit.setLayoutParams(divEditLp);
+			divEdit.setBackgroundColor(Color.parseColor("#1A1E28"));
+			mainCard.addView(divEdit);
 
 			LinearLayout rowEdit = buildChatStyleActionRow(
 				"Edit komentar",
 				Color.WHITE,
-				Color.parseColor("#3B4D70"),
+				Color.parseColor("#1C2538"),
 				1,
-				Color.parseColor("#93C5FD"),
+				Color.parseColor("#60A5FA"),
 				d
 			);
 			rowEdit.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
 					sheet.dismiss();
-					showEditCommentDialog(commentId, commentText);
+					if (actionListener != null) {
+						actionListener.onEditRequested(commentId, commentText);
+					}
 				}
 			});
 			mainCard.addView(rowEdit);
+			visibleRowCount++;
 		}
 
-		View div2 = new View(this);
-		LinearLayout.LayoutParams div2Lp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
-		);
-		div2Lp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
-		div2.setLayoutParams(div2Lp);
-		div2.setBackgroundColor(Color.parseColor("#334155"));
-		mainCard.addView(div2);
-
-		LinearLayout rowCopy = buildChatStyleActionRow(
-			"Salin komentar",
-			Color.WHITE,
-			Color.parseColor("#3B4D70"),
-			2,
-			Color.parseColor("#93C5FD"),
-			d
-		);
-		rowCopy.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				sheet.dismiss();
-				ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-				if (cm != null && commentText != null) {
-					cm.setPrimaryClip(ClipData.newPlainText("komentar", commentText));
-					DongflixToast.show(WatchActivity.this, "Komentar disalin");
-				}
+		if (!isStickerOnly && commentText != null && !commentText.trim().isEmpty()) {
+			if (visibleRowCount > 0) {
+				View divCopy = new View(this);
+				LinearLayout.LayoutParams divCopyLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+				);
+				divCopyLp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
+				divCopy.setLayoutParams(divCopyLp);
+				divCopy.setBackgroundColor(Color.parseColor("#1A1E28"));
+				mainCard.addView(divCopy);
 			}
-		});
-		mainCard.addView(rowCopy);
+
+			LinearLayout rowCopy = buildChatStyleActionRow(
+				"Salin komentar",
+				Color.WHITE,
+				Color.parseColor("#1C2538"),
+				2,
+				Color.parseColor("#60A5FA"),
+				d
+			);
+			rowCopy.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheet.dismiss();
+					ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+					if (cm != null) {
+						cm.setPrimaryClip(ClipData.newPlainText("komentar", commentText));
+						DongflixToast.show(WatchActivity.this, "Komentar disalin");
+					}
+				}
+			});
+			mainCard.addView(rowCopy);
+			visibleRowCount++;
+		}
 
 		if (!isOwnComment) {
-			View div3 = new View(this);
-			LinearLayout.LayoutParams div3Lp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
-			);
-			div3Lp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
-			div3.setLayoutParams(div3Lp);
-			div3.setBackgroundColor(Color.parseColor("#334155"));
-			mainCard.addView(div3);
+			if (visibleRowCount > 0) {
+				View divReport = new View(this);
+				LinearLayout.LayoutParams divReportLp = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+				);
+				divReportLp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
+				divReport.setLayoutParams(divReportLp);
+				divReport.setBackgroundColor(Color.parseColor("#1A1E28"));
+				mainCard.addView(divReport);
+			}
 
 			LinearLayout rowReport = buildChatStyleActionRow(
 				"Laporkan komentar",
 				Color.WHITE,
-				Color.parseColor("#4A3B22"),
+				Color.parseColor("#2B2314"),
 				3,
 				Color.parseColor("#FACC15"),
 				d
@@ -1366,10 +1272,7 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onClick(View v) {
 					sheet.dismiss();
-					sendReportToTelegramBot(
-						"Laporan Komentar (" + authorName + ")",
-						"ID: " + commentId + " | Isi: " + (commentText != null ? commentText : "-")
-					);
+					sendCommentReportToTelegramBot(commentId, authorName, ownerEmail, commentText, stickerUrl);
 				}
 			});
 			mainCard.addView(rowReport);
@@ -1381,7 +1284,7 @@ public class WatchActivity extends AppCompatActivity {
 			LinearLayout deleteCard = buildChatStyleActionRow(
 				"Hapus",
 				Color.parseColor("#F87171"),
-				Color.parseColor("#57242A"),
+				Color.parseColor("#3B191E"),
 				4,
 				Color.parseColor("#F87171"),
 				d
@@ -1392,9 +1295,8 @@ public class WatchActivity extends AppCompatActivity {
 			delCardLp.topMargin = (int) (10 * d);
 			deleteCard.setLayoutParams(delCardLp);
 			GradientDrawable delCardBg = new GradientDrawable();
-			delCardBg.setColor(Color.parseColor("#381D22"));
+			delCardBg.setColor(Color.parseColor("#241216"));
 			delCardBg.setCornerRadius(16 * d);
-			delCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#5C2830"));
 			deleteCard.setBackground(delCardBg);
 			deleteCard.setOnClickListener(new View.OnClickListener() {
 				@Override
@@ -2157,6 +2059,7 @@ public class WatchActivity extends AppCompatActivity {
 
 		final String[] selectedStickerUrl = {""};
 		final String[] activeReplyParentId = {""};
+		final String[] activeEditCommentId = {""};
 
 		final ImageView ivStickerPreview = new ImageView(this);
 		final FrameLayout stickerPreviewBox = new FrameLayout(this);
@@ -2203,6 +2106,12 @@ public class WatchActivity extends AppCompatActivity {
 		etInput.setPadding((int) (12 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
 		etInput.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+		final ImageView btnSticker = new ImageView(this);
+		btnSticker.setLayoutParams(new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d)));
+		btnSticker.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
+		btnSticker.setImageDrawable(resolveVectorDrawable("ic_sticker", createStickerSvgDrawable(Color.parseColor("#CBD5E1"), Math.max(1.6f, 1.5f * d))));
+		btnSticker.setColorFilter(Color.parseColor("#CBD5E1"), PorterDuff.Mode.SRC_IN);
+
 		TextView btnCancelReply = new TextView(this);
 		btnCancelReply.setText("Batal");
 		btnCancelReply.setTextColor(Color.parseColor("#94A3B8"));
@@ -2212,6 +2121,8 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void onClick(View v) {
 				activeReplyParentId[0] = "";
+				activeEditCommentId[0] = "";
+				btnSticker.setVisibility(View.VISIBLE);
 				replyBanner.setVisibility(View.GONE);
 				etInput.setText("");
 			}
@@ -2222,9 +2133,11 @@ public class WatchActivity extends AppCompatActivity {
 		activeCommentSheetAdapter = new TikTokCommentAdapter(
 			mainCommentList,
 			repliesByParentMap,
-			new OnReplyClickListener() {
+			new OnCommentActionListener() {
 				@Override
 				public void onReplyRequested(String parentCommentId, String mentionTag) {
+					activeEditCommentId[0] = "";
+					btnSticker.setVisibility(View.VISIBLE);
 					activeReplyParentId[0] = parentCommentId;
 					replyBanner.setVisibility(View.VISIBLE);
 					tvReplyBanner.setText("Balas @" + mentionTag);
@@ -2232,6 +2145,24 @@ public class WatchActivity extends AppCompatActivity {
 					String prefix = "@" + mentionTag + " ";
 					etInput.setText(prefix);
 					etInput.setSelection(prefix.length());
+					etInput.requestFocus();
+					InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+					if (imm != null) imm.showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT);
+				}
+
+				@Override
+				public void onEditRequested(String commentId, String oldText) {
+					activeReplyParentId[0] = "";
+					selectedStickerUrl[0] = "";
+					stickerPreviewBox.setVisibility(View.GONE);
+					btnSticker.setVisibility(View.GONE);
+					activeEditCommentId[0] = commentId;
+					replyBanner.setVisibility(View.VISIBLE);
+					tvReplyBanner.setText("Edit komentar");
+
+					String initialText = oldText != null ? oldText : "";
+					etInput.setText(initialText);
+					etInput.setSelection(initialText.length());
 					etInput.requestFocus();
 					InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
 					if (imm != null) imm.showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT);
@@ -2252,7 +2183,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable mListBg = new GradientDrawable();
 		mListBg.setColor(Color.parseColor("#12151E"));
 		mListBg.setCornerRadius(14 * d);
-		mListBg.setStroke((int) (1 * d), Color.parseColor("#1E222B"));
 		rvMentionList.setBackground(mListBg);
 		rvMentionList.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
 
@@ -2400,12 +2330,6 @@ public class WatchActivity extends AppCompatActivity {
 		pillInputBg.setCornerRadius(1000f);
 		inputPill.setBackground(pillInputBg);
 
-		ImageView btnSticker = new ImageView(this);
-		btnSticker.setLayoutParams(new LinearLayout.LayoutParams((int) (32 * d), (int) (32 * d)));
-		btnSticker.setPadding((int) (6 * d), (int) (6 * d), (int) (6 * d), (int) (6 * d));
-		btnSticker.setImageDrawable(resolveVectorDrawable("ic_sticker", createStickerSvgDrawable(Color.parseColor("#CBD5E1"), Math.max(1.6f, 1.5f * d))));
-		btnSticker.setColorFilter(Color.parseColor("#CBD5E1"), PorterDuff.Mode.SRC_IN);
-
 		final ImageView btnSendIcon = new ImageView(this);
 		LinearLayout.LayoutParams sendLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (36 * d));
 		sendLp.leftMargin = (int) (8 * d);
@@ -2423,7 +2347,8 @@ public class WatchActivity extends AppCompatActivity {
 			@Override
 			public void run() {
 				boolean hasText = !etInput.getText().toString().trim().isEmpty();
-				btnSendIcon.setVisibility(hasText ? View.VISIBLE : View.GONE);
+				boolean hasSticker = !selectedStickerUrl[0].isEmpty() && activeEditCommentId[0].isEmpty();
+				btnSendIcon.setVisibility((hasText || hasSticker) ? View.VISIBLE : View.GONE);
 			}
 		};
 
@@ -2437,6 +2362,7 @@ public class WatchActivity extends AppCompatActivity {
 						ivStickerPreview.setImageURI(null);
 						Glide.with(WatchActivity.this).load(Uri.parse(url)).into(ivStickerPreview);
 						stickerPreviewBox.setVisibility(View.VISIBLE);
+						refreshSendVisibility.run();
 					}
 				});
 			}
@@ -2447,6 +2373,7 @@ public class WatchActivity extends AppCompatActivity {
 			public void onClick(View v) {
 				selectedStickerUrl[0] = "";
 				stickerPreviewBox.setVisibility(View.GONE);
+				refreshSendVisibility.run();
 			}
 		});
 
@@ -2489,14 +2416,46 @@ public class WatchActivity extends AppCompatActivity {
 				String text = etInput.getText().toString().trim();
 				String stUrl = selectedStickerUrl[0];
 				String pId = activeReplyParentId[0];
+				String editId = activeEditCommentId[0];
 
-				if ((text.isEmpty() && stUrl.isEmpty()) || currentSlug.isEmpty()) return;
+				if (currentSlug.isEmpty()) return;
 
 				FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
 				if (u == null) {
 					DongflixToast.show(WatchActivity.this, "Silakan login untuk berkomentar");
 					return;
 				}
+
+				String cleanSlugKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+
+				if (!editId.isEmpty()) {
+					if (text.isEmpty()) {
+						DongflixToast.show(WatchActivity.this, "Komentar tidak boleh kosong");
+						return;
+					}
+					Map<String, Object> upd = new HashMap<>();
+					upd.put("text", text);
+					upd.put("edited", true);
+					FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+						.getReference("comments")
+						.child(cleanSlugKey)
+						.child(editId)
+						.updateChildren(upd);
+
+					etInput.setText("");
+					activeEditCommentId[0] = "";
+					btnSticker.setVisibility(View.VISIBLE);
+					replyBanner.setVisibility(View.GONE);
+					rvMentionList.setVisibility(View.GONE);
+					refreshSendVisibility.run();
+					DongflixToast.show(WatchActivity.this, "Komentar diperbarui");
+
+					InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+					if (imm != null) imm.hideSoftInputFromWindow(etInput.getWindowToken(), 0);
+					return;
+				}
+
+				if (text.isEmpty() && stUrl.isEmpty()) return;
 
 				String uKey = sanitizeUserKey(u.getEmail(), u.getUid());
 				HashMap<String, String> p = resolveUserProfile(u.getEmail(), u.getUid());
@@ -2513,7 +2472,6 @@ public class WatchActivity extends AppCompatActivity {
 					payload.put("parentId", pId);
 				}
 
-				String cleanSlugKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
 				String entryId = String.valueOf(System.currentTimeMillis());
 				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
 					.getReference("comments")
@@ -2649,7 +2607,6 @@ public class WatchActivity extends AppCompatActivity {
 		GradientDrawable bg = new GradientDrawable();
 		bg.setColor(Color.parseColor("#0B0D11"));
 		bg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
-		bg.setStroke((int) (1 * d), Color.parseColor("#1E222B"));
 		root.setBackground(bg);
 
 		View handle = new View(this);
@@ -2715,7 +2672,6 @@ public class WatchActivity extends AppCompatActivity {
 				GradientDrawable cBg = new GradientDrawable();
 				cBg.setColor(Color.parseColor("#12141A"));
 				cBg.setCornerRadius(14 * d);
-				cBg.setStroke((int) (1 * d), Color.parseColor("#1E222B"));
 				cell.setBackground(cBg);
 
 				ImageView iv = new ImageView(parent.getContext());
@@ -2772,17 +2728,17 @@ public class WatchActivity extends AppCompatActivity {
 	private class TikTokCommentAdapter extends RecyclerView.Adapter<TikTokCommentAdapter.ViewHolder> {
 		private final List<HashMap<String, Object>> mainItems;
 		private final Map<String, List<HashMap<String, Object>>> repliesMap;
-		private final OnReplyClickListener replyListener;
+		private final OnCommentActionListener actionListener;
 		private final Set<String> expandedParents = new HashSet<>();
 
 		TikTokCommentAdapter(
 			List<HashMap<String, Object>> mainItems,
 			Map<String, List<HashMap<String, Object>>> repliesMap,
-			OnReplyClickListener replyListener
+			OnCommentActionListener actionListener
 		) {
 			this.mainItems = mainItems;
 			this.repliesMap = repliesMap;
-			this.replyListener = replyListener;
+			this.actionListener = actionListener;
 		}
 
 		@NonNull
@@ -2979,7 +2935,7 @@ public class WatchActivity extends AppCompatActivity {
 			final String email = item.get("email") != null ? item.get("email").toString() : "";
 			final String uid = item.get("uid") != null ? item.get("uid").toString() : "";
 			final String text = item.get("text") != null ? item.get("text").toString() : "";
-			String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
+			final String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
 
 			HashMap<String, String> prof = resolveUserProfile(email, uid);
@@ -3059,8 +3015,8 @@ public class WatchActivity extends AppCompatActivity {
 				btnReply.setOnClickListener(new View.OnClickListener() {
 					@Override
 					public void onClick(View v) {
-						if (replyListener != null) {
-							replyListener.onReplyRequested(commentId, mentionHandle);
+						if (actionListener != null) {
+							actionListener.onReplyRequested(commentId, mentionHandle);
 						}
 					}
 				});
@@ -3069,7 +3025,7 @@ public class WatchActivity extends AppCompatActivity {
 			holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
 				public boolean onLongClick(View v) {
-					showCommentLongPressSheet(commentId, email, uid, displayName, mentionHandle, text, replyListener);
+					showCommentLongPressSheet(commentId, email, uid, displayName, mentionHandle, text, stickerUrl, actionListener);
 					return true;
 				}
 			});
@@ -3118,7 +3074,7 @@ public class WatchActivity extends AppCompatActivity {
 			final String rEmail = rItem.get("email") != null ? rItem.get("email").toString() : "";
 			final String rUid = rItem.get("uid") != null ? rItem.get("uid").toString() : "";
 			final String rText = rItem.get("text") != null ? rItem.get("text").toString() : "";
-			String rSticker = rItem.get("stickerUrl") != null ? rItem.get("stickerUrl").toString().trim() : "";
+			final String rSticker = rItem.get("stickerUrl") != null ? rItem.get("stickerUrl").toString().trim() : "";
 			long rTs = parseLongSafe(rItem.get("timestamp"), System.currentTimeMillis());
 
 			HashMap<String, String> rProf = resolveUserProfile(rEmail, rUid);
@@ -3238,7 +3194,7 @@ public class WatchActivity extends AppCompatActivity {
 			row.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
 				public boolean onLongClick(View v) {
-					showCommentLongPressSheet(replyId, rEmail, rUid, rName, replyHandle, rText, replyListener);
+					showCommentLongPressSheet(replyId, rEmail, rUid, rName, replyHandle, rText, rSticker, actionListener);
 					return true;
 				}
 			});
@@ -6396,7 +6352,7 @@ public class WatchActivity extends AppCompatActivity {
 				public void onClick(View v) {
 					String titleStr = getCurrentTitleForDownload();
 					String epStr = getCurrentEpisodeLabelForDownload();
-					String shareText = "Nonton " + titleStr + " (" + epStr + ") Sub Indo di Dongflix!\nhttps://www.dongflix.my.id/watch?slug=" + currentSlug;
+					String shareText = "Nonton " + titleStr + " (" + epStr + ") Sub Indo di Dongflix!\nhttps://dongflix.my.id/donghua/" + currentSlug;
 					Intent shareIntent = new Intent(Intent.ACTION_SEND);
 					shareIntent.setType("text/plain");
 					shareIntent.putExtra(Intent.EXTRA_SUBJECT, titleStr + " - " + epStr);
