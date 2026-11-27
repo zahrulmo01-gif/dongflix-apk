@@ -127,7 +127,7 @@ public class ChatActivity extends AppCompatActivity {
 	private FrameLayout chatRoot;
 	private FrameLayout headerOverlayWrapper;
 	private LinearLayout chatHeader;
-	private AvatarDecorationView headerProfileAvatarDecor;
+	private ImageView headerProfileAvatar;
 	private FrameLayout pinnedMessageCard;
 	private LinearLayout chatBottomBar;
 	private ScrollView chatScrollView;
@@ -147,7 +147,6 @@ public class ChatActivity extends AppCompatActivity {
 	private LinearLayout stickerPanel;
 	private LinearLayout stickerGridContainer;
 
-	// Langsung sinkron realtime dari /users di Firebase tanpa cache lokal
 	private final Map<String, HashMap<String, Object>> liveUsersMap = new HashMap<>();
 	private final List<HashMap<String, Object>> allUsersList = new ArrayList<>();
 	private final List<String> stickerUrls = new ArrayList<>();
@@ -210,6 +209,34 @@ public class ChatActivity extends AppCompatActivity {
 			return "data:image/jpeg;base64," + trimmed.replaceAll("\\s+", "");
 		}
 		return "";
+	}
+
+	private Bitmap decodeBase64AvatarBitmap(String dataOrBase64) {
+		if (dataOrBase64 == null || dataOrBase64.isEmpty()) return null;
+		try {
+			String payload = dataOrBase64;
+			int commaIdx = payload.indexOf(",");
+			if (payload.startsWith("data:image") && commaIdx >= 0) {
+				payload = payload.substring(commaIdx + 1);
+			}
+			payload = payload.replaceAll("\\s+", "");
+			byte[] decoded = Base64.decode(payload, Base64.DEFAULT);
+			if (decoded == null || decoded.length == 0) return null;
+
+			BitmapFactory.Options opts = new BitmapFactory.Options();
+			opts.inJustDecodeBounds = true;
+			BitmapFactory.decodeByteArray(decoded, 0, decoded.length, opts);
+			int sample = 1;
+			while ((opts.outWidth / sample) > 256 || (opts.outHeight / sample) > 256) {
+				sample *= 2;
+			}
+
+			BitmapFactory.Options decodeOpts = new BitmapFactory.Options();
+			decodeOpts.inSampleSize = Math.max(1, sample);
+			return BitmapFactory.decodeByteArray(decoded, 0, decoded.length, decodeOpts);
+		} catch (Throwable ignored) {
+			return null;
+		}
 	}
 
 	private void armFastLoadTimeout() {
@@ -795,8 +822,6 @@ public class ChatActivity extends AppCompatActivity {
 
 		FrameLayout profileBtn = new FrameLayout(this);
 		profileBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
-		profileBtn.setClipChildren(false);
-		profileBtn.setClipToPadding(false);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) profileBtn.setElevation(14f);
 
 		BlurView profileBlur = new BlurView(this);
@@ -806,13 +831,20 @@ public class ChatActivity extends AppCompatActivity {
 		setupGlassBlur(profileBlur, chatRoot, 20f, btnSize / 2f, Color.parseColor("#66141824"), Color.parseColor("#33FFFFFF"));
 		profileBtn.addView(profileBlur);
 
-		headerProfileAvatarDecor = new AvatarDecorationView(this, 36, false);
-		FrameLayout.LayoutParams hAvLp = new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER
-		);
-		headerProfileAvatarDecor.setLayoutParams(hAvLp);
+		headerProfileAvatar = new ImageView(this);
+		headerProfileAvatar.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+		headerProfileAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		headerProfileAvatar.setOutlineProvider(new ViewOutlineProvider() {
+			@Override
+			public void getOutline(View view, Outline outline) {
+				outline.setOval(0, 0, view.getWidth(), view.getHeight());
+			}
+		});
+		headerProfileAvatar.setClipToOutline(true);
 		bindHeaderProfileAvatar();
-		profileBtn.addView(headerProfileAvatarDecor);
+		profileBtn.addView(headerProfileAvatar);
 		profileBtn.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -1263,14 +1295,6 @@ public class ChatActivity extends AppCompatActivity {
 		return uid != null ? uid.trim() : "";
 	}
 
-	private String getCurrentUserKey() {
-		if (currentUser == null) return "";
-		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
-		String emailKey = resolveUserKeyFromEmail(email);
-		return !emailKey.isEmpty() ? emailKey : currentUser.getUid();
-	}
-
-	// Sinkron realtime langsung dari node /users di Firebase tanpa cache lokal
 	private void startListeningUsersRealtime() {
 		usersListener = new ValueEventListener() {
 			@Override
@@ -1316,20 +1340,15 @@ public class ChatActivity extends AppCompatActivity {
 				}
 			}
 
-			@Override
-			public void onCancelled(@NonNull DatabaseError error) {}
+			@Override public void onCancelled(@NonNull DatabaseError error) {}
 		};
 		usersRef.addValueEventListener(usersListener);
 	}
 
 	private void bindHeaderProfileAvatar() {
-		if (headerProfileAvatarDecor == null || currentUser == null) return;
+		if (headerProfileAvatar == null || currentUser == null) return;
 		String email = currentUser.getEmail() != null ? currentUser.getEmail().trim().toLowerCase(Locale.US) : "";
 		HashMap<String, Object> prof = findUserProfile(currentUser.getUid(), email);
-
-		String displayName = (prof != null && prof.get("name") != null && !prof.get("name").toString().trim().isEmpty())
-			? prof.get("name").toString().trim()
-			: (email.contains("@") ? email.split("@")[0] : "R");
 
 		String photoSrc = "";
 		if (prof != null && prof.get("photoURL") != null) {
@@ -1339,10 +1358,31 @@ public class ChatActivity extends AppCompatActivity {
 			photoSrc = normalizeAvatarSource(currentUser.getPhotoUrl().toString());
 		}
 
-		String frameUrl = (prof != null && prof.get("avatarFrame") != null)
-			? prof.get("avatarFrame").toString().trim() : "";
+		if (!photoSrc.isEmpty()) {
+			headerProfileAvatar.setPadding(0, 0, 0, 0);
+			headerProfileAvatar.clearColorFilter();
+			headerProfileAvatar.setBackgroundColor(Color.parseColor("#161A24"));
+			if (photoSrc.startsWith("data:image")) {
+				Bitmap bmp = decodeBase64AvatarBitmap(photoSrc);
+				if (bmp != null) {
+					headerProfileAvatar.setImageBitmap(bmp);
+					return;
+				}
+			} else {
+				Glide.with(getApplicationContext())
+					.load(Uri.parse(photoSrc))
+					.circleCrop()
+					.into(headerProfileAvatar);
+				return;
+			}
+		}
 
-		headerProfileAvatarDecor.bind(photoSrc, displayName, frameUrl);
+		int pad = (int) (8 * getResources().getDisplayMetrics().density);
+		headerProfileAvatar.setBackgroundColor(Color.TRANSPARENT);
+		headerProfileAvatar.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		headerProfileAvatar.setPadding(pad, pad, pad, pad);
+		headerProfileAvatar.setImageResource(R.drawable.ic_profile);
+		headerProfileAvatar.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 	}
 
 	private void showCurrentUserProfileInfo() {
@@ -1356,9 +1396,6 @@ public class ChatActivity extends AppCompatActivity {
 		String uname = (prof != null && prof.get("username") != null && !prof.get("username").toString().trim().isEmpty())
 			? "@" + prof.get("username").toString().trim().replaceFirst("^@", "")
 			: "-";
-		String frameName = (prof != null && prof.get("avatarFrameName") != null && !prof.get("avatarFrameName").toString().trim().isEmpty())
-			? prof.get("avatarFrameName").toString().trim()
-			: "Tanpa bingkai";
 		long exp = prof != null ? parseLongVal(prof.get("exp")) : 0L;
 		boolean isAdm = ADMIN_EMAIL.equalsIgnoreCase(email);
 		int level = UserBadgeView.computeLevelFromExp(exp);
@@ -1368,7 +1405,6 @@ public class ChatActivity extends AppCompatActivity {
 			.setMessage(
 				"Username: " + uname
 					+ "\nEmail: " + email
-					+ "\nBingkai: " + frameName
 					+ "\nLevel: " + (isAdm ? "Lv999+ (Admin)" : "Lv" + level + " (" + exp + " XP)")
 			)
 			.setPositiveButton("Tutup", null)
@@ -1991,7 +2027,6 @@ public class ChatActivity extends AppCompatActivity {
 			rowLp.bottomMargin = (int) (12 * d);
 			row.setLayoutParams(rowLp);
 
-			// Avatar + bingkai GIF langsung dari node /users
 			AvatarDecorationView avatarDecor = new AvatarDecorationView(this, 36, false);
 			LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
