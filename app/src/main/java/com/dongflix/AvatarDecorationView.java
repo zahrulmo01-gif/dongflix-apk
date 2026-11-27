@@ -35,7 +35,8 @@ public class AvatarDecorationView extends FrameLayout {
 		super(context);
 		float d = context.getResources().getDisplayMetrics().density;
 		this.avatarSizePx = Math.max(1, Math.round(avatarSizeDp * d));
-		this.frameSizePx = Math.round(this.avatarSizePx * 1.20f);
+		// Proporsi 1.40f memberi ruang bingkai yang lebih lega di sekeliling lingkaran avatar
+		this.frameSizePx = Math.round(this.avatarSizePx * 1.40f);
 
 		setClipChildren(false);
 		setClipToPadding(false);
@@ -84,6 +85,17 @@ public class AvatarDecorationView extends FrameLayout {
 	}
 
 	public void bind(String avatarSrc, String displayName, String gifFrameUrl) {
+		bind(avatarSrc, displayName, gifFrameUrl, 1.0f, 0f, 0f);
+	}
+
+	public void bind(
+		String avatarSrc,
+		String displayName,
+		String gifFrameUrl,
+		float frameScale,
+		float offsetXDp,
+		float offsetYDdp
+	) {
 		String initial = (displayName != null && !displayName.trim().isEmpty())
 			? displayName.trim().substring(0, 1).toUpperCase(Locale.US) : "R";
 
@@ -118,6 +130,13 @@ public class AvatarDecorationView extends FrameLayout {
 			bg.setColor(Color.parseColor("#1D4ED8"));
 			tvInitial.setBackground(bg);
 		}
+
+		float d = getResources().getDisplayMetrics().density;
+		float safeScale = frameScale > 0f ? frameScale : 1.0f;
+		ivGifFrame.setScaleX(safeScale);
+		ivGifFrame.setScaleY(safeScale);
+		ivGifFrame.setTranslationX(offsetXDp * d);
+		ivGifFrame.setTranslationY(offsetYDdp * d);
 
 		if (gifFrameUrl != null && !gifFrameUrl.trim().isEmpty()) {
 			ivGifFrame.setVisibility(View.VISIBLE);
