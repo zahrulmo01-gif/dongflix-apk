@@ -3,6 +3,8 @@ package com.dongflix;
 import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -24,7 +26,6 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
@@ -332,7 +333,7 @@ public class WatchActivity extends AppCompatActivity {
 		ws.setUserAgentString("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
 
 		Map<String, String> headers = new HashMap<>();
-		headers.put("Referer", "https://geo.dailymotion.com/");
+		headers.put("Referer", currentStreamReferer.isEmpty() ? "https://geo.dailymotion.com/" : currentStreamReferer);
 		hiddenSnifferWebView.loadUrl(activeSnifferEmbedUrl, headers);
 	}
 
@@ -495,6 +496,14 @@ public class WatchActivity extends AppCompatActivity {
 				textActionDownloadView.setTextColor(Color.WHITE);
 			}
 		}
+	}
+
+	private String getReporterEmail() {
+		FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+		if (user != null && user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+			return user.getEmail().trim();
+		}
+		return "Anonim / Belum Login";
 	}
 
 	public void showReportBottomSheet() {
@@ -785,6 +794,7 @@ public class WatchActivity extends AppCompatActivity {
 	private void sendReportToTelegramBot(final String reason, final String extraNote) {
 		DongflixToast.show(this, "Mengirim laporan...");
 
+		final String reporterEmail = getReporterEmail();
 		final String titleStr = getCurrentTitleForDownload();
 		final String epStr = getCurrentEpisodeLabelForDownload();
 		final String serverStr = (textActionServer != null && !textActionServer.getText().toString().trim().isEmpty())
@@ -796,17 +806,18 @@ public class WatchActivity extends AppCompatActivity {
 				? currentEpisodeServerUrls.get(selectedServerIndex) : "-");
 
 		final StringBuilder msg = new StringBuilder();
-		msg.append("🚩 *LAPORAN EPISODE DONGFLIX*\n");
-		msg.append("• *Judul:* ").append(titleStr).append("\n");
-		msg.append("• *Slug:* ").append(currentSlug.isEmpty() ? "-" : currentSlug).append("\n");
-		msg.append("• *Episode:* ").append(epStr).append("\n");
-		msg.append("• *Server:* ").append(serverStr).append("\n");
-		msg.append("• *Alasan:* ").append(reason).append("\n");
+		msg.append("LAPORAN EPISODE DONGFLIX\n");
+		msg.append("- Email Pelapor: ").append(reporterEmail).append("\n");
+		msg.append("- Judul: ").append(titleStr).append("\n");
+		msg.append("- Slug: ").append(currentSlug.isEmpty() ? "-" : currentSlug).append("\n");
+		msg.append("- Episode: ").append(epStr).append("\n");
+		msg.append("- Server: ").append(serverStr).append("\n");
+		msg.append("- Alasan: ").append(reason).append("\n");
 		if (!extraNote.isEmpty()) {
-			msg.append("• *Detail:* ").append(extraNote).append("\n");
+			msg.append("- Detail: ").append(extraNote).append("\n");
 		}
 		if (!urlStr.isEmpty() && !"-".equals(urlStr)) {
-			msg.append("• *URL:* ").append(urlStr);
+			msg.append("- URL: ").append(urlStr);
 		}
 
 		new Thread(new Runnable() {
@@ -818,8 +829,7 @@ public class WatchActivity extends AppCompatActivity {
 					String encodedText = URLEncoder.encode(msg.toString(), "UTF-8");
 					String apiUrl = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN
 						+ "/sendMessage?chat_id=" + URLEncoder.encode(TELEGRAM_CHAT_ID, "UTF-8")
-						+ "&text=" + encodedText
-						+ "&parse_mode=Markdown";
+						+ "&text=" + encodedText;
 
 					URL url = new URL(apiUrl);
 					conn = (HttpURLConnection) url.openConnection();
@@ -847,6 +857,222 @@ public class WatchActivity extends AppCompatActivity {
 				});
 			}
 		}).start();
+	}
+
+	private void showCommentLongPressSheet(
+		final String commentId,
+		final String authorName,
+		final String mentionHandle,
+		final String commentText,
+		final OnReplyClickListener replyListener
+	) {
+		final float d = getResources().getDisplayMetrics().density;
+		final BottomSheetDialog sheet = new BottomSheetDialog(this);
+
+		LinearLayout root = new LinearLayout(this);
+		root.setOrientation(LinearLayout.VERTICAL);
+		root.setPadding((int) (18 * d), (int) (12 * d), (int) (18 * d), (int) (22 * d));
+
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#0B0D11"));
+		bg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
+		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		root.setBackground(bg);
+
+		View handle = new View(this);
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int) (38 * d), (int) (4 * d));
+		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+		handleLp.bottomMargin = (int) (12 * d);
+		handle.setLayoutParams(handleLp);
+		GradientDrawable handleBg = new GradientDrawable();
+		handleBg.setColor(Color.parseColor("#1E222B"));
+		handleBg.setCornerRadius(100f);
+		handle.setBackground(handleBg);
+		root.addView(handle);
+
+		FrameLayout header = new FrameLayout(this);
+		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (40 * d)
+		);
+		hLp.bottomMargin = (int) (10 * d);
+		header.setLayoutParams(hLp);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText(authorName != null && !authorName.isEmpty() ? authorName : "Komentar");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvTitle.setMaxLines(1);
+		tvTitle.setEllipsize(TextUtils.TruncateAt.END);
+		tvTitle.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL
+		));
+
+		TextView btnClose = new TextView(this);
+		btnClose.setText("✕");
+		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
+		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnClose.setGravity(Gravity.CENTER);
+		btnClose.setLayoutParams(new FrameLayout.LayoutParams(
+			(int) (32 * d), (int) (32 * d), Gravity.END | Gravity.CENTER_VERTICAL
+		));
+		GradientDrawable closeBg = new GradientDrawable();
+		closeBg.setShape(GradientDrawable.OVAL);
+		closeBg.setColor(Color.parseColor("#181B22"));
+		btnClose.setBackground(closeBg);
+		btnClose.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+			}
+		});
+
+		header.addView(tvTitle);
+		header.addView(btnClose);
+		root.addView(header);
+
+		if (commentText != null && !commentText.trim().isEmpty()) {
+			LinearLayout previewBox = new LinearLayout(this);
+			previewBox.setOrientation(LinearLayout.VERTICAL);
+			previewBox.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+			LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			pLp.bottomMargin = (int) (12 * d);
+			previewBox.setLayoutParams(pLp);
+			GradientDrawable pBg = new GradientDrawable();
+			pBg.setColor(Color.parseColor("#181B22"));
+			pBg.setCornerRadius(14 * d);
+			pBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+			previewBox.setBackground(pBg);
+
+			TextView tvPreview = new TextView(this);
+			tvPreview.setText(commentText.trim());
+			tvPreview.setTextColor(Color.parseColor("#CBD5E1"));
+			tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+			tvPreview.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+			tvPreview.setMaxLines(3);
+			tvPreview.setEllipsize(TextUtils.TruncateAt.END);
+			previewBox.addView(tvPreview);
+			root.addView(previewBox);
+		}
+
+		LinearLayout btnReplyAction = new LinearLayout(this);
+		btnReplyAction.setOrientation(LinearLayout.HORIZONTAL);
+		btnReplyAction.setGravity(Gravity.CENTER_VERTICAL);
+		btnReplyAction.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
+		LinearLayout.LayoutParams repLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		repLp.bottomMargin = (int) (8 * d);
+		btnReplyAction.setLayoutParams(repLp);
+		GradientDrawable repBg = new GradientDrawable();
+		repBg.setColor(Color.parseColor("#12141A"));
+		repBg.setCornerRadius(12 * d);
+		repBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		btnReplyAction.setBackground(repBg);
+
+		TextView tvReplyAction = new TextView(this);
+		tvReplyAction.setText("Balas Komentar");
+		tvReplyAction.setTextColor(Color.WHITE);
+		tvReplyAction.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		tvReplyAction.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnReplyAction.addView(tvReplyAction);
+		btnReplyAction.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+				if (replyListener != null) {
+					replyListener.onReplyRequested(commentId, mentionHandle);
+				}
+			}
+		});
+		root.addView(btnReplyAction);
+
+		LinearLayout btnCopyAction = new LinearLayout(this);
+		btnCopyAction.setOrientation(LinearLayout.HORIZONTAL);
+		btnCopyAction.setGravity(Gravity.CENTER_VERTICAL);
+		btnCopyAction.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
+		LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		copyLp.bottomMargin = (int) (8 * d);
+		btnCopyAction.setLayoutParams(copyLp);
+		GradientDrawable copyBg = new GradientDrawable();
+		copyBg.setColor(Color.parseColor("#12141A"));
+		copyBg.setCornerRadius(12 * d);
+		copyBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		btnCopyAction.setBackground(copyBg);
+
+		TextView tvCopyAction = new TextView(this);
+		tvCopyAction.setText("Salin Teks");
+		tvCopyAction.setTextColor(Color.WHITE);
+		tvCopyAction.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		tvCopyAction.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCopyAction.addView(tvCopyAction);
+		btnCopyAction.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+				ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+				if (cm != null && commentText != null) {
+					cm.setPrimaryClip(ClipData.newPlainText("komentar", commentText));
+					DongflixToast.show(WatchActivity.this, "Komentar disalin");
+				}
+			}
+		});
+		root.addView(btnCopyAction);
+
+		LinearLayout btnReportAction = new LinearLayout(this);
+		btnReportAction.setOrientation(LinearLayout.HORIZONTAL);
+		btnReportAction.setGravity(Gravity.CENTER_VERTICAL);
+		btnReportAction.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
+		btnReportAction.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+		GradientDrawable rptBg = new GradientDrawable();
+		rptBg.setColor(Color.parseColor("#181C26"));
+		rptBg.setCornerRadius(12 * d);
+		rptBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
+		btnReportAction.setBackground(rptBg);
+
+		TextView tvReportAction = new TextView(this);
+		tvReportAction.setText("Laporkan Komentar");
+		tvReportAction.setTextColor(Color.parseColor("#38BDF8"));
+		tvReportAction.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		tvReportAction.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnReportAction.addView(tvReportAction);
+		btnReportAction.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				sheet.dismiss();
+				sendReportToTelegramBot(
+					"Laporan Komentar (" + authorName + ")",
+					"ID: " + commentId + " | Isi: " + (commentText != null ? commentText : "-")
+				);
+			}
+		});
+		root.addView(btnReportAction);
+
+		sheet.setContentView(root);
+		sheet.setOnShowListener(new DialogInterface.OnShowListener() {
+			@Override
+			public void onShow(DialogInterface dialog) {
+				FrameLayout bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+				if (bottomSheet != null) {
+					bottomSheet.setBackgroundColor(Color.TRANSPARENT);
+					bottomSheet.setBackgroundTintList(null);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+						bottomSheet.setElevation(0f);
+					}
+					BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+					behavior.setSkipCollapsed(true);
+					behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+				}
+			}
+		});
+		sheet.show();
 	}
 
 	private Typeface getOutfitTypeface() {
@@ -2401,7 +2627,7 @@ public class WatchActivity extends AppCompatActivity {
 			final String commentId = item.get("id") != null ? item.get("id").toString() : "";
 			String email = item.get("email") != null ? item.get("email").toString() : "";
 			String uid = item.get("uid") != null ? item.get("uid").toString() : "";
-			String text = item.get("text") != null ? item.get("text").toString() : "";
+			final String text = item.get("text") != null ? item.get("text").toString() : "";
 			String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
 
@@ -2489,6 +2715,14 @@ public class WatchActivity extends AppCompatActivity {
 				});
 			}
 
+			holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
+				@Override
+				public boolean onLongClick(View v) {
+					showCommentLongPressSheet(commentId, displayName, mentionHandle, text, replyListener);
+					return true;
+				}
+			});
+
 			final List<HashMap<String, Object>> replies = repliesMap.get(commentId);
 			final boolean isExpanded = expandedParents.contains(commentId);
 			if (toggleBox != null && btnToggleReplies != null && repliesWrapper != null && repliesContainer != null) {
@@ -2529,14 +2763,17 @@ public class WatchActivity extends AppCompatActivity {
 		}
 
 		private View buildReplyRowView(Context ctx, HashMap<String, Object> rItem, float d) {
+			final String replyId = rItem.get("id") != null ? rItem.get("id").toString() : "";
 			String rEmail = rItem.get("email") != null ? rItem.get("email").toString() : "";
 			String rUid = rItem.get("uid") != null ? rItem.get("uid").toString() : "";
-			String rText = rItem.get("text") != null ? rItem.get("text").toString() : "";
+			final String rText = rItem.get("text") != null ? rItem.get("text").toString() : "";
 			String rSticker = rItem.get("stickerUrl") != null ? rItem.get("stickerUrl").toString().trim() : "";
 			long rTs = parseLongSafe(rItem.get("timestamp"), System.currentTimeMillis());
 
 			HashMap<String, String> rProf = resolveUserProfile(rEmail, rUid);
-			String rName = rProf.get("name");
+			final String rName = rProf.get("name");
+			final String replyHandle = rProf.get("username") != null && !rProf.get("username").isEmpty()
+				? rProf.get("username") : rName;
 			String rPhoto = rProf.get("photoURL");
 			String rFrame = rProf.get("avatarFrame");
 			long rExp = parseLongSafe(rProf.get("exp"), 0L);
@@ -2647,6 +2884,13 @@ public class WatchActivity extends AppCompatActivity {
 
 			row.addView(replyAvatarDecor);
 			row.addView(col);
+			row.setOnLongClickListener(new View.OnLongClickListener() {
+				@Override
+				public boolean onLongClick(View v) {
+					showCommentLongPressSheet(replyId, rName, replyHandle, rText, replyListener);
+					return true;
+				}
+			});
 			return row;
 		}
 
@@ -5791,6 +6035,22 @@ public class WatchActivity extends AppCompatActivity {
 				@Override
 				public void onClick(View v) {
 					startBackgroundDownloadForCurrentEpisode();
+				}
+			});
+		}
+
+		if (btnActionShare != null) {
+			btnActionShare.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					String titleStr = getCurrentTitleForDownload();
+					String epStr = getCurrentEpisodeLabelForDownload();
+					String shareText = "Nonton " + titleStr + " (" + epStr + ") Sub Indo di Dongflix!\nhttps://www.dongflix.my.id/watch?slug=" + currentSlug;
+					Intent shareIntent = new Intent(Intent.ACTION_SEND);
+					shareIntent.setType("text/plain");
+					shareIntent.putExtra(Intent.EXTRA_SUBJECT, titleStr + " - " + epStr);
+					shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+					startActivity(Intent.createChooser(shareIntent, "Bagikan Episode"));
 				}
 			});
 		}
