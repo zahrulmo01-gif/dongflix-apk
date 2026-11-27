@@ -103,13 +103,13 @@ public class StreamExtractorHelper {
 			vidId = finalTargetUrl.substring(finalTargetUrl.lastIndexOf("/") + 1).replaceAll("[^0-9]", "");
 		}
 
-		String okPageUrl = !vidId.isEmpty() ? "https://m.ok.ru/video/" + vidId : finalTargetUrl;
-		HttpFetchResult res = fetchHttp(okPageUrl, "https://ok.ru/", true);
+		String embedPageUrl = !vidId.isEmpty() ? "https://ok.ru/videoembed/" + vidId : finalTargetUrl;
+		HttpFetchResult res = fetchHttp(embedPageUrl, "https://ok.ru/", true);
 		String html = res.body;
-		if (html.isEmpty() && !okPageUrl.equals(finalTargetUrl)) {
-			HttpFetchResult altRes = fetchHttp(finalTargetUrl, "https://ok.ru/", true);
-			html = altRes.body;
-			if (!altRes.cookie.isEmpty()) res = altRes;
+		if (html.isEmpty() && !vidId.isEmpty()) {
+			HttpFetchResult mobRes = fetchHttp("https://m.ok.ru/video/" + vidId, "https://ok.ru/", true);
+			html = mobRes.body;
+			if (!mobRes.cookie.isEmpty()) res = mobRes;
 		}
 
 		ArrayList<String> tempNames = new ArrayList<>();
@@ -205,8 +205,7 @@ public class StreamExtractorHelper {
 		if (!tempUrls.isEmpty()) {
 			postSuccess(mainHandler, callback, tempNames, tempUrls, "https://ok.ru/", res.cookie);
 		} else {
-			String snifferTarget = !vidId.isEmpty() ? "https://m.ok.ru/video/" + vidId : finalTargetUrl;
-			postSniffer(mainHandler, callback, snifferTarget, "https://ok.ru/");
+			postSniffer(mainHandler, callback, embedPageUrl, "https://ok.ru/");
 		}
 	}
 
@@ -771,3 +770,4 @@ public class StreamExtractorHelper {
 		return "";
 	}
 }
+
