@@ -26,6 +26,7 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
@@ -859,8 +860,364 @@ public class WatchActivity extends AppCompatActivity {
 		}).start();
 	}
 
+	private Drawable createActionMenuIcon(final int type, final int iconColor, final float strokePx) {
+		return new Drawable() {
+			private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+			private final Path path = new Path();
+
+			{
+				strokePaint.setColor(iconColor);
+				strokePaint.setStyle(Paint.Style.STROKE);
+				strokePaint.setStrokeWidth(strokePx);
+				strokePaint.setStrokeCap(Paint.Cap.ROUND);
+				strokePaint.setStrokeJoin(Paint.Join.ROUND);
+
+				fillPaint.setColor(iconColor);
+				fillPaint.setStyle(Paint.Style.FILL);
+			}
+
+			@Override
+			public void draw(@NonNull Canvas canvas) {
+				Rect b = getBounds();
+				float w = b.width();
+				float h = b.height();
+				if (w <= 0 || h <= 0) return;
+				float l = b.left;
+				float t = b.top;
+
+				if (type == 0) {
+					// Reply arrow
+					path.reset();
+					path.moveTo(l + w * 0.44f, t + h * 0.28f);
+					path.lineTo(l + w * 0.24f, t + h * 0.46f);
+					path.lineTo(l + w * 0.44f, t + h * 0.64f);
+					canvas.drawPath(path, strokePaint);
+
+					path.reset();
+					path.moveTo(l + w * 0.26f, t + h * 0.46f);
+					path.lineTo(l + w * 0.56f, t + h * 0.46f);
+					path.quadTo(l + w * 0.76f, t + h * 0.46f, l + w * 0.76f, t + h * 0.70f);
+					canvas.drawPath(path, strokePaint);
+				} else if (type == 1) {
+					// Edit pencil
+					path.reset();
+					path.moveTo(l + w * 0.28f, t + h * 0.72f);
+					path.lineTo(l + w * 0.32f, t + h * 0.56f);
+					path.lineTo(l + w * 0.64f, t + h * 0.24f);
+					path.lineTo(l + w * 0.76f, t + h * 0.36f);
+					path.lineTo(l + w * 0.44f, t + h * 0.68f);
+					path.close();
+					canvas.drawPath(path, strokePaint);
+				} else if (type == 2) {
+					// Copy
+					float r = w * 0.08f;
+					RectF backRect = new RectF(l + w * 0.26f, t + h * 0.24f, l + w * 0.62f, t + h * 0.62f);
+					canvas.drawRoundRect(backRect, r, r, strokePaint);
+					RectF frontRect = new RectF(l + w * 0.38f, t + h * 0.36f, l + w * 0.74f, t + h * 0.74f);
+					canvas.drawRoundRect(frontRect, r, r, strokePaint);
+				} else if (type == 3) {
+					// Warning triangle
+					path.reset();
+					path.moveTo(l + w * 0.50f, t + h * 0.22f);
+					path.lineTo(l + w * 0.78f, t + h * 0.74f);
+					path.lineTo(l + w * 0.22f, t + h * 0.74f);
+					path.close();
+					canvas.drawPath(path, strokePaint);
+					canvas.drawLine(l + w * 0.50f, t + h * 0.42f, l + w * 0.50f, t + h * 0.56f, strokePaint);
+					canvas.drawCircle(l + w * 0.50f, t + h * 0.65f, Math.max(1.3f, strokePx * 0.65f), fillPaint);
+				} else {
+					// Trash delete
+					canvas.drawLine(l + w * 0.26f, t + h * 0.32f, l + w * 0.74f, t + h * 0.32f, strokePaint);
+					canvas.drawLine(l + w * 0.42f, t + h * 0.24f, l + w * 0.58f, t + h * 0.24f, strokePaint);
+					RectF body = new RectF(l + w * 0.32f, t + h * 0.32f, l + w * 0.68f, t + h * 0.75f);
+					canvas.drawRoundRect(body, w * 0.07f, w * 0.07f, strokePaint);
+					canvas.drawLine(l + w * 0.44f, t + h * 0.43f, l + w * 0.44f, t + h * 0.64f, strokePaint);
+					canvas.drawLine(l + w * 0.56f, t + h * 0.43f, l + w * 0.56f, t + h * 0.64f, strokePaint);
+				}
+			}
+
+			@Override public void setAlpha(int alpha) { strokePaint.setAlpha(alpha); fillPaint.setAlpha(alpha); }
+			@Override public void setColorFilter(ColorFilter cf) { strokePaint.setColorFilter(cf); fillPaint.setColorFilter(cf); }
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		};
+	}
+
+	private LinearLayout buildChatStyleActionRow(
+		String labelText,
+		int textColor,
+		int badgeBgColor,
+		int iconType,
+		int iconColor,
+		float d
+	) {
+		LinearLayout row = new LinearLayout(this);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setGravity(Gravity.CENTER_VERTICAL);
+		row.setPadding((int) (16 * d), (int) (13 * d), (int) (16 * d), (int) (13 * d));
+		row.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+
+		ImageView iconView = new ImageView(this);
+		LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams((int) (34 * d), (int) (34 * d));
+		iconLp.rightMargin = (int) (14 * d);
+		iconView.setLayoutParams(iconLp);
+		GradientDrawable badgeBg = new GradientDrawable();
+		badgeBg.setCornerRadius(10 * d);
+		badgeBg.setColor(badgeBgColor);
+		iconView.setBackground(badgeBg);
+		iconView.setImageDrawable(createActionMenuIcon(iconType, iconColor, Math.max(1.7f, 1.6f * d)));
+
+		TextView tvLabel = new TextView(this);
+		tvLabel.setText(labelText);
+		tvLabel.setTextColor(textColor);
+		tvLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f);
+		tvLabel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		tvLabel.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		row.addView(iconView);
+		row.addView(tvLabel);
+		return row;
+	}
+
+	private void showEditCommentDialog(final String commentId, final String oldText) {
+		if (commentId == null || commentId.trim().isEmpty() || currentSlug.isEmpty()) return;
+		final float d = getResources().getDisplayMetrics().density;
+
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout card = new LinearLayout(this);
+		card.setOrientation(LinearLayout.VERTICAL);
+		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
+
+		GradientDrawable cardBg = new GradientDrawable();
+		cardBg.setColor(Color.parseColor("#12141A"));
+		cardBg.setCornerRadius(20 * d);
+		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
+		card.setBackground(cardBg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Edit komentar");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		card.addView(tvTitle);
+
+		final EditText etEdit = new EditText(this);
+		etEdit.setText(oldText != null ? oldText : "");
+		etEdit.setSelection(etEdit.getText().length());
+		etEdit.setHint("Tulis komentar...");
+		etEdit.setHintTextColor(Color.parseColor("#8E8E93"));
+		etEdit.setTextColor(Color.WHITE);
+		etEdit.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		etEdit.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		etEdit.setMinLines(2);
+		etEdit.setMaxLines(5);
+		etEdit.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+		LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		editLp.topMargin = (int) (12 * d);
+		editLp.bottomMargin = (int) (18 * d);
+		etEdit.setLayoutParams(editLp);
+		GradientDrawable editBg = new GradientDrawable();
+		editBg.setColor(Color.parseColor("#181B22"));
+		editBg.setCornerRadius(14 * d);
+		editBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		etEdit.setBackground(editBg);
+		card.addView(etEdit);
+
+		LinearLayout btnRow = new LinearLayout(this);
+		btnRow.setOrientation(LinearLayout.HORIZONTAL);
+		btnRow.setGravity(Gravity.END);
+		btnRow.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+
+		TextView btnCancel = new TextView(this);
+		btnCancel.setText("Batal");
+		btnCancel.setTextColor(Color.parseColor("#CBD5E1"));
+		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCancel.setGravity(Gravity.CENTER);
+		btnCancel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
+		LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		cancelLp.rightMargin = (int) (10 * d);
+		btnCancel.setLayoutParams(cancelLp);
+		GradientDrawable cancelBg = new GradientDrawable();
+		cancelBg.setColor(Color.parseColor("#181C26"));
+		cancelBg.setCornerRadius(100f);
+		cancelBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1FFFFFFF"));
+		btnCancel.setBackground(cancelBg);
+		btnCancel.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { dialog.dismiss(); }
+		});
+
+		TextView btnSave = new TextView(this);
+		btnSave.setText("Simpan");
+		btnSave.setTextColor(Color.WHITE);
+		btnSave.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnSave.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnSave.setGravity(Gravity.CENTER);
+		btnSave.setPadding((int) (20 * d), (int) (10 * d), (int) (20 * d), (int) (10 * d));
+		GradientDrawable saveBg = new GradientDrawable();
+		saveBg.setColor(Color.parseColor("#2563EB"));
+		saveBg.setCornerRadius(100f);
+		btnSave.setBackground(saveBg);
+		btnSave.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String updated = etEdit.getText().toString().trim();
+				if (updated.isEmpty()) {
+					DongflixToast.show(WatchActivity.this, "Komentar tidak boleh kosong");
+					return;
+				}
+				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+				Map<String, Object> upd = new HashMap<>();
+				upd.put("text", updated);
+				upd.put("edited", true);
+				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+					.getReference("comments")
+					.child(cleanKey)
+					.child(commentId)
+					.updateChildren(upd);
+				dialog.dismiss();
+				DongflixToast.show(WatchActivity.this, "Komentar diperbarui");
+			}
+		});
+
+		btnRow.addView(btnCancel);
+		btnRow.addView(btnSave);
+		card.addView(btnRow);
+
+		dialog.setContentView(card);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			win.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			int dialogW = isLandscapeOrFullscreen()
+				? Math.min((int) (360 * d), screenW - (int) (48 * d))
+				: Math.min((int) (340 * d), screenW - (int) (36 * d));
+			win.setLayout(dialogW, ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
+	}
+
+	private void showDeleteCommentConfirmDialog(final String commentId) {
+		if (commentId == null || commentId.trim().isEmpty() || currentSlug.isEmpty()) return;
+		float d = getResources().getDisplayMetrics().density;
+
+		final Dialog dialog = new Dialog(this);
+		dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+		LinearLayout card = new LinearLayout(this);
+		card.setOrientation(LinearLayout.VERTICAL);
+		card.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (18 * d));
+
+		GradientDrawable cardBg = new GradientDrawable();
+		cardBg.setColor(Color.parseColor("#12141A"));
+		cardBg.setCornerRadius(20 * d);
+		cardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#24FFFFFF"));
+		card.setBackground(cardBg);
+
+		TextView tvTitle = new TextView(this);
+		tvTitle.setText("Hapus komentar?");
+		tvTitle.setTextColor(Color.WHITE);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f);
+		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		card.addView(tvTitle);
+
+		TextView tvDesc = new TextView(this);
+		tvDesc.setText("Komentar yang dihapus tidak dapat dikembalikan.");
+		tvDesc.setTextColor(Color.parseColor("#94A3B8"));
+		tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		tvDesc.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		descLp.topMargin = (int) (6 * d);
+		descLp.bottomMargin = (int) (20 * d);
+		tvDesc.setLayoutParams(descLp);
+		card.addView(tvDesc);
+
+		LinearLayout btnRow = new LinearLayout(this);
+		btnRow.setOrientation(LinearLayout.HORIZONTAL);
+		btnRow.setGravity(Gravity.END);
+		btnRow.setLayoutParams(new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		));
+
+		TextView btnCancel = new TextView(this);
+		btnCancel.setText("Batal");
+		btnCancel.setTextColor(Color.parseColor("#CBD5E1"));
+		btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnCancel.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnCancel.setGravity(Gravity.CENTER);
+		btnCancel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
+		LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		cancelLp.rightMargin = (int) (10 * d);
+		btnCancel.setLayoutParams(cancelLp);
+		GradientDrawable cancelBg = new GradientDrawable();
+		cancelBg.setColor(Color.parseColor("#181C26"));
+		cancelBg.setCornerRadius(100f);
+		cancelBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1FFFFFFF"));
+		btnCancel.setBackground(cancelBg);
+		btnCancel.setOnClickListener(new View.OnClickListener() {
+			@Override public void onClick(View v) { dialog.dismiss(); }
+		});
+
+		TextView btnConfirmDelete = new TextView(this);
+		btnConfirmDelete.setText("Hapus");
+		btnConfirmDelete.setTextColor(Color.WHITE);
+		btnConfirmDelete.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		btnConfirmDelete.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
+		btnConfirmDelete.setGravity(Gravity.CENTER);
+		btnConfirmDelete.setPadding((int) (20 * d), (int) (10 * d), (int) (20 * d), (int) (10 * d));
+		GradientDrawable delBg = new GradientDrawable();
+		delBg.setColor(Color.parseColor("#DC2626"));
+		delBg.setCornerRadius(100f);
+		btnConfirmDelete.setBackground(delBg);
+		btnConfirmDelete.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String cleanKey = currentSlug.replaceAll("[.#$\\[\\]/]", "_");
+				FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+					.getReference("comments")
+					.child(cleanKey)
+					.child(commentId)
+					.removeValue();
+				dialog.dismiss();
+			}
+		});
+
+		btnRow.addView(btnCancel);
+		btnRow.addView(btnConfirmDelete);
+		card.addView(btnRow);
+
+		dialog.setContentView(card);
+		Window win = dialog.getWindow();
+		if (win != null) {
+			win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+			int screenW = getResources().getDisplayMetrics().widthPixels;
+			int dialogW = isLandscapeOrFullscreen()
+				? Math.min((int) (360 * d), screenW - (int) (48 * d))
+				: Math.min((int) (340 * d), screenW - (int) (36 * d));
+			win.setLayout(dialogW, ViewGroup.LayoutParams.WRAP_CONTENT);
+		}
+		dialog.show();
+	}
+
 	private void showCommentLongPressSheet(
 		final String commentId,
+		final String ownerEmail,
+		final String ownerUid,
 		final String authorName,
 		final String mentionHandle,
 		final String commentText,
@@ -869,117 +1226,62 @@ public class WatchActivity extends AppCompatActivity {
 		final float d = getResources().getDisplayMetrics().density;
 		final BottomSheetDialog sheet = new BottomSheetDialog(this);
 
+		FirebaseUser curUser = FirebaseAuth.getInstance().getCurrentUser();
+		String curEmail = (curUser != null && curUser.getEmail() != null) ? curUser.getEmail().trim() : "";
+		String curUid = (curUser != null && curUser.getUid() != null) ? curUser.getUid().trim() : "";
+
+		boolean isAdminUser = !curEmail.isEmpty() && ADMIN_EMAIL.equalsIgnoreCase(curEmail);
+		boolean isOwnComment = false;
+		if (curUser != null) {
+			if (!ownerEmail.isEmpty() && curEmail.equalsIgnoreCase(ownerEmail.trim())) {
+				isOwnComment = true;
+			} else if (!ownerUid.isEmpty() && curUid.equals(ownerUid.trim())) {
+				isOwnComment = true;
+			}
+		}
+
 		LinearLayout root = new LinearLayout(this);
 		root.setOrientation(LinearLayout.VERTICAL);
-		root.setPadding((int) (18 * d), (int) (12 * d), (int) (18 * d), (int) (22 * d));
+		root.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (18 * d));
 
 		GradientDrawable bg = new GradientDrawable();
-		bg.setColor(Color.parseColor("#0B0D11"));
+		bg.setColor(Color.parseColor("#181C26"));
 		bg.setCornerRadii(new float[]{22 * d, 22 * d, 22 * d, 22 * d, 0f, 0f, 0f, 0f});
-		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
+		bg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#26334D"));
 		root.setBackground(bg);
 
 		View handle = new View(this);
-		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int) (38 * d), (int) (4 * d));
+		LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams((int) (36 * d), (int) (4 * d));
 		handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-		handleLp.bottomMargin = (int) (12 * d);
+		handleLp.bottomMargin = (int) (14 * d);
 		handle.setLayoutParams(handleLp);
 		GradientDrawable handleBg = new GradientDrawable();
-		handleBg.setColor(Color.parseColor("#1E222B"));
+		handleBg.setColor(Color.parseColor("#64748B"));
 		handleBg.setCornerRadius(100f);
 		handle.setBackground(handleBg);
 		root.addView(handle);
 
-		FrameLayout header = new FrameLayout(this);
-		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (40 * d)
-		);
-		hLp.bottomMargin = (int) (10 * d);
-		header.setLayoutParams(hLp);
-
-		TextView tvTitle = new TextView(this);
-		tvTitle.setText(authorName != null && !authorName.isEmpty() ? authorName : "Komentar");
-		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
-		tvTitle.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		tvTitle.setMaxLines(1);
-		tvTitle.setEllipsize(TextUtils.TruncateAt.END);
-		tvTitle.setLayoutParams(new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL
-		));
-
-		TextView btnClose = new TextView(this);
-		btnClose.setText("✕");
-		btnClose.setTextColor(Color.parseColor("#CBD5E1"));
-		btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		btnClose.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnClose.setGravity(Gravity.CENTER);
-		btnClose.setLayoutParams(new FrameLayout.LayoutParams(
-			(int) (32 * d), (int) (32 * d), Gravity.END | Gravity.CENTER_VERTICAL
-		));
-		GradientDrawable closeBg = new GradientDrawable();
-		closeBg.setShape(GradientDrawable.OVAL);
-		closeBg.setColor(Color.parseColor("#181B22"));
-		btnClose.setBackground(closeBg);
-		btnClose.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				sheet.dismiss();
-			}
-		});
-
-		header.addView(tvTitle);
-		header.addView(btnClose);
-		root.addView(header);
-
-		if (commentText != null && !commentText.trim().isEmpty()) {
-			LinearLayout previewBox = new LinearLayout(this);
-			previewBox.setOrientation(LinearLayout.VERTICAL);
-			previewBox.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
-			LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
-				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-			);
-			pLp.bottomMargin = (int) (12 * d);
-			previewBox.setLayoutParams(pLp);
-			GradientDrawable pBg = new GradientDrawable();
-			pBg.setColor(Color.parseColor("#181B22"));
-			pBg.setCornerRadius(14 * d);
-			pBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-			previewBox.setBackground(pBg);
-
-			TextView tvPreview = new TextView(this);
-			tvPreview.setText(commentText.trim());
-			tvPreview.setTextColor(Color.parseColor("#CBD5E1"));
-			tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-			tvPreview.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-			tvPreview.setMaxLines(3);
-			tvPreview.setEllipsize(TextUtils.TruncateAt.END);
-			previewBox.addView(tvPreview);
-			root.addView(previewBox);
-		}
-
-		LinearLayout btnReplyAction = new LinearLayout(this);
-		btnReplyAction.setOrientation(LinearLayout.HORIZONTAL);
-		btnReplyAction.setGravity(Gravity.CENTER_VERTICAL);
-		btnReplyAction.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
-		LinearLayout.LayoutParams repLp = new LinearLayout.LayoutParams(
+		LinearLayout mainCard = new LinearLayout(this);
+		mainCard.setOrientation(LinearLayout.VERTICAL);
+		mainCard.setLayoutParams(new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		repLp.bottomMargin = (int) (8 * d);
-		btnReplyAction.setLayoutParams(repLp);
-		GradientDrawable repBg = new GradientDrawable();
-		repBg.setColor(Color.parseColor("#12141A"));
-		repBg.setCornerRadius(12 * d);
-		repBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-		btnReplyAction.setBackground(repBg);
+		));
+		GradientDrawable mainCardBg = new GradientDrawable();
+		mainCardBg.setColor(Color.parseColor("#252D40"));
+		mainCardBg.setCornerRadius(16 * d);
+		mainCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#334155"));
+		mainCard.setBackground(mainCardBg);
 
-		TextView tvReplyAction = new TextView(this);
-		tvReplyAction.setText("Balas Komentar");
-		tvReplyAction.setTextColor(Color.WHITE);
-		tvReplyAction.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		tvReplyAction.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnReplyAction.addView(tvReplyAction);
-		btnReplyAction.setOnClickListener(new View.OnClickListener() {
+		// 1. Balas
+		LinearLayout rowReply = buildChatStyleActionRow(
+			"Balas",
+			Color.WHITE,
+			Color.parseColor("#3B4D70"),
+			0,
+			Color.parseColor("#93C5FD"),
+			d
+		);
+		rowReply.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				sheet.dismiss();
@@ -988,30 +1290,58 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			}
 		});
-		root.addView(btnReplyAction);
+		mainCard.addView(rowReply);
 
-		LinearLayout btnCopyAction = new LinearLayout(this);
-		btnCopyAction.setOrientation(LinearLayout.HORIZONTAL);
-		btnCopyAction.setGravity(Gravity.CENTER_VERTICAL);
-		btnCopyAction.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
-		LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		if (isOwnComment) {
+			// Divider
+			View div1 = new View(this);
+			LinearLayout.LayoutParams div1Lp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+			);
+			div1Lp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
+			div1.setLayoutParams(div1Lp);
+			div1.setBackgroundColor(Color.parseColor("#334155"));
+			mainCard.addView(div1);
+
+			// 2. Edit komentar (hanya untuk komentar sendiri)
+			LinearLayout rowEdit = buildChatStyleActionRow(
+				"Edit komentar",
+				Color.WHITE,
+				Color.parseColor("#3B4D70"),
+				1,
+				Color.parseColor("#93C5FD"),
+				d
+			);
+			rowEdit.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheet.dismiss();
+					showEditCommentDialog(commentId, commentText);
+				}
+			});
+			mainCard.addView(rowEdit);
+		}
+
+		// Divider
+		View div2 = new View(this);
+		LinearLayout.LayoutParams div2Lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
 		);
-		copyLp.bottomMargin = (int) (8 * d);
-		btnCopyAction.setLayoutParams(copyLp);
-		GradientDrawable copyBg = new GradientDrawable();
-		copyBg.setColor(Color.parseColor("#12141A"));
-		copyBg.setCornerRadius(12 * d);
-		copyBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#1E222B"));
-		btnCopyAction.setBackground(copyBg);
+		div2Lp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
+		div2.setLayoutParams(div2Lp);
+		div2.setBackgroundColor(Color.parseColor("#334155"));
+		mainCard.addView(div2);
 
-		TextView tvCopyAction = new TextView(this);
-		tvCopyAction.setText("Salin Teks");
-		tvCopyAction.setTextColor(Color.WHITE);
-		tvCopyAction.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		tvCopyAction.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnCopyAction.addView(tvCopyAction);
-		btnCopyAction.setOnClickListener(new View.OnClickListener() {
+		// Salin komentar
+		LinearLayout rowCopy = buildChatStyleActionRow(
+			"Salin komentar",
+			Color.WHITE,
+			Color.parseColor("#3B4D70"),
+			2,
+			Color.parseColor("#93C5FD"),
+			d
+		);
+		rowCopy.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
 				sheet.dismiss();
@@ -1022,38 +1352,72 @@ public class WatchActivity extends AppCompatActivity {
 				}
 			}
 		});
-		root.addView(btnCopyAction);
+		mainCard.addView(rowCopy);
 
-		LinearLayout btnReportAction = new LinearLayout(this);
-		btnReportAction.setOrientation(LinearLayout.HORIZONTAL);
-		btnReportAction.setGravity(Gravity.CENTER_VERTICAL);
-		btnReportAction.setPadding((int) (14 * d), (int) (13 * d), (int) (14 * d), (int) (13 * d));
-		btnReportAction.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		));
-		GradientDrawable rptBg = new GradientDrawable();
-		rptBg.setColor(Color.parseColor("#181C26"));
-		rptBg.setCornerRadius(12 * d);
-		rptBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#38BDF8"));
-		btnReportAction.setBackground(rptBg);
+		if (!isOwnComment) {
+			// Divider
+			View div3 = new View(this);
+			LinearLayout.LayoutParams div3Lp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d))
+			);
+			div3Lp.setMargins((int) (16 * d), 0, (int) (16 * d), 0);
+			div3.setLayoutParams(div3Lp);
+			div3.setBackgroundColor(Color.parseColor("#334155"));
+			mainCard.addView(div3);
 
-		TextView tvReportAction = new TextView(this);
-		tvReportAction.setText("Laporkan Komentar");
-		tvReportAction.setTextColor(Color.parseColor("#38BDF8"));
-		tvReportAction.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		tvReportAction.setTypeface(getOutfitTypeface(), Typeface.NORMAL);
-		btnReportAction.addView(tvReportAction);
-		btnReportAction.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				sheet.dismiss();
-				sendReportToTelegramBot(
-					"Laporan Komentar (" + authorName + ")",
-					"ID: " + commentId + " | Isi: " + (commentText != null ? commentText : "-")
-				);
-			}
-		});
-		root.addView(btnReportAction);
+			// Laporkan komentar (hanya untuk komentar orang lain)
+			LinearLayout rowReport = buildChatStyleActionRow(
+				"Laporkan komentar",
+				Color.WHITE,
+				Color.parseColor("#4A3B22"),
+				3,
+				Color.parseColor("#FACC15"),
+				d
+			);
+			rowReport.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheet.dismiss();
+					sendReportToTelegramBot(
+						"Laporan Komentar (" + authorName + ")",
+						"ID: " + commentId + " | Isi: " + (commentText != null ? commentText : "-")
+					);
+				}
+			});
+			mainCard.addView(rowReport);
+		}
+
+		root.addView(mainCard);
+
+		// Kartu merah terpisah untuk Hapus: muncul untuk komentar sendiri ATAU jika admin pada komentar orang lain
+		if (isOwnComment || isAdminUser) {
+			LinearLayout deleteCard = buildChatStyleActionRow(
+				"Hapus",
+				Color.parseColor("#F87171"),
+				Color.parseColor("#57242A"),
+				4,
+				Color.parseColor("#F87171"),
+				d
+			);
+			LinearLayout.LayoutParams delCardLp = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+			);
+			delCardLp.topMargin = (int) (10 * d);
+			deleteCard.setLayoutParams(delCardLp);
+			GradientDrawable delCardBg = new GradientDrawable();
+			delCardBg.setColor(Color.parseColor("#381D22"));
+			delCardBg.setCornerRadius(16 * d);
+			delCardBg.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#5C2830"));
+			deleteCard.setBackground(delCardBg);
+			deleteCard.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View v) {
+					sheet.dismiss();
+					showDeleteCommentConfirmDialog(commentId);
+				}
+			});
+			root.addView(deleteCard);
+		}
 
 		sheet.setContentView(root);
 		sheet.setOnShowListener(new DialogInterface.OnShowListener() {
@@ -2625,8 +2989,8 @@ public class WatchActivity extends AppCompatActivity {
 		public void onBindViewHolder(@NonNull ViewHolder holder, int pos) {
 			final HashMap<String, Object> item = mainItems.get(pos);
 			final String commentId = item.get("id") != null ? item.get("id").toString() : "";
-			String email = item.get("email") != null ? item.get("email").toString() : "";
-			String uid = item.get("uid") != null ? item.get("uid").toString() : "";
+			final String email = item.get("email") != null ? item.get("email").toString() : "";
+			final String uid = item.get("uid") != null ? item.get("uid").toString() : "";
 			final String text = item.get("text") != null ? item.get("text").toString() : "";
 			String stickerUrl = item.get("stickerUrl") != null ? item.get("stickerUrl").toString().trim() : "";
 			long ts = parseLongSafe(item.get("timestamp"), System.currentTimeMillis());
@@ -2718,7 +3082,7 @@ public class WatchActivity extends AppCompatActivity {
 			holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
 				public boolean onLongClick(View v) {
-					showCommentLongPressSheet(commentId, displayName, mentionHandle, text, replyListener);
+					showCommentLongPressSheet(commentId, email, uid, displayName, mentionHandle, text, replyListener);
 					return true;
 				}
 			});
@@ -2764,8 +3128,8 @@ public class WatchActivity extends AppCompatActivity {
 
 		private View buildReplyRowView(Context ctx, HashMap<String, Object> rItem, float d) {
 			final String replyId = rItem.get("id") != null ? rItem.get("id").toString() : "";
-			String rEmail = rItem.get("email") != null ? rItem.get("email").toString() : "";
-			String rUid = rItem.get("uid") != null ? rItem.get("uid").toString() : "";
+			final String rEmail = rItem.get("email") != null ? rItem.get("email").toString() : "";
+			final String rUid = rItem.get("uid") != null ? rItem.get("uid").toString() : "";
 			final String rText = rItem.get("text") != null ? rItem.get("text").toString() : "";
 			String rSticker = rItem.get("stickerUrl") != null ? rItem.get("stickerUrl").toString().trim() : "";
 			long rTs = parseLongSafe(rItem.get("timestamp"), System.currentTimeMillis());
@@ -2887,7 +3251,7 @@ public class WatchActivity extends AppCompatActivity {
 			row.setOnLongClickListener(new View.OnLongClickListener() {
 				@Override
 				public boolean onLongClick(View v) {
-					showCommentLongPressSheet(replyId, rName, replyHandle, rText, replyListener);
+					showCommentLongPressSheet(replyId, rEmail, rUid, rName, replyHandle, rText, replyListener);
 					return true;
 				}
 			});
