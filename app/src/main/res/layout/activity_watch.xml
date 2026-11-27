@@ -23,6 +23,15 @@
 			android:layout_height="match_parent"
 			android:layout_gravity="center" />
 
+		<ProgressBar
+			android:id="@+id/playerLoading"
+			android:layout_width="64dp"
+			android:layout_height="64dp"
+			android:layout_gravity="center"
+			android:indeterminate="true"
+			android:indeterminateTint="#3B82F6"
+			android:visibility="gone" />
+
 		<LinearLayout
 			android:id="@+id/animSeekLeft"
 			android:layout_width="wrap_content"
@@ -283,15 +292,6 @@
 					android:layout_height="64dp"
 					android:layout_marginLeft="22dp"
 					android:layout_marginRight="22dp">
-
-					<ProgressBar
-						android:id="@+id/playerLoading"
-						android:layout_width="64dp"
-						android:layout_height="64dp"
-						android:indeterminate="true"
-						android:indeterminateTint="#3B82F6"
-						android:layout_gravity="center"
-						android:visibility="gone" />
 
 					<ImageView
 						android:id="@+id/btnPlay"
