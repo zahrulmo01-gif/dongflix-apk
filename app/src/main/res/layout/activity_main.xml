@@ -105,10 +105,11 @@
 						android:layout_marginTop="3dp"
 						android:clipToOutline="true">
 
-						<eightbitlab.com.blurview.BlurView
+						<View
 							android:id="@+id/top_action_pill_blur_bg"
 							android:layout_width="match_parent"
-							android:layout_height="match_parent" />
+							android:layout_height="match_parent"
+							android:visibility="gone" />
 
 						<LinearLayout
 							android:id="@+id/linear82"
@@ -700,7 +701,7 @@
 		</LinearLayout>
 	</androidx.core.widget.NestedScrollView>
 
-	<!-- Indikator Icon Refresh Melayang (Gaya YouTube) -->
+	<!-- Indikator Icon Refresh Melayang -->
 	<FrameLayout
 		android:id="@+id/pull_refresh_indicator"
 		android:layout_width="40dp"
@@ -869,7 +870,7 @@
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			android:layout_marginTop="4dp"
-			android:text="v1.0.0 Pro Edition"
+			android:text="v1.0.3 Pro Edition"
 			android:textSize="13sp"
 			android:textColor="#3B82F6" />
 		<LinearLayout
@@ -916,15 +917,16 @@
 			android:layout_width="0dp"
 			android:layout_height="64dp"
 			android:layout_weight="1"
-			android:layout_marginRight="10dp"
 			android:clipToOutline="true">
 
-			<eightbitlab.com.blurview.BlurView
+			<View
 				android:id="@+id/navbar_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent" />
+				android:layout_height="match_parent"
+				android:visibility="gone" />
 
 			<LinearLayout
+				android:id="@+id/navbar_tabs_row"
 				android:layout_width="match_parent"
 				android:layout_height="match_parent"
 				android:padding="5dp"
@@ -941,8 +943,8 @@
 
 					<ImageView
 						android:id="@+id/img_home"
-						android:layout_width="21dp"
-						android:layout_height="21dp"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
 						android:src="@drawable/ic_home"
 						android:scaleType="fitCenter" />
 
@@ -952,7 +954,7 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Beranda"
-						android:textSize="10.5sp"
+						android:textSize="10sp"
 						android:textColor="#FFFFFF" />
 				</LinearLayout>
 
@@ -966,8 +968,8 @@
 
 					<ImageView
 						android:id="@+id/img_jelajahi"
-						android:layout_width="21dp"
-						android:layout_height="21dp"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
 						android:src="@drawable/ic_jelajahi"
 						android:scaleType="fitCenter" />
 
@@ -977,8 +979,8 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Jelajahi"
-						android:textSize="10.5sp"
-						android:textColor="#CBD5E1" />
+						android:textSize="10sp"
+						android:textColor="#94A3B8" />
 				</LinearLayout>
 
 				<LinearLayout
@@ -991,8 +993,8 @@
 
 					<ImageView
 						android:id="@+id/img_favorite"
-						android:layout_width="21dp"
-						android:layout_height="21dp"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
 						android:src="@drawable/ic_favorite"
 						android:scaleType="fitCenter" />
 
@@ -1002,8 +1004,33 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Pustaka"
-						android:textSize="10.5sp"
-						android:textColor="#CBD5E1" />
+						android:textSize="10sp"
+						android:textColor="#94A3B8" />
+				</LinearLayout>
+
+				<LinearLayout
+					android:id="@+id/tab_search_inline"
+					android:layout_width="0dp"
+					android:layout_height="match_parent"
+					android:layout_weight="1"
+					android:gravity="center"
+					android:orientation="vertical">
+
+					<ImageView
+						android:id="@+id/img_search"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
+						android:src="@drawable/ic_search"
+						android:scaleType="fitCenter" />
+
+					<TextView
+						android:id="@+id/txt_search"
+						android:layout_width="wrap_content"
+						android:layout_height="wrap_content"
+						android:layout_marginTop="2dp"
+						android:text="Cari"
+						android:textSize="10sp"
+						android:textColor="#94A3B8" />
 				</LinearLayout>
 
 				<LinearLayout
@@ -1016,8 +1043,8 @@
 
 					<ImageView
 						android:id="@+id/img_profile"
-						android:layout_width="21dp"
-						android:layout_height="21dp"
+						android:layout_width="20dp"
+						android:layout_height="20dp"
 						android:src="@drawable/ic_profile"
 						android:scaleType="fitCenter" />
 
@@ -1027,27 +1054,28 @@
 						android:layout_height="wrap_content"
 						android:layout_marginTop="2dp"
 						android:text="Akun"
-						android:textSize="10.5sp"
-						android:textColor="#CBD5E1" />
+						android:textSize="10sp"
+						android:textColor="#94A3B8" />
 				</LinearLayout>
 			</LinearLayout>
 		</FrameLayout>
 
 		<FrameLayout
 			android:id="@+id/btn_compact_home"
-			android:layout_width="58dp"
-			android:layout_height="58dp"
+			android:layout_width="56dp"
+			android:layout_height="56dp"
 			android:clipToOutline="true"
 			android:visibility="gone">
 
-			<eightbitlab.com.blurview.BlurView
+			<View
 				android:id="@+id/compact_home_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent" />
+				android:layout_height="match_parent"
+				android:visibility="gone" />
 
 			<ImageView
-				android:layout_width="23dp"
-				android:layout_height="23dp"
+				android:layout_width="22dp"
+				android:layout_height="22dp"
 				android:layout_gravity="center"
 				android:src="@drawable/ic_home"
 				android:scaleType="fitCenter" />
@@ -1056,7 +1084,7 @@
 		<FrameLayout
 			android:id="@+id/mini_player_inline_slot"
 			android:layout_width="0dp"
-			android:layout_height="58dp"
+			android:layout_height="56dp"
 			android:layout_weight="1"
 			android:layout_marginLeft="8dp"
 			android:layout_marginRight="8dp"
@@ -1064,19 +1092,22 @@
 
 		<FrameLayout
 			android:id="@+id/btn_circle_search"
-			android:layout_width="64dp"
-			android:layout_height="64dp"
-			android:clipToOutline="true">
+			android:layout_width="56dp"
+			android:layout_height="56dp"
+			android:layout_marginLeft="10dp"
+			android:clipToOutline="true"
+			android:visibility="gone">
 
-			<eightbitlab.com.blurview.BlurView
+			<View
 				android:id="@+id/search_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent" />
+				android:layout_height="match_parent"
+				android:visibility="gone" />
 
 			<ImageView
-				android:id="@+id/img_search"
-				android:layout_width="24dp"
-				android:layout_height="24dp"
+				android:id="@+id/img_search_compact"
+				android:layout_width="22dp"
+				android:layout_height="22dp"
 				android:layout_gravity="center"
 				android:src="@drawable/ic_search"
 				android:scaleType="fitCenter" />
