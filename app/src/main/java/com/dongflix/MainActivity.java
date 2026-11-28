@@ -28,6 +28,8 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.*;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import eightbitlab.com.blurview.BlurView;
+import eightbitlab.com.blurview.RenderScriptBlur;
 import java.io.*;
 import java.util.*;
 
@@ -394,13 +396,17 @@ public class MainActivity extends AppCompatActivity {
 				case MotionEvent.ACTION_CANCEL:
 					if (navDownRawX > 0f) {
 						liquidDragPill.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
-						float slotW = Math.max(1f, (trackW - (10 * d)) / 5f);
+						int slotCount = isNavbarCompact ? 4 : 5;
+						float slotW = Math.max(1f, (trackW - (10 * d)) / slotCount);
 						int targetSlot = isDraggingNavbarPill
-							? Math.max(0, Math.min(4, Math.round(liquidDragPill.getTranslationX() / slotW)))
-							: Math.max(0, Math.min(4, (int) ((rawX - loc[0]) / Math.max(1f, trackW / 5f))));
+							? Math.max(0, Math.min(slotCount - 1, Math.round(liquidDragPill.getTranslationX() / slotW)))
+							: Math.max(0, Math.min(slotCount - 1, (int) ((rawX - loc[0]) / Math.max(1f, trackW / (float) slotCount))));
 						navDownRawX = 0f;
 						isDraggingNavbarPill = false;
-						selectNavTabByIndex(mapSlotToNavTab(targetSlot), true);
+						int resolvedTab = isNavbarCompact
+							? (targetSlot == 3 ? 3 : targetSlot)
+							: mapSlotToNavTab(targetSlot);
+						selectNavTabByIndex(resolvedTab, true);
 						return true;
 					}
 					break;
@@ -2460,7 +2466,7 @@ public class MainActivity extends AppCompatActivity {
 					if (btnHeroFavorite != null) {
 						btnHeroFavorite.setVisibility(View.VISIBLE);
 						btnHeroFavorite.setEnabled(true);
-						applySmoothGlassSurface(btnHeroFavorite, 1000f);
+						applyCapsuleShapeAndBorder(btnHeroFavorite, 1000f, Color.parseColor("#B8121622"));
 					}
 					if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.VISIBLE);
 					if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.VISIBLE);
@@ -2530,10 +2536,25 @@ public class MainActivity extends AppCompatActivity {
 		dongflix_req.startRequestNetwork("GET", CATALOG_URL, "", _dongflix_req_request_listener);
 	}
 
-	private void applySmoothGlassSurface(View container, final float radiusPx) {
+	private void setupCleanBlurLayer(View blurTarget, ViewGroup root, float radius, int tintColor) {
+		if (blurTarget == null) return;
+		blurTarget.setVisibility(View.VISIBLE);
+		if (blurTarget instanceof BlurView && root != null) {
+			BlurView bv = (BlurView) blurTarget;
+			try {
+				bv.setupWith(root, new RenderScriptBlur(this))
+					.setBlurRadius(Math.max(4f, Math.min(25f, radius)))
+					.setBlurEnabled(true);
+				bv.setOverlayColor(tintColor);
+				return;
+			} catch (Throwable ignored) {}
+		}
+		blurTarget.setBackgroundColor(tintColor);
+	}
+
+	private void applyCapsuleShapeAndBorder(View container, final float radiusPx, int fallbackFillColor) {
 		if (container == null) return;
 		float d = getResources().getDisplayMetrics().density;
-
 		container.setOutlineProvider(new ViewOutlineProvider() {
 			@Override
 			public void getOutline(View view, Outline outline) {
@@ -2542,22 +2563,11 @@ public class MainActivity extends AppCompatActivity {
 		});
 		container.setClipToOutline(true);
 
-		GradientDrawable frostedFill = new GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{
-				Color.parseColor("#D9141824"),
-				Color.parseColor("#C70C0F17"),
-				Color.parseColor("#D910131E")
-			}
-		);
-		frostedFill.setCornerRadius(radiusPx);
-		container.setBackground(frostedFill);
-
-		GradientDrawable innerHighlight = new GradientDrawable();
-		innerHighlight.setColor(Color.TRANSPARENT);
-		innerHighlight.setCornerRadius(radiusPx);
-		innerHighlight.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2EFFFFFF"));
-		container.setForeground(innerHighlight);
+		GradientDrawable ringBorder = new GradientDrawable();
+		ringBorder.setColor(fallbackFillColor);
+		ringBorder.setCornerRadius(radiusPx);
+		ringBorder.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2EFFFFFF"));
+		container.setBackground(ringBorder);
 
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			container.setElevation(14f);
@@ -2590,14 +2600,15 @@ public class MainActivity extends AppCompatActivity {
 		View target;
 		if (idx == 1) target = tabJelajahi;
 		else if (idx == 2) target = tabPustaka;
-		else if (idx == 4 && tabSearchInline != null) target = tabSearchInline;
+		else if (idx == 4 && !isNavbarCompact && tabSearchInline != null) target = tabSearchInline;
 		else if (idx == 3) target = tabAkun;
 		else target = tabBeranda;
 
 		float d = getResources().getDisplayMetrics().density;
+		int visibleTabs = isNavbarCompact ? 4 : 5;
 		int targetW = target.getWidth();
 		if (targetW <= 0 && navbarExpanded != null && navbarExpanded.getWidth() > 0) {
-			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / 5;
+			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / visibleTabs;
 		}
 		if (targetW <= 0) targetW = (int) (64 * d);
 		ViewGroup.LayoutParams lp = liquidDragPill.getLayoutParams();
@@ -2605,8 +2616,7 @@ public class MainActivity extends AppCompatActivity {
 			lp.width = targetW;
 			liquidDragPill.setLayoutParams(lp);
 		}
-		int slot = mapNavTabToSlot(idx);
-		float tx = target.getLeft() > 0 ? Math.max(0f, target.getLeft() - (5 * d)) : slot * targetW;
+		float tx = target.getLeft() > 0 ? Math.max(0f, target.getLeft() - (5 * d)) : (mapNavTabToSlot(idx) * targetW);
 		if (animate) {
 			liquidDragPill.animate().translationX(tx).setInterpolator(new OvershootInterpolator(1.05f)).setDuration(220).start();
 		} else {
@@ -2706,19 +2716,20 @@ public class MainActivity extends AppCompatActivity {
 				GradientDrawable.Orientation.TOP_BOTTOM, new int[]{Color.TRANSPARENT, Color.parseColor("#FF000000")}));
 		}
 
-		// Gunakan lapisan frosted glass halus tanpa grid RenderScriptBlur
-		if (topActionPillBlurBg != null) topActionPillBlurBg.setVisibility(View.GONE);
+		ViewGroup rootMain = findViewById(R.id.root_main_container);
 		View navBlur = findViewById(R.id.navbar_blur_bg);
 		View compactBlur = findViewById(R.id.compact_home_blur_bg);
 		View searchBlur = findViewById(R.id.search_blur_bg);
-		if (navBlur != null) navBlur.setVisibility(View.GONE);
-		if (compactBlur != null) compactBlur.setVisibility(View.GONE);
-		if (searchBlur != null) searchBlur.setVisibility(View.GONE);
 
-		applySmoothGlassSurface(topActionPill, 1000f);
-		applySmoothGlassSurface(navbarExpanded, 1000f);
-		applySmoothGlassSurface(btnCompactHome, 1000f);
-		applySmoothGlassSurface(btnCircleSearch, 1000f);
+		setupCleanBlurLayer(topActionPillBlurBg, rootMain, 16f, Color.parseColor("#B8121622"));
+		setupCleanBlurLayer(navBlur, rootMain, 16f, Color.parseColor("#B8121622"));
+		setupCleanBlurLayer(compactBlur, rootMain, 16f, Color.parseColor("#B8121622"));
+		setupCleanBlurLayer(searchBlur, rootMain, 16f, Color.parseColor("#B8121622"));
+
+		applyCapsuleShapeAndBorder(topActionPill, 1000f, Color.TRANSPARENT);
+		applyCapsuleShapeAndBorder(navbarExpanded, 1000f, Color.TRANSPARENT);
+		applyCapsuleShapeAndBorder(btnCompactHome, 1000f, Color.TRANSPARENT);
+		applyCapsuleShapeAndBorder(btnCircleSearch, 1000f, Color.TRANSPARENT);
 	}
 
 	private void setupScrollResponsiveNavbar() {
@@ -2743,18 +2754,32 @@ public class MainActivity extends AppCompatActivity {
 	private void setNavbarCompactState(boolean compact) {
 		if (isNavbarCompact == compact) return;
 		isNavbarCompact = compact;
-		if (compact) {
-			if (navbarExpanded != null) navbarExpanded.setVisibility(View.GONE);
-			if (btnCompactHome != null) btnCompactHome.setVisibility(View.VISIBLE);
-			if (btnCircleSearch != null) btnCircleSearch.setVisibility(View.VISIBLE);
-		} else {
-			if (btnCompactHome != null) btnCompactHome.setVisibility(View.GONE);
-			if (btnCircleSearch != null) btnCircleSearch.setVisibility(View.GONE);
-			if (miniPlayerInlineSlot != null) miniPlayerInlineSlot.setVisibility(View.GONE);
-			if (navbarExpanded != null) navbarExpanded.setVisibility(View.VISIBLE);
-			snapPillToTab(activeNavTabIndex, false);
+		boolean miniActive = DongflixPlayerManager.getInstance().isMiniPlayerActive;
+
+		if (tabSearchInline != null) {
+			tabSearchInline.setVisibility(compact ? View.GONE : View.VISIBLE);
 		}
-		DongflixPlayerManager.getInstance().setCompactScrollMode(this, compact);
+		if (btnCircleSearch != null) {
+			btnCircleSearch.setVisibility(compact ? View.VISIBLE : View.GONE);
+		}
+		if (btnCompactHome != null) {
+			btnCompactHome.setVisibility((compact && miniActive) ? View.VISIBLE : View.GONE);
+		}
+		if (miniPlayerInlineSlot != null && !miniActive) {
+			miniPlayerInlineSlot.setVisibility(View.GONE);
+		}
+		if (navbarExpanded != null) {
+			navbarExpanded.setVisibility(View.VISIBLE);
+			navbarExpanded.post(new Runnable() {
+				@Override
+				public void run() {
+					snapPillToTab(activeNavTabIndex, true);
+				}
+			});
+		}
+		if (miniActive) {
+			DongflixPlayerManager.getInstance().setCompactScrollMode(this, compact);
+		}
 	}
 
 	public void _Nav() {
