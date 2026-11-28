@@ -30,9 +30,12 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
+import com.google.firebase.auth.FirebaseAuth;
 import eightbitlab.com.blurview.BlurView;
 import eightbitlab.com.blurview.RenderScriptBlur;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -70,8 +73,10 @@ public class DongflixPlayerManager {
 	public boolean isScrolledDownCompact = false;
 
 	private boolean isReceiverRegistered = false;
+	private boolean isAuthListenerRegistered = false;
 	private Application appContext;
 	private int startedActivityCount = 0;
+	private WeakReference<Activity> currentActivityRef = new WeakReference<>(null);
 
 	public static synchronized DongflixPlayerManager getInstance() {
 		if (instance == null) {
@@ -85,6 +90,7 @@ public class DongflixPlayerManager {
 		appContext = app;
 		createNotificationChannel(app);
 		registerNotificationReceiver(app);
+		registerAuthLogoutListener(app);
 
 		app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
 			@Override
@@ -109,6 +115,13 @@ public class DongflixPlayerManager {
 
 			@Override
 			public void onActivityResumed(Activity activity) {
+				currentActivityRef = new WeakReference<>(activity);
+				if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+					if (isMiniPlayerActive || sharedMediaPlayer != null) {
+						stopAndCloseEverything(activity);
+					}
+					return;
+				}
 				if (activity instanceof WatchActivity) {
 					removeMiniPlayerFromActivity(activity);
 				} else if (isMiniPlayerActive && sharedMediaPlayer != null) {
@@ -120,8 +133,33 @@ public class DongflixPlayerManager {
 			@Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {}
 			@Override public void onActivityPaused(Activity activity) {}
 			@Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
-			@Override public void onActivityDestroyed(Activity activity) {}
+			@Override
+			public void onActivityDestroyed(Activity activity) {
+				if (currentActivityRef.get() == activity) {
+					currentActivityRef.clear();
+				}
+			}
 		});
+	}
+
+	private void registerAuthLogoutListener(final Application app) {
+		if (isAuthListenerRegistered) return;
+		try {
+			FirebaseAuth.getInstance().addAuthStateListener(new FirebaseAuth.AuthStateListener() {
+				@Override
+				public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+					if (firebaseAuth.getCurrentUser() == null) {
+						Activity activeAct = currentActivityRef.get();
+						if (activeAct != null && !activeAct.isFinishing() && !activeAct.isDestroyed()) {
+							stopAndCloseEverything(activeAct);
+						} else {
+							stopAndCloseEverything(app);
+						}
+					}
+				}
+			});
+			isAuthListenerRegistered = true;
+		} catch (Exception ignored) {}
 	}
 
 	private void createNotificationChannel(Context ctx) {
@@ -225,6 +263,13 @@ public class DongflixPlayerManager {
 	public void clearCache() {
 		cachedAllCatalogJson = "";
 		cachedEpisodesJson = "";
+		activeSlug = "";
+		activeTitle = "";
+		activeEpisodeLabel = "";
+		activeCoverUrl = "";
+		activeStreamUrl = "";
+		activeEpisodeIndex = 0;
+		activeEpisodeList.clear();
 		activeServerName = "";
 		activeSelectedServerIndex = 0;
 		activeServerNames.clear();
@@ -247,13 +292,16 @@ public class DongflixPlayerManager {
 			} catch (Exception ignored) {}
 			sharedMediaPlayer = null;
 		}
-		NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-		if (nm != null) nm.cancel(NOTIF_ID);
+		if (ctx != null) {
+			NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+			if (nm != null) nm.cancel(NOTIF_ID);
+		}
 
-		if (ctx instanceof Activity) {
-			removeMiniPlayerFromActivity((Activity) ctx);
-			if (ctx instanceof MainActivity) {
-				((MainActivity) ctx).resetNavbarToExpanded();
+		Activity targetAct = (ctx instanceof Activity) ? (Activity) ctx : currentActivityRef.get();
+		if (targetAct != null && !targetAct.isFinishing() && !targetAct.isDestroyed()) {
+			removeMiniPlayerFromActivity(targetAct);
+			if (targetAct instanceof MainActivity) {
+				((MainActivity) targetAct).resetNavbarToExpanded();
 			}
 		}
 	}
@@ -481,6 +529,10 @@ public class DongflixPlayerManager {
 
 	public void attachMiniPlayerToActivity(final Activity activity) {
 		if (!isMiniPlayerActive || sharedMediaPlayer == null) return;
+		if (FirebaseAuth.getInstance().getCurrentUser() == null) {
+			stopAndCloseEverything(activity);
+			return;
+		}
 
 		removeMiniPlayerFromActivity(activity);
 		float d = activity.getResources().getDisplayMetrics().density;
