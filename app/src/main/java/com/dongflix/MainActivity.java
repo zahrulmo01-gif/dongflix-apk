@@ -29,6 +29,7 @@ import com.google.firebase.database.*;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import eightbitlab.com.blurview.BlurView;
+import eightbitlab.com.blurview.RenderScriptBlur;
 import java.io.*;
 import java.util.*;
 
@@ -208,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
 		return input
 			.replace("â€™", "'")
 			.replace("â€œ", "\"")
-			.replace("â€", "\"")
+			.replace("â€", "\"")
 			.replace("â€“", "-")
 			.replaceAll("\\[[^\\x20-\\x7E]+\\]", "")
 			.replaceAll("[^\\x20-\\x7E\\n]", "")
@@ -344,7 +345,7 @@ public class MainActivity extends AppCompatActivity {
 						navDownRawX = rawX;
 						navInitialPillTx = liquidDragPill.getTranslationX();
 						isDraggingNavbarPill = false;
-						LiquidGlass.press(liquidDragPill);
+						liquidDragPill.animate().scaleX(1.06f).scaleY(1.04f).setDuration(100).start();
 						return true;
 					}
 					break;
@@ -354,7 +355,6 @@ public class MainActivity extends AppCompatActivity {
 						if (Math.abs(dx) > (6 * d)) isDraggingNavbarPill = true;
 						if (isDraggingNavbarPill) {
 							liquidDragPill.setTranslationX(Math.max(minTx, Math.min(maxTx, navInitialPillTx + dx)));
-							LiquidGlass.stretch(liquidDragPill, dx, d);
 							return true;
 						}
 					}
@@ -362,7 +362,7 @@ public class MainActivity extends AppCompatActivity {
 				case MotionEvent.ACTION_UP:
 				case MotionEvent.ACTION_CANCEL:
 					if (navDownRawX > 0f) {
-						LiquidGlass.release(liquidDragPill);
+						liquidDragPill.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
 						float slotW = Math.max(1f, (trackW - (10 * d)) / 4f);
 						int targetIdx = isDraggingNavbarPill
 							? Math.max(0, Math.min(3, Math.round(liquidDragPill.getTranslationX() / slotW)))
@@ -2441,12 +2441,37 @@ public class MainActivity extends AppCompatActivity {
 		startMainShimmer();
 		dongflix_req.startRequestNetwork("GET", CATALOG_URL, "", _dongflix_req_request_listener);
 	}
-	// ===== Liquid glass: diserahkan ke LiquidGlass.java =====
 	private void setupRealTimeBlurView(View blurTarget, ViewGroup root, float radius) {
-		LiquidGlass.setupBlur(this, blurTarget, root, getWindow(), radius);
+		if (!(blurTarget instanceof BlurView) || root == null) return;
+		BlurView bv = (BlurView) blurTarget;
+		bv.setupWith(root, new RenderScriptBlur(this))
+			.setFrameClearDrawable(getWindow().getDecorView().getBackground())
+			.setBlurRadius(radius);
+		bv.setOverlayColor(Color.parseColor("#66141824"));
+		bv.setOutlineProvider(new ViewOutlineProvider() {
+			@Override public void getOutline(View view, Outline outline) { outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f); }
+		});
+		bv.setClipToOutline(true);
 	}
 	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
-		LiquidGlass.style(blurTarget, containerTarget, getResources().getDisplayMetrics().density);
+		float d = getResources().getDisplayMetrics().density;
+		if (blurTarget != null && !(blurTarget instanceof BlurView)) {
+			GradientDrawable glass = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
+			);
+			glass.setCornerRadius(100f);
+			glass.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
+			blurTarget.setBackground(glass);
+		}
+		if (containerTarget != null) {
+			GradientDrawable border = new GradientDrawable();
+			border.setColor(Color.TRANSPARENT);
+			border.setCornerRadius(1000f);
+			border.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
+			containerTarget.setForeground(border);
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) containerTarget.setElevation(18f);
+		}
 	}
 	private void setupIos26DraggableNavbar() {
 		if (navbarExpanded == null || tabBeranda == null || navbarExpanded.getChildCount() < 2) return;
@@ -2454,7 +2479,12 @@ public class MainActivity extends AppCompatActivity {
 		final float d = getResources().getDisplayMetrics().density;
 		if (liquidDragPill == null) {
 			liquidDragPill = new View(this);
-			liquidDragPill.setBackground(LiquidGlass.pill(d));
+			GradientDrawable pillBg = new GradientDrawable(
+				GradientDrawable.Orientation.TOP_BOTTOM,
+				new int[]{Color.parseColor("#38FFFFFF"), Color.parseColor("#22FFFFFF")}
+			);
+			pillBg.setCornerRadius(100f);
+			liquidDragPill.setBackground(pillBg);
 			FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (72 * d), (int) (54 * d), Gravity.CENTER_VERTICAL | Gravity.START);
 			lp.leftMargin = (int) (5 * d);
 			liquidDragPill.setLayoutParams(lp);
@@ -2484,7 +2514,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		float tx = target.getLeft() > 0 ? Math.max(0f, target.getLeft() - (5 * d)) : idx * targetW;
 		if (animate) {
-			LiquidGlass.springX(liquidDragPill, tx);
+			liquidDragPill.animate().translationX(tx).setInterpolator(new OvershootInterpolator(1.05f)).setDuration(220).start();
 		} else {
 			liquidDragPill.setTranslationX(tx);
 		}
@@ -2574,10 +2604,10 @@ public class MainActivity extends AppCompatActivity {
 		View navBlur = findViewById(R.id.navbar_blur_bg);
 		View compactBlur = findViewById(R.id.compact_home_blur_bg);
 		View searchBlur = findViewById(R.id.search_blur_bg);
-		setupRealTimeBlurView(topActionPillBlurBg, rootMain, 16f);
-		setupRealTimeBlurView(navBlur, rootMain, 16f);
-		setupRealTimeBlurView(compactBlur, rootMain, 16f);
-		setupRealTimeBlurView(searchBlur, rootMain, 16f);
+		setupRealTimeBlurView(topActionPillBlurBg, rootMain, 20f);
+		setupRealTimeBlurView(navBlur, rootMain, 20f);
+		setupRealTimeBlurView(compactBlur, rootMain, 20f);
+		setupRealTimeBlurView(searchBlur, rootMain, 20f);
 		applyUniversalGlassStyle(topActionPillBlurBg, topActionPill);
 		applyUniversalGlassStyle(navBlur, navbarExpanded);
 		applyUniversalGlassStyle(compactBlur, btnCompactHome);
