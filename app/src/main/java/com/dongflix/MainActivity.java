@@ -28,8 +28,6 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.*;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import eightbitlab.com.blurview.BlurView;
-import eightbitlab.com.blurview.RenderScriptBlur;
 import java.io.*;
 import java.util.*;
 
@@ -102,10 +100,11 @@ public class MainActivity extends AppCompatActivity {
 	private TextView tvStatWatchTime, tvStatSavedCount, tvStatExpCount;
 	private TextView tvAccountLevelTitle, tvAccountExpProgressLabel, tvAccountExpPercent;
 	private View viewAccountExpTrack, viewAccountExpFill;
+	// Navbar & Search terintegrasi
 	private FrameLayout navbarExpanded, btnCompactHome, miniPlayerInlineSlot, btnCircleSearch;
-	private LinearLayout tabBeranda, tabJelajahi, tabPustaka, tabAkun;
-	private ImageView imgHome, imgJelajahi, imgFavorite, imgProfile, imgSearch;
-	private TextView txtHome, txtJelajahi, txtFavorite, txtProfile;
+	private LinearLayout tabBeranda, tabJelajahi, tabPustaka, tabSearchInline, tabAkun;
+	private ImageView imgHome, imgJelajahi, imgFavorite, imgProfile, imgSearch, imgSearchCompact;
+	private TextView txtHome, txtJelajahi, txtFavorite, txtProfile, txtSearch;
 	private View liquidDragPill;
 	private int activeNavTabIndex = 0;
 	private boolean isNavbarCompact = false;
@@ -128,6 +127,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 	};
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -161,6 +161,7 @@ public class MainActivity extends AppCompatActivity {
 		loadLocalDownloads();
 		UpdateCheckerDialog.checkForUpdate(this);
 	}
+
 	@Override
 	protected void onResume() {
 		super.onResume();
@@ -171,6 +172,7 @@ public class MainActivity extends AppCompatActivity {
 			renderActivePustakaTab();
 		}
 	}
+
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
@@ -182,6 +184,7 @@ public class MainActivity extends AppCompatActivity {
 			refreshAccountUi();
 		}
 	}
+
 	private void registerDownloadReceiverSafely() {
 		if (isDownloadReceiverRegistered) return;
 		try {
@@ -194,16 +197,19 @@ public class MainActivity extends AppCompatActivity {
 			isDownloadReceiverRegistered = true;
 		} catch (Exception ignored) {}
 	}
+
 	private String safeStr(Map<String, Object> map, String key, String fallback) {
 		if (map == null || key == null) return fallback;
 		Object val = map.get(key);
 		return val != null ? val.toString() : fallback;
 	}
+
 	private String normalizeCoverUrl(String raw) {
 		if (raw == null) return "";
 		String url = raw.trim().replace("i.ibb.co.com", "i.ibb.co");
 		return url.startsWith("http://") ? url.replace("http://", "https://") : url;
 	}
+
 	private String cleanText(String input) {
 		if (input == null) return "";
 		return input
@@ -215,6 +221,7 @@ public class MainActivity extends AppCompatActivity {
 			.replaceAll("[^\\x20-\\x7E\\n]", "")
 			.trim();
 	}
+
 	private Typeface getOutfitTypeface() {
 		if (outfitFont != null) return outfitFont;
 		String[] candidates = {
@@ -233,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
 		outfitFont = Typeface.DEFAULT;
 		return outfitFont;
 	}
+
 	private void applyOutfitFontsWithoutBold() {
 		Typeface tf = getOutfitTypeface();
 		View contentView = getWindow().getDecorView().findViewById(android.R.id.content);
@@ -253,12 +261,14 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 	}
+
 	private int resolveNotificationDrawableRes() {
 		int notifId = getResources().getIdentifier("ic_notifications", "drawable", getPackageName());
 		if (notifId > 0) return notifId;
 		int bellId = getResources().getIdentifier("ic_notification", "drawable", getPackageName());
 		return bellId > 0 ? bellId : R.drawable.ic_search;
 	}
+
 	private int resolveMessageDrawableRes(int notifRes) {
 		String[] candidates = {"ic_chat", "ic_message", "ic_forum", "ic_comment", "ic_mail", "ic_send"};
 		for (String name : candidates) {
@@ -267,6 +277,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return android.R.drawable.sym_action_chat;
 	}
+
 	private int resolveActionArrowDrawableRes() {
 		String[] candidates = {"ic_chevron_right", "ic_arrow_forward", "ic_arrow_right", "ic_play1"};
 		for (String name : candidates) {
@@ -275,6 +286,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return 0;
 	}
+
 	private void attachRightIconToActionText(TextView tv) {
 		if (tv == null) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -298,6 +310,7 @@ public class MainActivity extends AppCompatActivity {
 			tv.setText(cur + " ›");
 		}
 	}
+
 	private void applyHeaderActionIcons() {
 		int notifRes = resolveNotificationDrawableRes();
 		int chatRes = resolveMessageDrawableRes(notifRes);
@@ -310,6 +323,7 @@ public class MainActivity extends AppCompatActivity {
 			imgTopChat.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 		}
 	}
+
 	private String formatRemainingMinutesText(Map<String, Object> item) {
 		long posMs = parseLongSafe(item.get("positionMs"));
 		long durMs = parseLongSafe(item.get("durationMs"));
@@ -326,6 +340,23 @@ public class MainActivity extends AppCompatActivity {
 		if (!remRaw.isEmpty()) return remRaw;
 		return "Lanjutkan";
 	}
+
+	private int mapSlotToNavTab(int slot) {
+		if (slot == 0) return 0; // Beranda
+		if (slot == 1) return 1; // Jelajahi
+		if (slot == 2) return 2; // Pustaka
+		if (slot == 3) return 4; // Cari (di sebelah kiri Akun)
+		return 3; // Akun
+	}
+
+	private int mapNavTabToSlot(int tabIdx) {
+		if (tabIdx == 0) return 0;
+		if (tabIdx == 1) return 1;
+		if (tabIdx == 2) return 2;
+		if (tabIdx == 4) return 3;
+		return 4;
+	}
+
 	@Override
 	public boolean dispatchTouchEvent(MotionEvent ev) {
 		if (navbarExpanded != null && navbarExpanded.getVisibility() == View.VISIBLE && liquidDragPill != null) {
@@ -363,13 +394,13 @@ public class MainActivity extends AppCompatActivity {
 				case MotionEvent.ACTION_CANCEL:
 					if (navDownRawX > 0f) {
 						liquidDragPill.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
-						float slotW = Math.max(1f, (trackW - (10 * d)) / 4f);
-						int targetIdx = isDraggingNavbarPill
-							? Math.max(0, Math.min(3, Math.round(liquidDragPill.getTranslationX() / slotW)))
-							: Math.max(0, Math.min(3, (int) ((rawX - loc[0]) / Math.max(1f, trackW / 4f))));
+						float slotW = Math.max(1f, (trackW - (10 * d)) / 5f);
+						int targetSlot = isDraggingNavbarPill
+							? Math.max(0, Math.min(4, Math.round(liquidDragPill.getTranslationX() / slotW)))
+							: Math.max(0, Math.min(4, (int) ((rawX - loc[0]) / Math.max(1f, trackW / 5f))));
 						navDownRawX = 0f;
 						isDraggingNavbarPill = false;
-						selectNavTabByIndex(targetIdx, true);
+						selectNavTabByIndex(mapSlotToNavTab(targetSlot), true);
 						return true;
 					}
 					break;
@@ -377,6 +408,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return super.dispatchTouchEvent(ev);
 	}
+
 	private void applyCircularAvatar(ImageView target, String photoUrl) {
 		if (target == null) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -420,6 +452,7 @@ public class MainActivity extends AppCompatActivity {
 		target.setImageResource(R.drawable.ic_profile);
 		target.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
 	}
+
 	private void loadLoggedInUserProfile(FirebaseUser user) {
 		if (user == null || user.getEmail() == null) return;
 		currentUserEmail = user.getEmail().trim().toLowerCase(Locale.US);
@@ -473,6 +506,7 @@ public class MainActivity extends AppCompatActivity {
 		};
 		userProfileRef.addValueEventListener(userProfileListener);
 	}
+
 	private void setupPullToRefresh() {
 		final NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
 		if (mainScroll == null) return;
@@ -524,6 +558,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		});
 	}
+
 	private void triggerCatalogRefresh() {
 		if (isRefreshingCatalog) return;
 		isRefreshingCatalog = true;
@@ -534,12 +569,14 @@ public class MainActivity extends AppCompatActivity {
 			dongflix_req.startRequestNetwork("GET", CATALOG_URL, "", _dongflix_req_request_listener);
 		}
 	}
+
 	private void hideRefreshIndicator() {
 		isRefreshingCatalog = false;
 		if (pullRefreshIndicator != null) pullRefreshIndicator.setVisibility(View.GONE);
 		if (pullRefreshSpinner != null) pullRefreshSpinner.setVisibility(View.GONE);
 		if (imgPullRefreshIcon != null) imgPullRefreshIcon.setVisibility(View.VISIBLE);
 	}
+
 	private void startHeroAutoSlider() {
 		stopHeroAutoSlider();
 		if (listMap == null || listMap.size() < 3) return;
@@ -599,6 +636,7 @@ public class MainActivity extends AppCompatActivity {
 		};
 		heroSliderHandler.post(heroSliderRunnable);
 	}
+
 	private void stopHeroAutoSlider() {
 		if (heroSliderRunnable != null) {
 			heroSliderHandler.removeCallbacks(heroSliderRunnable);
@@ -606,6 +644,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		heroSliderHandler.removeCallbacksAndMessages(null);
 	}
+
 	private void bindSectionLikePopularToday(RecyclerView rv, ArrayList<HashMap<String, Object>> items) {
 		if (rv == null) return;
 		float d = getResources().getDisplayMetrics().density;
@@ -616,6 +655,7 @@ public class MainActivity extends AppCompatActivity {
 		rv.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
 		rv.setAdapter(new HorizontalPosterAdapter(items, 114, 162));
 	}
+
 	private ArrayList<HashMap<String, Object>> buildEmptyDummyList(int count) {
 		ArrayList<HashMap<String, Object>> list = new ArrayList<>();
 		for (int i = 0; i < count; i++) {
@@ -625,6 +665,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return list;
 	}
+
 	private void populateCategorizedSections() {
 		if (fullCatalogList == null || fullCatalogList.isEmpty()) return;
 		ArrayList<HashMap<String, Object>> cultivation = new ArrayList<>();
@@ -668,6 +709,7 @@ public class MainActivity extends AppCompatActivity {
 		bindSectionLikePopularToday(recyclerMovieDonghua, new ArrayList<>(movie.subList(0, Math.min(10, movie.size()))));
 		bindSectionLikePopularToday(recyclerRomanceDonghua, new ArrayList<>(romance.subList(0, Math.min(10, romance.size()))));
 	}
+
 	private void setupContinueWatchingSection() {
 		layoutSectionContinue = findViewById(R.id.layout_section_continue);
 		textTitleContinue = findViewById(R.id.text_title_continue);
@@ -691,6 +733,7 @@ public class MainActivity extends AppCompatActivity {
 			});
 		}
 	}
+
 	private void setupJelajahiSection() {
 		View pageJelajahi = findViewById(R.id.layout_jelajahi);
 		if (!(pageJelajahi instanceof ViewGroup)) return;
@@ -783,6 +826,7 @@ public class MainActivity extends AppCompatActivity {
 		jelajahiGroup.addView(root);
 		updateJelajahiChipVisuals();
 	}
+
 	private void updateJelajahiChipVisuals() {
 		float d = getResources().getDisplayMetrics().density;
 		for (TextView chip : jelajahiChipViews) {
@@ -801,6 +845,7 @@ public class MainActivity extends AppCompatActivity {
 			chip.setBackground(bg);
 		}
 	}
+
 	private void renderJelajahiGrid() {
 		if (recyclerJelajahiGrid == null) return;
 		if (fullCatalogList == null || fullCatalogList.isEmpty()) {
@@ -847,6 +892,7 @@ public class MainActivity extends AppCompatActivity {
 		if (textJelajahiCountBadge != null) textJelajahiCountBadge.setText(filtered.size() + " judul");
 		recyclerJelajahiGrid.setAdapter(new JelajahiGridAdapter(filtered));
 	}
+
 	private void setupPustakaSection() {
 		View pageFavorite = findViewById(R.id.layout_favorite);
 		if (!(pageFavorite instanceof ViewGroup)) return;
@@ -942,6 +988,7 @@ public class MainActivity extends AppCompatActivity {
 		favGroup.addView(root);
 		updatePustakaTabVisual(activePustakaTab);
 	}
+
 	private TextView buildPustakaPillTab(String label, final int tabIndex) {
 		TextView tv = new TextView(this);
 		tv.setText(label);
@@ -960,6 +1007,7 @@ public class MainActivity extends AppCompatActivity {
 		});
 		return tv;
 	}
+
 	private void updatePustakaTabVisual(int idx) {
 		TextView[] tabs = {tabPustakaRiwayat, tabPustakaDaftarku, tabPustakaUnduhan};
 		for (int i = 0; i < tabs.length; i++) {
@@ -978,6 +1026,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 	}
+
 	private void setupAccountSection() {
 		View pageProfile = findViewById(R.id.layout_profile);
 		if (!(pageProfile instanceof ViewGroup)) return;
@@ -1293,6 +1342,7 @@ public class MainActivity extends AppCompatActivity {
 		profGroup.addView(scroll);
 		refreshAccountUi();
 	}
+
 	private void openEditProfileDialog() {
 		Intent intent = new Intent(MainActivity.this, EditProfileActivity.class);
 		intent.putExtra("name", currentDisplayName);
@@ -1301,6 +1351,7 @@ public class MainActivity extends AppCompatActivity {
 		intent.putExtra("photoURL", currentPhotoUrl);
 		startActivityForResult(intent, REQ_EDIT_PROFILE);
 	}
+
 	private void openAccountSettingsDialog() {
 		float d = getResources().getDisplayMetrics().density;
 		final Dialog dialog = new Dialog(this);
@@ -1377,6 +1428,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		dialog.show();
 	}
+
 	private void openMyCommentsDialog() {
 		float d = getResources().getDisplayMetrics().density;
 		final Dialog dialog = new Dialog(this);
@@ -1536,6 +1588,7 @@ public class MainActivity extends AppCompatActivity {
 				}
 			});
 	}
+
 	private LinearLayout buildStatColumn(TextView valueView, String initVal, String label, float d) {
 		LinearLayout col = new LinearLayout(this);
 		col.setOrientation(LinearLayout.VERTICAL);
@@ -1557,6 +1610,7 @@ public class MainActivity extends AppCompatActivity {
 		col.addView(tvLbl);
 		return col;
 	}
+
 	private LinearLayout buildAccountMenuItem(String title, String sub, int titleColor, float d, View.OnClickListener listener) {
 		LinearLayout row = new LinearLayout(this);
 		row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1588,6 +1642,7 @@ public class MainActivity extends AppCompatActivity {
 		row.addView(chev);
 		return row;
 	}
+
 	private void refreshAccountUi() {
 		if (tvAccountName != null) tvAccountName.setText(currentDisplayName);
 		if (tvAccountHandle != null) tvAccountHandle.setText("@" + currentUsername);
@@ -1645,6 +1700,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 	}
+
 	private void updateAccountExpBarWidth(int totalBarWidth) {
 		if (viewAccountExpFill == null || totalBarWidth <= 0) return;
 		long expInLevel = currentUserExp <= 0L ? 0L : ((currentUserExp - 1L) % 1000L) + 1L;
@@ -1657,6 +1713,7 @@ public class MainActivity extends AppCompatActivity {
 			viewAccountExpFill.setLayoutParams(lp);
 		}
 	}
+
 	private void loadUserHistoryAndFavoritesFromFirebase(FirebaseUser user) {
 		if (user == null || user.getEmail() == null) return;
 		currentUserKey = user.getEmail().trim().toLowerCase().replace(".", ",");
@@ -1711,6 +1768,7 @@ public class MainActivity extends AppCompatActivity {
 			@Override public void onCancelled(@NonNull DatabaseError error) {}
 		});
 	}
+
 	private HashMap<String, Object> extractMapFromSnapshot(DataSnapshot snap) {
 		HashMap<String, Object> map = new HashMap<>();
 		if (snap == null || !snap.exists()) return map;
@@ -1733,11 +1791,13 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return map;
 	}
+
 	private long parseLongSafe(Object o) {
 		if (o == null) return 0L;
 		if (o instanceof Number) return ((Number) o).longValue();
 		try { return Long.parseLong(o.toString().trim()); } catch (Exception e) { return 0L; }
 	}
+
 	private void renderContinueWatchingCards() {
 		if (layoutSectionContinue == null || recyclerContinue == null) return;
 		if (historyList == null || historyList.isEmpty()) {
@@ -1747,6 +1807,7 @@ public class MainActivity extends AppCompatActivity {
 		layoutSectionContinue.setVisibility(View.VISIBLE);
 		recyclerContinue.setAdapter(new ContinueWatchingAdapter(historyList));
 	}
+
 	private void loadLocalDownloads() {
 		ArrayList<HashMap<String, Object>> found = new ArrayList<>();
 		Set<String> seenPaths = new HashSet<>();
@@ -1783,6 +1844,7 @@ public class MainActivity extends AppCompatActivity {
 		} catch (Exception ignored) {}
 		downloadsList = found;
 	}
+
 	private void collectDownloadFiles(File dir, ArrayList<HashMap<String, Object>> out, Set<String> seenPaths, int depth) {
 		if (dir == null || depth > 3) return;
 		File[] children;
@@ -1814,6 +1876,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}
 	}
+
 	private void renderActivePustakaTab() {
 		if (recyclerPustakaList == null) return;
 		ArrayList<HashMap<String, Object>> activeData;
@@ -1851,6 +1914,7 @@ public class MainActivity extends AppCompatActivity {
 			recyclerPustakaList.setAdapter(new PustakaListAdapter(activeData, activePustakaTab, sectionLabel));
 		}
 	}
+
 	private void openDownloadedVideoSafely(String filePath, String title) {
 		if (filePath == null || filePath.trim().isEmpty()) {
 			DongflixToast.show(this, "File video tidak ditemukan");
@@ -1881,6 +1945,7 @@ public class MainActivity extends AppCompatActivity {
 			DongflixToast.show(this, "Tidak ada pemutar video yang mendukung file ini");
 		}
 	}
+
 	private void removePustakaItem(int mode, HashMap<String, Object> item) {
 		if (item == null) return;
 		if (mode == 0) {
@@ -1921,6 +1986,7 @@ public class MainActivity extends AppCompatActivity {
 			renderActivePustakaTab();
 		}
 	}
+
 	private ArrayList<HashMap<String, Object>> getMergedFavoritesList() {
 		LinkedHashMap<String, HashMap<String, Object>> dedup = new LinkedHashMap<>();
 		for (HashMap<String, Object> item : favoritesList) {
@@ -1944,6 +2010,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		return new ArrayList<>(dedup.values());
 	}
+
 	private ArrayList<HashMap<String, Object>> sortCatalogByViews(
 		List<HashMap<String, Object>> src, final Map<String, Long> primary, final Map<String, Long> secondary
 	) {
@@ -1964,6 +2031,7 @@ public class MainActivity extends AppCompatActivity {
 		});
 		return sorted;
 	}
+
 	private void sortAndRenderPopularSections() {
 		if (fullCatalogList == null || fullCatalogList.isEmpty()) return;
 		ArrayList<HashMap<String, Object>> todaySorted = sortCatalogByViews(fullCatalogList, viewsDailyMap, viewsTotalMap);
@@ -1978,6 +2046,7 @@ public class MainActivity extends AppCompatActivity {
 		populateCategorizedSections();
 		if (activeNavTabIndex == 1) renderJelajahiGrid();
 	}
+
 	private void attachFirebasePopularityListeners() {
 		detachFirebasePopularityListeners();
 		Calendar cal = Calendar.getInstance();
@@ -2021,6 +2090,7 @@ public class MainActivity extends AppCompatActivity {
 		viewsTotalRef.addValueEventListener(viewsTotalListener);
 		viewsDailyTodayRef.addValueEventListener(viewsDailyListener);
 	}
+
 	private void detachFirebasePopularityListeners() {
 		if (viewsTotalRef != null && viewsTotalListener != null) {
 			viewsTotalRef.removeEventListener(viewsTotalListener);
@@ -2029,9 +2099,11 @@ public class MainActivity extends AppCompatActivity {
 			viewsDailyTodayRef.removeEventListener(viewsDailyListener);
 		}
 	}
+
 	private boolean isFavoriteSlug(String slug) {
 		return favPrefs != null && slug != null && !slug.isEmpty() && favPrefs.contains("fav_" + slug);
 	}
+
 	private void toggleFavoriteItem(HashMap<String, Object> item) {
 		if (favPrefs == null || item == null) return;
 		String slug = safeStr(item, "slug", "");
@@ -2052,6 +2124,7 @@ public class MainActivity extends AppCompatActivity {
 		updateHeroFavoriteIcon(slug);
 		if (activePustakaTab == 1) renderActivePustakaTab();
 	}
+
 	private void updateHeroFavoriteIcon(String slug) {
 		if (imgHeroFavorite == null) return;
 		if (isFavoriteSlug(slug)) {
@@ -2062,6 +2135,7 @@ public class MainActivity extends AppCompatActivity {
 			imgHeroFavorite.setColorFilter(Color.WHITE);
 		}
 	}
+
 	private void openWatchBySlug(String slug) {
 		if (slug == null || slug.trim().isEmpty()) return;
 		hideKeyboard();
@@ -2070,9 +2144,11 @@ public class MainActivity extends AppCompatActivity {
 		startActivity(intent);
 		overridePendingTransition(R.anim.slide_up_enter, R.anim.no_anim);
 	}
+
 	private void openNotificationsSheet() {
 		startActivity(new Intent(this, NotificationActivity.class));
 	}
+
 	private void showKeyboardOnSearch() {
 		if (inputSearch == null) return;
 		inputSearch.requestFocus();
@@ -2084,11 +2160,13 @@ public class MainActivity extends AppCompatActivity {
 			}
 		}, 120);
 	}
+
 	private void hideKeyboard() {
 		if (inputSearch == null) return;
 		InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
 		if (imm != null) imm.hideSoftInputFromWindow(inputSearch.getWindowToken(), 0);
 	}
+
 	private Drawable createMainShimmerDrawable(final float cornerRadiusPx) {
 		return new Drawable() {
 			private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -2119,6 +2197,7 @@ public class MainActivity extends AppCompatActivity {
 			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
 		};
 	}
+
 	private void startMainShimmer() {
 		isMainLoading = true;
 		mainShimmerAnimator = ValueAnimator.ofFloat(0f, 1f);
@@ -2148,6 +2227,7 @@ public class MainActivity extends AppCompatActivity {
 		});
 		mainShimmerAnimator.start();
 	}
+
 	private void invalidateRecursive(View v) {
 		if (v == null) return;
 		v.invalidate();
@@ -2156,6 +2236,7 @@ public class MainActivity extends AppCompatActivity {
 			for (int i = 0; i < vg.getChildCount(); i++) invalidateRecursive(vg.getChildAt(i));
 		}
 	}
+
 	private void stopMainShimmer() {
 		isMainLoading = false;
 		if (mainShimmerAnimator != null) {
@@ -2163,6 +2244,7 @@ public class MainActivity extends AppCompatActivity {
 			mainShimmerAnimator = null;
 		}
 	}
+
 	@Override
 	protected void onDestroy() {
 		if (isDownloadReceiverRegistered) {
@@ -2181,6 +2263,7 @@ public class MainActivity extends AppCompatActivity {
 		}
 		super.onDestroy();
 	}
+
 	private void initialize() {
 		dongflix_req = new RequestNetwork(this);
 		pullRefreshIndicator = findViewById(R.id.pull_refresh_indicator);
@@ -2233,16 +2316,20 @@ public class MainActivity extends AppCompatActivity {
 		tabBeranda = findViewById(R.id.tab_beranda);
 		tabJelajahi = findViewById(R.id.tab_jelajahi);
 		tabPustaka = findViewById(R.id.tab_pustaka);
+		tabSearchInline = findViewById(R.id.tab_search_inline);
 		tabAkun = findViewById(R.id.tab_akun);
 		imgHome = findViewById(R.id.img_home);
 		imgJelajahi = findViewById(R.id.img_jelajahi);
 		imgFavorite = findViewById(R.id.img_favorite);
 		imgProfile = findViewById(R.id.img_profile);
 		imgSearch = findViewById(R.id.img_search);
+		imgSearchCompact = findViewById(R.id.img_search_compact);
 		txtHome = findViewById(R.id.txt_home);
 		txtJelajahi = findViewById(R.id.txt_jelajahi);
 		txtFavorite = findViewById(R.id.txt_favorite);
 		txtProfile = findViewById(R.id.txt_profile);
+		txtSearch = findViewById(R.id.txt_search);
+
 		final Map<TextView, String[]> seeAllConfig = new LinkedHashMap<>();
 		seeAllConfig.put(textSeeAll, new String[]{"Baru Diupdate", "all"});
 		seeAllConfig.put(textPopularDongflixSeeAll, new String[]{"Populer di Dongflix", "popular_dongflix"});
@@ -2373,7 +2460,7 @@ public class MainActivity extends AppCompatActivity {
 					if (btnHeroFavorite != null) {
 						btnHeroFavorite.setVisibility(View.VISIBLE);
 						btnHeroFavorite.setEnabled(true);
-						applyUniversalGlassStyle(btnHeroFavorite, btnHeroFavorite);
+						applySmoothGlassSurface(btnHeroFavorite, 1000f);
 					}
 					if (imgPlayIcon != null) imgPlayIcon.setVisibility(View.VISIBLE);
 					if (indicatorCapsule != null) indicatorCapsule.setVisibility(View.VISIBLE);
@@ -2394,6 +2481,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		};
 	}
+
 	private void initializeLogic() {
 		_UI();
 		setupIos26DraggableNavbar();
@@ -2441,84 +2529,91 @@ public class MainActivity extends AppCompatActivity {
 		startMainShimmer();
 		dongflix_req.startRequestNetwork("GET", CATALOG_URL, "", _dongflix_req_request_listener);
 	}
-	private void setupRealTimeBlurView(View blurTarget, ViewGroup root, float radius) {
-		if (!(blurTarget instanceof BlurView) || root == null) return;
-		BlurView bv = (BlurView) blurTarget;
-		bv.setupWith(root, new RenderScriptBlur(this))
-			.setFrameClearDrawable(getWindow().getDecorView().getBackground())
-			.setBlurRadius(radius);
-		bv.setOverlayColor(Color.parseColor("#66141824"));
-		bv.setOutlineProvider(new ViewOutlineProvider() {
-			@Override public void getOutline(View view, Outline outline) { outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), 1000f); }
-		});
-		bv.setClipToOutline(true);
-	}
-	private void applyUniversalGlassStyle(View blurTarget, View containerTarget) {
+
+	private void applySmoothGlassSurface(View container, final float radiusPx) {
+		if (container == null) return;
 		float d = getResources().getDisplayMetrics().density;
-		if (blurTarget != null && !(blurTarget instanceof BlurView)) {
-			GradientDrawable glass = new GradientDrawable(
-				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#B3161923"), Color.parseColor("#CC0A0C12")}
-			);
-			glass.setCornerRadius(100f);
-			glass.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
-			blurTarget.setBackground(glass);
-		}
-		if (containerTarget != null) {
-			GradientDrawable border = new GradientDrawable();
-			border.setColor(Color.TRANSPARENT);
-			border.setCornerRadius(1000f);
-			border.setStroke((int) (1 * d), Color.parseColor("#33FFFFFF"));
-			containerTarget.setForeground(border);
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) containerTarget.setElevation(18f);
+
+		container.setOutlineProvider(new ViewOutlineProvider() {
+			@Override
+			public void getOutline(View view, Outline outline) {
+				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radiusPx);
+			}
+		});
+		container.setClipToOutline(true);
+
+		GradientDrawable frostedFill = new GradientDrawable(
+			GradientDrawable.Orientation.TOP_BOTTOM,
+			new int[]{
+				Color.parseColor("#D9141824"),
+				Color.parseColor("#C70C0F17"),
+				Color.parseColor("#D910131E")
+			}
+		);
+		frostedFill.setCornerRadius(radiusPx);
+		container.setBackground(frostedFill);
+
+		GradientDrawable innerHighlight = new GradientDrawable();
+		innerHighlight.setColor(Color.TRANSPARENT);
+		innerHighlight.setCornerRadius(radiusPx);
+		innerHighlight.setStroke(Math.max(1, (int) (1 * d)), Color.parseColor("#2EFFFFFF"));
+		container.setForeground(innerHighlight);
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			container.setElevation(14f);
 		}
 	}
+
 	private void setupIos26DraggableNavbar() {
-		if (navbarExpanded == null || tabBeranda == null || navbarExpanded.getChildCount() < 2) return;
-		final ViewGroup tabsRow = (ViewGroup) navbarExpanded.getChildAt(1);
+		if (navbarExpanded == null || tabBeranda == null) return;
 		final float d = getResources().getDisplayMetrics().density;
 		if (liquidDragPill == null) {
 			liquidDragPill = new View(this);
 			GradientDrawable pillBg = new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#38FFFFFF"), Color.parseColor("#22FFFFFF")}
+				new int[]{Color.parseColor("#33FFFFFF"), Color.parseColor("#1AFFFFFF")}
 			);
 			pillBg.setCornerRadius(100f);
 			liquidDragPill.setBackground(pillBg);
-			FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (72 * d), (int) (54 * d), Gravity.CENTER_VERTICAL | Gravity.START);
+			FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (64 * d), (int) (54 * d), Gravity.CENTER_VERTICAL | Gravity.START);
 			lp.leftMargin = (int) (5 * d);
 			liquidDragPill.setLayoutParams(lp);
 			navbarExpanded.addView(liquidDragPill, 1);
 		}
-		tabsRow.post(new Runnable() {
+		navbarExpanded.post(new Runnable() {
 			@Override public void run() { snapPillToTab(activeNavTabIndex, false); }
 		});
 	}
+
 	private void snapPillToTab(int idx, boolean animate) {
 		if (liquidDragPill == null || tabBeranda == null || tabJelajahi == null || tabPustaka == null || tabAkun == null) return;
 		View target;
 		if (idx == 1) target = tabJelajahi;
 		else if (idx == 2) target = tabPustaka;
+		else if (idx == 4 && tabSearchInline != null) target = tabSearchInline;
 		else if (idx == 3) target = tabAkun;
 		else target = tabBeranda;
+
 		float d = getResources().getDisplayMetrics().density;
 		int targetW = target.getWidth();
 		if (targetW <= 0 && navbarExpanded != null && navbarExpanded.getWidth() > 0) {
-			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / 4;
+			targetW = (navbarExpanded.getWidth() - (int) (10 * d)) / 5;
 		}
-		if (targetW <= 0) targetW = (int) (72 * d);
+		if (targetW <= 0) targetW = (int) (64 * d);
 		ViewGroup.LayoutParams lp = liquidDragPill.getLayoutParams();
 		if (lp.width != targetW) {
 			lp.width = targetW;
 			liquidDragPill.setLayoutParams(lp);
 		}
-		float tx = target.getLeft() > 0 ? Math.max(0f, target.getLeft() - (5 * d)) : idx * targetW;
+		int slot = mapNavTabToSlot(idx);
+		float tx = target.getLeft() > 0 ? Math.max(0f, target.getLeft() - (5 * d)) : slot * targetW;
 		if (animate) {
 			liquidDragPill.animate().translationX(tx).setInterpolator(new OvershootInterpolator(1.05f)).setDuration(220).start();
 		} else {
 			liquidDragPill.setTranslationX(tx);
 		}
 	}
+
 	private void selectNavTabByIndex(int idx, boolean animatePill) {
 		activeNavTabIndex = idx;
 		snapPillToTab(idx, animatePill);
@@ -2535,11 +2630,20 @@ public class MainActivity extends AppCompatActivity {
 		if (imgJelajahi != null) imgJelajahi.setColorFilter(idx == 1 ? active : inactive);
 		if (imgFavorite != null) imgFavorite.setColorFilter(idx == 2 ? active : inactive);
 		if (imgProfile != null) imgProfile.setColorFilter(idx == 3 ? active : inactive);
-		if (imgSearch != null) imgSearch.setColorFilter(inactive);
+		if (imgSearch != null) imgSearch.setColorFilter(idx == 4 ? active : inactive);
+		if (imgSearchCompact != null) imgSearchCompact.setColorFilter(idx == 4 ? active : inactive);
 		if (txtHome != null) txtHome.setTextColor(idx == 0 ? active : inactive);
 		if (txtJelajahi != null) txtJelajahi.setTextColor(idx == 1 ? active : inactive);
 		if (txtFavorite != null) txtFavorite.setTextColor(idx == 2 ? active : inactive);
 		if (txtProfile != null) txtProfile.setTextColor(idx == 3 ? active : inactive);
+		if (txtSearch != null) txtSearch.setTextColor(idx == 4 ? active : inactive);
+
+		if (idx == 4) {
+			if (pages[4] != null) pages[4].setVisibility(View.VISIBLE);
+			showKeyboardOnSearch();
+			return;
+		}
+
 		hideKeyboard();
 		if (idx == 0) {
 			if (pages[0] != null) pages[0].setVisibility(View.VISIBLE);
@@ -2556,6 +2660,7 @@ public class MainActivity extends AppCompatActivity {
 			refreshAccountUi();
 		}
 	}
+
 	public void _UI() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			Window w = getWindow();
@@ -2600,58 +2705,59 @@ public class MainActivity extends AppCompatActivity {
 			heroShadow.setBackground(new GradientDrawable(
 				GradientDrawable.Orientation.TOP_BOTTOM, new int[]{Color.TRANSPARENT, Color.parseColor("#FF000000")}));
 		}
-		ViewGroup rootMain = findViewById(R.id.root_main_container);
+
+		// Gunakan lapisan frosted glass halus tanpa grid RenderScriptBlur
+		if (topActionPillBlurBg != null) topActionPillBlurBg.setVisibility(View.GONE);
 		View navBlur = findViewById(R.id.navbar_blur_bg);
 		View compactBlur = findViewById(R.id.compact_home_blur_bg);
 		View searchBlur = findViewById(R.id.search_blur_bg);
-		setupRealTimeBlurView(topActionPillBlurBg, rootMain, 20f);
-		setupRealTimeBlurView(navBlur, rootMain, 20f);
-		setupRealTimeBlurView(compactBlur, rootMain, 20f);
-		setupRealTimeBlurView(searchBlur, rootMain, 20f);
-		applyUniversalGlassStyle(topActionPillBlurBg, topActionPill);
-		applyUniversalGlassStyle(navBlur, navbarExpanded);
-		applyUniversalGlassStyle(compactBlur, btnCompactHome);
-		applyUniversalGlassStyle(searchBlur, btnCircleSearch);
+		if (navBlur != null) navBlur.setVisibility(View.GONE);
+		if (compactBlur != null) compactBlur.setVisibility(View.GONE);
+		if (searchBlur != null) searchBlur.setVisibility(View.GONE);
+
+		applySmoothGlassSurface(topActionPill, 1000f);
+		applySmoothGlassSurface(navbarExpanded, 1000f);
+		applySmoothGlassSurface(btnCompactHome, 1000f);
+		applySmoothGlassSurface(btnCircleSearch, 1000f);
 	}
+
 	private void setupScrollResponsiveNavbar() {
 		NestedScrollView mainScroll = findViewById(R.id.main_scroll_view);
 		if (mainScroll != null) {
 			mainScroll.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
 				@Override
 				public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldX, int oldY) {
-					if (!DongflixPlayerManager.getInstance().isMiniPlayerActive) {
-						resetNavbarToExpanded();
-						return;
-					}
 					int dy = scrollY - oldY;
-					if (scrollY <= 20 || dy < -12) setNavbarCompactState(false);
-					else if (dy > 14 && scrollY > 80) setNavbarCompactState(true);
+					if (scrollY <= 20 || dy < -12) {
+						setNavbarCompactState(false);
+					} else if (dy > 14 && scrollY > 80) {
+						setNavbarCompactState(true);
+					}
 				}
 			});
 		}
 	}
+
 	public void resetNavbarToExpanded() { setNavbarCompactState(false); }
+
 	private void setNavbarCompactState(boolean compact) {
-		if (compact && !DongflixPlayerManager.getInstance().isMiniPlayerActive) compact = false;
 		if (isNavbarCompact == compact) return;
 		isNavbarCompact = compact;
 		if (compact) {
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.GONE);
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.VISIBLE);
+			if (btnCircleSearch != null) btnCircleSearch.setVisibility(View.VISIBLE);
 		} else {
 			if (btnCompactHome != null) btnCompactHome.setVisibility(View.GONE);
+			if (btnCircleSearch != null) btnCircleSearch.setVisibility(View.GONE);
 			if (miniPlayerInlineSlot != null) miniPlayerInlineSlot.setVisibility(View.GONE);
 			if (navbarExpanded != null) navbarExpanded.setVisibility(View.VISIBLE);
 			snapPillToTab(activeNavTabIndex, false);
 		}
 		DongflixPlayerManager.getInstance().setCompactScrollMode(this, compact);
 	}
+
 	public void _Nav() {
-		final View pageHome = findViewById(R.id.main_scroll_view);
-		final View pageJelajahi = findViewById(R.id.layout_jelajahi);
-		final View pageSearch = findViewById(R.id.layout_search);
-		final View pageFavorite = findViewById(R.id.layout_favorite);
-		final View pageProfile = findViewById(R.id.layout_profile);
 		if (btnCompactHome != null) {
 			btnCompactHome.setOnClickListener(new View.OnClickListener() {
 				@Override public void onClick(View v) { selectNavTabByIndex(0, true); }
@@ -2661,18 +2767,13 @@ public class MainActivity extends AppCompatActivity {
 			btnCircleSearch.setOnClickListener(new View.OnClickListener() {
 				@Override
 				public void onClick(View v) {
-					if (pageHome != null) pageHome.setVisibility(View.GONE);
-					if (pageJelajahi != null) pageJelajahi.setVisibility(View.GONE);
-					if (pageFavorite != null) pageFavorite.setVisibility(View.GONE);
-					if (pageProfile != null) pageProfile.setVisibility(View.GONE);
-					if (pageSearch != null) pageSearch.setVisibility(View.VISIBLE);
-					if (imgSearch != null) imgSearch.setColorFilter(Color.WHITE);
-					showKeyboardOnSearch();
+					selectNavTabByIndex(4, true);
 				}
 			});
 		}
 		selectNavTabByIndex(0, false);
 	}
+
 	public void setGridViewHeightBasedOnChildren(final GridView gv, final int columns) {
 		gv.post(new Runnable() {
 			@Override
@@ -2693,6 +2794,7 @@ public class MainActivity extends AppCompatActivity {
 			}
 		});
 	}
+
 	public class JelajahiGridAdapter extends RecyclerView.Adapter<JelajahiGridAdapter.ViewHolder> {
 		private final ArrayList<HashMap<String, Object>> data;
 		public JelajahiGridAdapter(ArrayList<HashMap<String, Object>> arr) { this.data = arr; }
@@ -2758,6 +2860,7 @@ public class MainActivity extends AppCompatActivity {
 		@Override public int getItemCount() { return data.size(); }
 		class ViewHolder extends RecyclerView.ViewHolder { ViewHolder(@NonNull View v) { super(v); } }
 	}
+
 	public class ContinueWatchingAdapter extends RecyclerView.Adapter<ContinueWatchingAdapter.ViewHolder> {
 		private final ArrayList<HashMap<String, Object>> data;
 		public ContinueWatchingAdapter(ArrayList<HashMap<String, Object>> arr) { this.data = arr; }
@@ -2887,6 +2990,7 @@ public class MainActivity extends AppCompatActivity {
 		@Override public int getItemCount() { return data.size(); }
 		class ViewHolder extends RecyclerView.ViewHolder { ViewHolder(@NonNull View v) { super(v); } }
 	}
+
 	public class HorizontalPosterAdapter extends RecyclerView.Adapter<HorizontalPosterAdapter.ViewHolder> {
 		private final ArrayList<HashMap<String, Object>> data;
 		private final int cardWidthDp, cardHeightDp;
@@ -3023,6 +3127,7 @@ public class MainActivity extends AppCompatActivity {
 		@Override public int getItemCount() { return data.size(); }
 		public class ViewHolder extends RecyclerView.ViewHolder { public ViewHolder(View v) { super(v); } }
 	}
+
 	public class PustakaListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 		private static final int TYPE_HEADER = 0;
 		private static final int TYPE_ITEM = 1;
@@ -3241,6 +3346,7 @@ public class MainActivity extends AppCompatActivity {
 		class HeaderViewHolder extends RecyclerView.ViewHolder { HeaderViewHolder(@NonNull View v) { super(v); } }
 		class ItemViewHolder extends RecyclerView.ViewHolder { ItemViewHolder(@NonNull View v) { super(v); } }
 	}
+
 	public class Gridview1Adapter extends BaseAdapter {
 		ArrayList<HashMap<String, Object>> data;
 		public Gridview1Adapter(ArrayList<HashMap<String, Object>> arr) { this.data = arr; }
@@ -3291,6 +3397,7 @@ public class MainActivity extends AppCompatActivity {
 			return v;
 		}
 	}
+
 	public class ListPopularAdapter extends RecyclerView.Adapter<ListPopularAdapter.ViewHolder> {
 		ArrayList<HashMap<String, Object>> data;
 		public ListPopularAdapter(ArrayList<HashMap<String, Object>> arr) { this.data = arr; }
