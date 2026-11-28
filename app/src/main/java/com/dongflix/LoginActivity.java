@@ -2,17 +2,26 @@ package com.dongflix;
 
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.PorterDuff;
+import android.graphics.Path;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextWatcher;
 import android.text.method.PasswordTransformationMethod;
 import android.text.method.SingleLineTransformationMethod;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.UnderlineSpan;
 import android.util.Patterns;
 import android.util.TypedValue;
 import android.view.GestureDetector;
@@ -56,28 +65,24 @@ public class LoginActivity extends AppCompatActivity {
 	private FrameLayout pagerViewport;
 	private LinearLayout pagesStrip;
 	private View[] pageContainers = new View[3];
-	private View[] pageDots = new View[3];
-	private TextView btnNextPage;
 	private int currentPageIndex = 0;
 	private int screenWidthPx = 0;
 
-	// Auth / Register views (Page 3)
-	private FrameLayout logoBadgeBox, btnSubmitAuth;
-	private LinearLayout tabSwitchContainer, authFormCard, groupRegisterFields;
-	private TextView textAuthHeading, textAuthSub, tabModeLogin, tabModeRegister, textSubmitAuth, textToggleHint, textUsernameStatus;
-	private EditText inputRegName, inputRegUsername, inputAuthIdentifier, inputAuthPassword;
-	private ImageView btnTogglePasswordVis;
-	private ProgressBar progressAuth;
+	// Page 3 (Auth & Register)
+	private LinearLayout registerOnlyBlock;
+	private TextView textPageTitle, textPageDesc, textActionPrimary, textSwitchMode, textUsernameCheck, textLegalNote;
+	private EditText inputName, inputUsername, inputAccount, inputPassword;
+	private ImageView btnEyeToggle;
+	private ProgressBar loadingSpinner;
 
 	private boolean isRegisterMode = false;
-	private boolean isProcessing = false;
-	private boolean isPasswordVisible = false;
-	private boolean isUsernameAvailable = false;
-	private boolean isCheckingUsername = false;
-	private String lastCheckedUsername = "";
+	private boolean isBusy = false;
+	private boolean isPassVisible = false;
+	private boolean isUsernameValidAndFree = false;
+	private String verifiedUsername = "";
 
-	private final Handler uiHandler = new Handler(Looper.getMainLooper());
-	private Runnable usernameCheckRunnable;
+	private final Handler mainHandler = new Handler(Looper.getMainLooper());
+	private Runnable usernameDebounceRunnable;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -91,25 +96,33 @@ public class LoginActivity extends AppCompatActivity {
 			return;
 		}
 
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			Window w = getWindow();
+			w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+			w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+			w.setStatusBarColor(Color.parseColor("#0A0D16"));
+			w.setNavigationBarColor(Color.parseColor("#0A0D16"));
+		}
+
 		setContentView(R.layout.activity_login);
 		screenWidthPx = getResources().getDisplayMetrics().widthPixels;
 		if (screenWidthPx <= 0) screenWidthPx = 1080;
 
-		buildThreePageOnboardingAndAuthLayout();
-		setupStyle();
-		applyCustomFonts();
-		setupListeners();
-		showPage(0, false);
+		buildLayout();
+		applyFonts();
+		bindEvents();
+		setCurrentPage(0, false);
+		refreshAuthTexts();
 	}
 
-	private void buildThreePageOnboardingAndAuthLayout() {
+	private void buildLayout() {
 		float d = getResources().getDisplayMetrics().density;
 
-		FrameLayout rootContainer = new FrameLayout(this);
-		rootContainer.setLayoutParams(new FrameLayout.LayoutParams(
+		FrameLayout root = new FrameLayout(this);
+		root.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		rootContainer.setBackgroundColor(Color.parseColor("#000000"));
+		root.setBackgroundColor(Color.parseColor("#0A0D16"));
 
 		pagerViewport = new FrameLayout(this);
 		pagerViewport.setLayoutParams(new FrameLayout.LayoutParams(
@@ -122,9 +135,9 @@ public class LoginActivity extends AppCompatActivity {
 			screenWidthPx * 3, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 
-		pageContainers[0] = buildWelcomePage(d);
-		pageContainers[1] = buildDisclaimerPage(d);
-		pageContainers[2] = buildAuthPage(d);
+		pageContainers[0] = createIntroSlide(d);
+		pageContainers[1] = createNoticeSlide(d);
+		pageContainers[2] = createAuthSlide(d);
 
 		for (int i = 0; i < 3; i++) {
 			pagesStrip.addView(pageContainers[i], new LinearLayout.LayoutParams(
@@ -133,82 +146,21 @@ public class LoginActivity extends AppCompatActivity {
 		}
 
 		pagerViewport.addView(pagesStrip);
-		rootContainer.addView(pagerViewport);
+		root.addView(pagerViewport);
+		setContentView(root);
 
-		// Bottom indicator + next button (hanya tampil di halaman 0 dan 1)
-		LinearLayout bottomNavBar = new LinearLayout(this);
-		bottomNavBar.setOrientation(LinearLayout.VERTICAL);
-		bottomNavBar.setGravity(Gravity.CENTER_HORIZONTAL);
-		bottomNavBar.setPadding((int) (24 * d), (int) (10 * d), (int) (24 * d), (int) (28 * d));
-		FrameLayout.LayoutParams navLp = new FrameLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM
-		);
-		bottomNavBar.setLayoutParams(navLp);
-
-		LinearLayout dotsRow = new LinearLayout(this);
-		dotsRow.setOrientation(LinearLayout.HORIZONTAL);
-		dotsRow.setGravity(Gravity.CENTER);
-		LinearLayout.LayoutParams dotsLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		dotsLp.bottomMargin = (int) (16 * d);
-		dotsRow.setLayoutParams(dotsLp);
-
-		for (int i = 0; i < 3; i++) {
-			View dot = new View(this);
-			LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams((int) (8 * d), (int) (8 * d));
-			if (i < 2) dotLp.rightMargin = (int) (8 * d);
-			dot.setLayoutParams(dotLp);
-			GradientDrawable dotBg = new GradientDrawable();
-			dotBg.setCornerRadius(100f);
-			dotBg.setColor(i == 0 ? Color.parseColor("#3B82F6") : Color.parseColor("#334155"));
-			dot.setBackground(dotBg);
-			pageDots[i] = dot;
-			dotsRow.addView(dot);
-		}
-		bottomNavBar.addView(dotsRow);
-
-		btnNextPage = new TextView(this);
-		btnNextPage.setText("Lanjut  →");
-		btnNextPage.setTextColor(Color.WHITE);
-		btnNextPage.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
-		btnNextPage.setTypeface(null, Typeface.BOLD);
-		btnNextPage.setGravity(Gravity.CENTER);
-		btnNextPage.setLayoutParams(new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (50 * d)
-		));
-		GradientDrawable nextBg = new GradientDrawable(
-			GradientDrawable.Orientation.LEFT_RIGHT,
-			new int[]{Color.parseColor("#2563EB"), Color.parseColor("#3B82F6")}
-		);
-		nextBg.setCornerRadius(100f);
-		btnNextPage.setBackground(nextBg);
-		btnNextPage.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				if (currentPageIndex < 2) {
-					showPage(currentPageIndex + 1, true);
-				}
-			}
-		});
-		bottomNavBar.addView(btnNextPage);
-
-		rootContainer.addView(bottomNavBar);
-		setContentView(rootContainer);
-
-		// Gesture swipe horizontal antar 3 halaman
-		final GestureDetector swipeDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+		final GestureDetector gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
 			@Override
 			public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-				if (e1 == null || e2 == null || isProcessing) return false;
+				if (e1 == null || e2 == null || isBusy) return false;
 				float dx = e2.getX() - e1.getX();
 				float dy = e2.getY() - e1.getY();
-				if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > (60 * d)) {
+				if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > (55 * d)) {
 					if (dx < 0 && currentPageIndex < 2) {
-						showPage(currentPageIndex + 1, true);
+						setCurrentPage(currentPageIndex + 1, true);
 						return true;
 					} else if (dx > 0 && currentPageIndex > 0) {
-						showPage(currentPageIndex - 1, true);
+						setCurrentPage(currentPageIndex - 1, true);
 						return true;
 					}
 				}
@@ -216,495 +168,494 @@ public class LoginActivity extends AppCompatActivity {
 			}
 		});
 
-		View.OnTouchListener swipeTouchListener = new View.OnTouchListener() {
+		View.OnTouchListener slideTouch = new View.OnTouchListener() {
 			@Override
 			public boolean onTouch(View v, MotionEvent event) {
-				swipeDetector.onTouchEvent(event);
+				gestureDetector.onTouchEvent(event);
 				return false;
 			}
 		};
-		pageContainers[0].setOnTouchListener(swipeTouchListener);
-		pageContainers[1].setOnTouchListener(swipeTouchListener);
+
+		pageContainers[0].setOnTouchListener(slideTouch);
+		pageContainers[1].setOnTouchListener(slideTouch);
 	}
 
-	private View buildWelcomePage(float d) {
-		LinearLayout page = new LinearLayout(this);
-		page.setOrientation(LinearLayout.VERTICAL);
-		page.setPadding((int) (24 * d), (int) (52 * d), (int) (24 * d), (int) (130 * d));
+	private View createIntroSlide(float d) {
+		FrameLayout slide = new FrameLayout(this);
+		slide.setLayoutParams(new ViewGroup.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
 
-		GradientDrawable bg = new GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#11192B"), Color.parseColor("#000000"), Color.parseColor("#000000")}
+		GradientDrawable backdrop = new GradientDrawable(
+			GradientDrawable.Orientation.BL_TR,
+			new int[]{
+				Color.parseColor("#2B1A12"),
+				Color.parseColor("#111622"),
+				Color.parseColor("#1C1710")
+			}
 		);
-		page.setBackground(bg);
+		slide.setBackground(backdrop);
 
-		TextView tvPill = new TextView(this);
-		tvPill.setText("✦ HALAMAN 1 DARI 3 • SELAMAT DATANG");
-		tvPill.setTextColor(Color.parseColor("#38BDF8"));
-		tvPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-		tvPill.setTypeface(null, Typeface.BOLD);
-		tvPill.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
-		GradientDrawable pillBg = new GradientDrawable();
-		pillBg.setColor(Color.parseColor("#1A38BDF8"));
-		pillBg.setCornerRadius(100f);
-		tvPill.setBackground(pillBg);
-		page.addView(tvPill);
+		// Top-right version pill
+		TextView verPill = new TextView(this);
+		verPill.setText("v1.0.3 (APK)");
+		verPill.setTextColor(Color.parseColor("#E2E8F0"));
+		verPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+		verPill.setTypeface(null, Typeface.BOLD);
+		verPill.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
+		FrameLayout.LayoutParams vpLp = new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END
+		);
+		vpLp.topMargin = (int) (40 * d);
+		vpLp.rightMargin = (int) (18 * d);
+		verPill.setLayoutParams(vpLp);
+		GradientDrawable vpBg = new GradientDrawable();
+		vpBg.setColor(Color.parseColor("#55262A36"));
+		vpBg.setCornerRadius(100f);
+		verPill.setBackground(vpBg);
+		slide.addView(verPill);
+
+		// Main column
+		LinearLayout col = new LinearLayout(this);
+		col.setOrientation(LinearLayout.VERTICAL);
+		col.setPadding((int) (24 * d), (int) (68 * d), (int) (24 * d), (int) (36 * d));
+		col.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
 
 		TextView tvTitle = new TextView(this);
-		tvTitle.setText("Selamat Datang di\nDongflix");
+		tvTitle.setText("Selamat datang di\nDongflix");
 		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 27f);
 		tvTitle.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+		tvTitle.setLineSpacing(2 * d, 1.05f);
+		col.addView(tvTitle);
+
+		TextView tvSub = new TextView(this);
+		tvSub.setText("Jelajahi, tonton, dan ikuti serial donghua & anime pilihanmu dalam satu tempat. Bergabunglah bersama komunitas penggemar.");
+		tvSub.setTextColor(Color.parseColor("#CBD5E1"));
+		tvSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+		tvSub.setLineSpacing(3 * d, 1.08f);
+		LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		tLp.topMargin = (int) (16 * d);
-		tvTitle.setLayoutParams(tLp);
-		page.addView(tvTitle);
+		subLp.topMargin = (int) (10 * d);
+		tvSub.setLayoutParams(subLp);
+		col.addView(tvSub);
 
-		TextView tvDesc = new TextView(this);
-		tvDesc.setText("Temukan, tonton, dan pantau serial donghua & anime favoritmu dalam satu ruang dengan riwayat tontonan dan komentar komunitas.");
-		tvDesc.setTextColor(Color.parseColor("#94A3B8"));
-		tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-		tvDesc.setLineSpacing(3 * d, 1.08f);
-		LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		dLp.topMargin = (int) (10 * d);
-		tvDesc.setLayoutParams(dLp);
-		page.addView(tvDesc);
+		View accentBar = new View(this);
+		LinearLayout.LayoutParams abLp = new LinearLayout.LayoutParams((int) (46 * d), (int) (3 * d));
+		abLp.topMargin = (int) (14 * d);
+		accentBar.setLayoutParams(abLp);
+		accentBar.setBackgroundColor(Color.parseColor("#F59E0B"));
+		col.addView(accentBar);
 
-		LinearLayout centerCard = new LinearLayout(this);
-		centerCard.setOrientation(LinearLayout.VERTICAL);
-		centerCard.setGravity(Gravity.CENTER);
-		centerCard.setPadding((int) (20 * d), (int) (28 * d), (int) (20 * d), (int) (28 * d));
-		LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
+		FrameLayout logoCenter = new FrameLayout(this);
+		logoCenter.setLayoutParams(new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-		);
-		cLp.topMargin = (int) (24 * d);
-		cLp.bottomMargin = (int) (12 * d);
-		centerCard.setLayoutParams(cLp);
-		GradientDrawable cBg = new GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#12141A"), Color.parseColor("#0B0D11")}
-		);
-		cBg.setCornerRadius(24 * d);
-		cBg.setStroke((int) (1 * d), Color.parseColor("#22FFFFFF"));
-		centerCard.setBackground(cBg);
+		));
 
-		FrameLayout badge = new FrameLayout(this);
-		badge.setLayoutParams(new LinearLayout.LayoutParams((int) (68 * d), (int) (68 * d)));
-		GradientDrawable bBg = new GradientDrawable();
-		bBg.setColor(Color.parseColor("#3B82F6"));
-		bBg.setCornerRadius(20 * d);
-		badge.setBackground(bBg);
+		ImageView ivLogo = new ImageView(this);
+		int logoPx = (int) (176 * d);
+		FrameLayout.LayoutParams lLp = new FrameLayout.LayoutParams(logoPx, logoPx, Gravity.CENTER);
+		ivLogo.setLayoutParams(lLp);
+		ivLogo.setImageResource(R.drawable.img_splash_logo);
+		ivLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		logoCenter.addView(ivLogo);
+		col.addView(logoCenter);
 
-		ImageView ivPlay = new ImageView(this);
-		ivPlay.setLayoutParams(new FrameLayout.LayoutParams((int) (30 * d), (int) (30 * d), Gravity.CENTER));
-		ivPlay.setImageResource(R.drawable.ic_play1);
-		ivPlay.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		badge.addView(ivPlay);
-		centerCard.addView(badge);
+		TextView tvSwipePrompt = new TextView(this);
+		tvSwipePrompt.setText("^  Geser untuk lanjut");
+		tvSwipePrompt.setTextColor(Color.parseColor("#E2E8F0"));
+		tvSwipePrompt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvSwipePrompt.setGravity(Gravity.CENTER);
+		tvSwipePrompt.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				setCurrentPage(1, true);
+			}
+		});
+		col.addView(tvSwipePrompt);
 
-		TextView tvSwipeHint = new TextView(this);
-		tvSwipeHint.setText("Geser ke kiri atau tekan Lanjut");
-		tvSwipeHint.setTextColor(Color.parseColor("#CBD5E1"));
-		tvSwipeHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		LinearLayout.LayoutParams shLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		shLp.topMargin = (int) (16 * d);
-		tvSwipeHint.setLayoutParams(shLp);
-		centerCard.addView(tvSwipeHint);
-
-		page.addView(centerCard);
-		return page;
+		slide.addView(col);
+		return slide;
 	}
 
-	private View buildDisclaimerPage(float d) {
-		LinearLayout page = new LinearLayout(this);
-		page.setOrientation(LinearLayout.VERTICAL);
-		page.setPadding((int) (24 * d), (int) (52 * d), (int) (24 * d), (int) (130 * d));
+	private View createNoticeSlide(float d) {
+		FrameLayout slide = new FrameLayout(this);
+		slide.setLayoutParams(new ViewGroup.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
 
-		GradientDrawable bg = new GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#11192B"), Color.parseColor("#000000"), Color.parseColor("#000000")}
+		GradientDrawable backdrop = new GradientDrawable(
+			GradientDrawable.Orientation.BL_TR,
+			new int[]{
+				Color.parseColor("#2B1A12"),
+				Color.parseColor("#111622"),
+				Color.parseColor("#1C1710")
+			}
 		);
-		page.setBackground(bg);
+		slide.setBackground(backdrop);
 
-		TextView tvPill = new TextView(this);
-		tvPill.setText("✦ HALAMAN 2 DARI 3 • INFORMASI & DISCLAIMER");
-		tvPill.setTextColor(Color.parseColor("#38BDF8"));
-		tvPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-		tvPill.setTypeface(null, Typeface.BOLD);
-		tvPill.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (4 * d));
-		GradientDrawable pillBg = new GradientDrawable();
-		pillBg.setColor(Color.parseColor("#1A38BDF8"));
-		pillBg.setCornerRadius(100f);
-		tvPill.setBackground(pillBg);
-		page.addView(tvPill);
+		LinearLayout col = new LinearLayout(this);
+		col.setOrientation(LinearLayout.VERTICAL);
+		col.setGravity(Gravity.CENTER_HORIZONTAL);
+		col.setPadding((int) (24 * d), (int) (68 * d), (int) (24 * d), (int) (36 * d));
+		col.setLayoutParams(new FrameLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+		));
+
+		FrameLayout warnCircle = new FrameLayout(this);
+		int cSize = (int) (46 * d);
+		LinearLayout.LayoutParams wcLp = new LinearLayout.LayoutParams(cSize, cSize);
+		wcLp.bottomMargin = (int) (18 * d);
+		warnCircle.setLayoutParams(wcLp);
+		GradientDrawable wcBg = new GradientDrawable();
+		wcBg.setShape(GradientDrawable.OVAL);
+		wcBg.setColor(Color.parseColor("#382814"));
+		warnCircle.setBackground(wcBg);
+
+		ImageView warnIcon = new ImageView(this);
+		int icSize = (int) (22 * d);
+		warnIcon.setLayoutParams(new FrameLayout.LayoutParams(icSize, icSize, Gravity.CENTER));
+		warnIcon.setImageDrawable(new Drawable() {
+			private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+			{
+				paint.setColor(Color.parseColor("#F59E0B"));
+				paint.setStyle(Paint.Style.FILL);
+			}
+
+			@Override
+			public void draw(@NonNull Canvas canvas) {
+				android.graphics.Rect b = getBounds();
+				float w = b.width();
+				float h = b.height();
+				if (w <= 0 || h <= 0) return;
+				Path tri = new Path();
+				tri.moveTo(b.left + w * 0.50f, b.top + h * 0.14f);
+				tri.lineTo(b.right - w * 0.10f, b.bottom - h * 0.16f);
+				tri.lineTo(b.left + w * 0.10f, b.bottom - h * 0.16f);
+				tri.close();
+				canvas.drawPath(tri, paint);
+
+				Paint inner = new Paint(Paint.ANTI_ALIAS_FLAG);
+				inner.setColor(Color.parseColor("#382814"));
+				inner.setStrokeWidth(Math.max(2f, w * 0.09f));
+				inner.setStrokeCap(Paint.Cap.ROUND);
+				canvas.drawLine(b.left + w * 0.50f, b.top + h * 0.38f, b.left + w * 0.50f, b.top + h * 0.62f, inner);
+				canvas.drawCircle(b.left + w * 0.50f, b.top + h * 0.74f, Math.max(1.6f, w * 0.055f), inner);
+			}
+
+			@Override public void setAlpha(int alpha) {}
+			@Override public void setColorFilter(ColorFilter colorFilter) {}
+			@Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+		});
+		warnCircle.addView(warnIcon);
+		col.addView(warnCircle);
 
 		TextView tvTitle = new TextView(this);
 		tvTitle.setText("Sebelum Memulai");
 		tvTitle.setTextColor(Color.WHITE);
-		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f);
+		tvTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23f);
 		tvTitle.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+		tvTitle.setGravity(Gravity.CENTER);
+		col.addView(tvTitle);
+
+		TextView tvP1 = new TextView(this);
+		tvP1.setText("Dongflix adalah aplikasi tidak resmi yang membantu pengguna menemukan tautan tontonan yang tersedia di internet. Kami tidak menyimpan maupun mengunggah berkas video di server kami, dan seluruh merek dagang milik pemilik resminya.");
+		tvP1.setTextColor(Color.parseColor("#E2E8F0"));
+		tvP1.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		tvP1.setLineSpacing(3 * d, 1.08f);
+		LinearLayout.LayoutParams p1Lp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		tLp.topMargin = (int) (14 * d);
-		tvTitle.setLayoutParams(tLp);
-		page.addView(tvTitle);
+		p1Lp.topMargin = (int) (18 * d);
+		tvP1.setLayoutParams(p1Lp);
+		col.addView(tvP1);
 
-		LinearLayout card = new LinearLayout(this);
-		card.setOrientation(LinearLayout.VERTICAL);
-		card.setPadding((int) (18 * d), (int) (18 * d), (int) (18 * d), (int) (18 * d));
-		LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
+		TextView tvP2 = new TextView(this);
+		tvP2.setText("Dongflix berfungsi sebagai peramban katalog untuk sumber tautan publik. Untuk pertanyaan atau keberatan hak cipta, hubungi kontak resmi Dongflix dan laporan yang sah akan segera ditindaklanjuti.");
+		tvP2.setTextColor(Color.parseColor("#E2E8F0"));
+		tvP2.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		tvP2.setLineSpacing(3 * d, 1.08f);
+		LinearLayout.LayoutParams p2Lp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		cLp.topMargin = (int) (18 * d);
-		card.setLayoutParams(cLp);
-		GradientDrawable cBg = new GradientDrawable(
-			GradientDrawable.Orientation.TOP_BOTTOM,
-			new int[]{Color.parseColor("#12141A"), Color.parseColor("#0B0D11")}
+		p2Lp.topMargin = (int) (14 * d);
+		tvP2.setLayoutParams(p2Lp);
+		col.addView(tvP2);
+
+		TextView tvP3 = new TextView(this);
+		tvP3.setText("Dengan melanjutkan penggunaan Dongflix, kamu menyetujui catatan ini. Jika tidak setuju, silakan hentikan penggunaan aplikasi.");
+		tvP3.setTextColor(Color.parseColor("#E2E8F0"));
+		tvP3.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		tvP3.setLineSpacing(3 * d, 1.08f);
+		LinearLayout.LayoutParams p3Lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		cBg.setCornerRadius(20 * d);
-		cBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
-		card.setBackground(cBg);
+		p3Lp.topMargin = (int) (14 * d);
+		tvP3.setLayoutParams(p3Lp);
+		col.addView(tvP3);
 
-		String[] points = new String[]{
-			"Dongflix menyediakan akses katalog dan pemutar untuk tautan video yang tersedia secara publik di internet.",
-			"Kami tidak menyimpan atau mengunggah file video secara langsung di server aplikasi.",
-			"Dengan melanjutkan ke halaman masuk, kamu setuju menggunakan layanan ini secara wajar dan mematuhi aturan komunitas."
-		};
+		View spacer = new View(this);
+		spacer.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+		col.addView(spacer);
 
-		for (int i = 0; i < points.length; i++) {
-			TextView tvP = new TextView(this);
-			tvP.setText("•  " + points[i]);
-			tvP.setTextColor(Color.parseColor("#CBD5E1"));
-			tvP.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-			tvP.setLineSpacing(3 * d, 1.08f);
-			if (i > 0) {
-				LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
-					ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-				);
-				pLp.topMargin = (int) (12 * d);
-				tvP.setLayoutParams(pLp);
+		TextView tvSwipePrompt = new TextView(this);
+		tvSwipePrompt.setText("^  Geser untuk lanjut");
+		tvSwipePrompt.setTextColor(Color.parseColor("#E2E8F0"));
+		tvSwipePrompt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+		tvSwipePrompt.setGravity(Gravity.CENTER);
+		tvSwipePrompt.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				setCurrentPage(2, true);
 			}
-			card.addView(tvP);
-		}
+		});
+		col.addView(tvSwipePrompt);
 
-		page.addView(card);
-		return page;
+		slide.addView(col);
+		return slide;
 	}
 
-	private View buildAuthPage(float d) {
+	private View createAuthSlide(float d) {
 		ScrollView sv = new ScrollView(this);
 		sv.setLayoutParams(new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
 		sv.setFillViewport(true);
 		sv.setOverScrollMode(View.OVER_SCROLL_NEVER);
+		sv.setBackgroundColor(Color.parseColor("#0A0D16"));
 
-		LinearLayout page = new LinearLayout(this);
-		page.setOrientation(LinearLayout.VERTICAL);
-		page.setGravity(Gravity.CENTER_VERTICAL);
-		page.setPadding((int) (24 * d), (int) (36 * d), (int) (24 * d), (int) (36 * d));
-		page.setBackgroundColor(Color.parseColor("#000000"));
-
-		// Brand header
-		LinearLayout brandRow = new LinearLayout(this);
-		brandRow.setOrientation(LinearLayout.HORIZONTAL);
-		brandRow.setGravity(Gravity.CENTER_VERTICAL);
-
-		logoBadgeBox = new FrameLayout(this);
-		logoBadgeBox.setLayoutParams(new LinearLayout.LayoutParams((int) (46 * d), (int) (46 * d)));
+		LinearLayout col = new LinearLayout(this);
+		col.setOrientation(LinearLayout.VERTICAL);
+		col.setGravity(Gravity.CENTER_VERTICAL);
+		col.setPadding((int) (22 * d), (int) (36 * d), (int) (22 * d), (int) (28 * d));
 
 		ImageView ivLogo = new ImageView(this);
-		ivLogo.setLayoutParams(new FrameLayout.LayoutParams((int) (22 * d), (int) (22 * d), Gravity.CENTER));
-		ivLogo.setImageResource(R.drawable.ic_play1);
-		ivLogo.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
-		logoBadgeBox.addView(ivLogo);
+		int logoPx = (int) (44 * d);
+		LinearLayout.LayoutParams lLp = new LinearLayout.LayoutParams(logoPx, logoPx);
+		lLp.bottomMargin = (int) (16 * d);
+		ivLogo.setLayoutParams(lLp);
+		ivLogo.setImageResource(R.drawable.img_splash_logo);
+		ivLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+		col.addView(ivLogo);
 
-		TextView tvBrand = new TextView(this);
-		tvBrand.setText("Dongflix");
-		tvBrand.setTextColor(Color.WHITE);
-		tvBrand.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f);
-		tvBrand.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		brLp.leftMargin = (int) (12 * d);
-		tvBrand.setLayoutParams(brLp);
+		textPageTitle = new TextView(this);
+		textPageTitle.setTextColor(Color.WHITE);
+		textPageTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25f);
+		textPageTitle.setTypeface(null, Typeface.BOLD);
+		textPageTitle.setLineSpacing(2 * d, 1.05f);
+		col.addView(textPageTitle);
 
-		brandRow.addView(logoBadgeBox);
-		brandRow.addView(tvBrand);
-		page.addView(brandRow);
-
-		textAuthHeading = new TextView(this);
-		textAuthHeading.setTextColor(Color.WHITE);
-		textAuthHeading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25f);
-		textAuthHeading.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		hLp.topMargin = (int) (24 * d);
-		textAuthHeading.setLayoutParams(hLp);
-		page.addView(textAuthHeading);
-
-		textAuthSub = new TextView(this);
-		textAuthSub.setTextColor(Color.parseColor("#94A3B8"));
-		textAuthSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-		LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(
+		textPageDesc = new TextView(this);
+		textPageDesc.setTextColor(Color.parseColor("#94A3B8"));
+		textPageDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		textPageDesc.setLineSpacing(2 * d, 1.08f);
+		LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		sLp.topMargin = (int) (6 * d);
-		textAuthSub.setLayoutParams(sLp);
-		page.addView(textAuthSub);
+		descLp.topMargin = (int) (8 * d);
+		descLp.bottomMargin = (int) (20 * d);
+		textPageDesc.setLayoutParams(descLp);
+		col.addView(textPageDesc);
 
-		// Tab Masuk / Daftar Baru
-		tabSwitchContainer = new LinearLayout(this);
-		tabSwitchContainer.setOrientation(LinearLayout.HORIZONTAL);
-		tabSwitchContainer.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
-		LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (48 * d)
+		// Register-only fields (1 field Nama + Username)
+		registerOnlyBlock = new LinearLayout(this);
+		registerOnlyBlock.setOrientation(LinearLayout.VERTICAL);
+		registerOnlyBlock.setVisibility(View.GONE);
+
+		inputName = createField(d, "Nama", false);
+		registerOnlyBlock.addView(inputName);
+
+		inputUsername = createField(d, "Username", true);
+		LinearLayout.LayoutParams unLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (50 * d)
 		);
-		tabLp.topMargin = (int) (22 * d);
-		tabSwitchContainer.setLayoutParams(tabLp);
+		unLp.topMargin = (int) (10 * d);
+		inputUsername.setLayoutParams(unLp);
+		registerOnlyBlock.addView(inputUsername);
 
-		tabModeLogin = new TextView(this);
-		tabModeLogin.setText("Masuk");
-		tabModeLogin.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		tabModeLogin.setTypeface(null, Typeface.BOLD);
-		tabModeLogin.setGravity(Gravity.CENTER);
-		tabModeLogin.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-
-		tabModeRegister = new TextView(this);
-		tabModeRegister.setText("Daftar Baru");
-		tabModeRegister.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		tabModeRegister.setTypeface(null, Typeface.BOLD);
-		tabModeRegister.setGravity(Gravity.CENTER);
-		tabModeRegister.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-
-		tabSwitchContainer.addView(tabModeLogin);
-		tabSwitchContainer.addView(tabModeRegister);
-		page.addView(tabSwitchContainer);
-
-		// Form Card
-		authFormCard = new LinearLayout(this);
-		authFormCard.setOrientation(LinearLayout.VERTICAL);
-		authFormCard.setPadding((int) (20 * d), (int) (20 * d), (int) (20 * d), (int) (20 * d));
-		LinearLayout.LayoutParams fcLp = new LinearLayout.LayoutParams(
+		textUsernameCheck = new TextView(this);
+		textUsernameCheck.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+		textUsernameCheck.setVisibility(View.GONE);
+		LinearLayout.LayoutParams ucLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		fcLp.topMargin = (int) (18 * d);
-		authFormCard.setLayoutParams(fcLp);
+		ucLp.topMargin = (int) (6 * d);
+		ucLp.leftMargin = (int) (6 * d);
+		textUsernameCheck.setLayoutParams(ucLp);
+		registerOnlyBlock.addView(textUsernameCheck);
 
-		// Register fields: Nama (1 field saja) + Username + Email
-		groupRegisterFields = new LinearLayout(this);
-		groupRegisterFields.setOrientation(LinearLayout.VERTICAL);
-		groupRegisterFields.setVisibility(View.GONE);
+		View regGap = new View(this);
+		regGap.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (10 * d)));
+		registerOnlyBlock.addView(regGap);
 
-		TextView lblName = new TextView(this);
-		lblName.setText("Nama");
-		lblName.setTextColor(Color.parseColor("#CBD5E1"));
-		lblName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		lblName.setTypeface(null, Typeface.BOLD);
-		groupRegisterFields.addView(lblName);
+		col.addView(registerOnlyBlock);
 
-		inputRegName = new EditText(this);
-		inputRegName.setHint("Contoh: RZ");
-		inputRegName.setHintTextColor(Color.parseColor("#64748B"));
-		inputRegName.setTextColor(Color.WHITE);
-		inputRegName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		inputRegName.setSingleLine(true);
-		inputRegName.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		LinearLayout.LayoutParams rnLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (48 * d)
+		// Login: Username atau Email | Register: Email
+		inputAccount = createField(d, "Username atau Email", false);
+		col.addView(inputAccount);
+
+		// Password + eye icon
+		FrameLayout passWrap = new FrameLayout(this);
+		LinearLayout.LayoutParams pwLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (50 * d)
 		);
-		rnLp.topMargin = (int) (8 * d);
-		inputRegName.setLayoutParams(rnLp);
-		groupRegisterFields.addView(inputRegName);
+		pwLp.topMargin = (int) (10 * d);
+		passWrap.setLayoutParams(pwLp);
 
-		TextView lblUsername = new TextView(this);
-		lblUsername.setText("Username");
-		lblUsername.setTextColor(Color.parseColor("#CBD5E1"));
-		lblUsername.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		lblUsername.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams luLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		luLp.topMargin = (int) (14 * d);
-		lblUsername.setLayoutParams(luLp);
-		groupRegisterFields.addView(lblUsername);
-
-		inputRegUsername = new EditText(this);
-		inputRegUsername.setHint("Contoh: dongflix");
-		inputRegUsername.setHintTextColor(Color.parseColor("#64748B"));
-		inputRegUsername.setTextColor(Color.WHITE);
-		inputRegUsername.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		inputRegUsername.setSingleLine(true);
-		inputRegUsername.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		LinearLayout.LayoutParams ruLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (48 * d)
-		);
-		ruLp.topMargin = (int) (8 * d);
-		inputRegUsername.setLayoutParams(ruLp);
-		groupRegisterFields.addView(inputRegUsername);
-
-		textUsernameStatus = new TextView(this);
-		textUsernameStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-		textUsernameStatus.setTextColor(Color.parseColor("#94A3B8"));
-		textUsernameStatus.setVisibility(View.GONE);
-		LinearLayout.LayoutParams usLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		usLp.topMargin = (int) (6 * d);
-		textUsernameStatus.setLayoutParams(usLp);
-		groupRegisterFields.addView(textUsernameStatus);
-
-		TextView lblRegEmail = new TextView(this);
-		lblRegEmail.setText("Alamat Email");
-		lblRegEmail.setTextColor(Color.parseColor("#CBD5E1"));
-		lblRegEmail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		lblRegEmail.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams reLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		reLp.topMargin = (int) (14 * d);
-		lblRegEmail.setLayoutParams(reLp);
-		groupRegisterFields.addView(lblRegEmail);
-
-		authFormCard.addView(groupRegisterFields);
-
-		// Login/Register identifier: Username atau Email saat login, Email saat daftar
-		TextView lblId = new TextView(this);
-		lblId.setText("Username atau Email");
-		lblId.setTextColor(Color.parseColor("#CBD5E1"));
-		lblId.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		lblId.setTypeface(null, Typeface.BOLD);
-		lblId.setTag("lbl_identifier");
-		authFormCard.addView(lblId);
-
-		inputAuthIdentifier = new EditText(this);
-		inputAuthIdentifier.setHint("username atau nama@gmail.com");
-		inputAuthIdentifier.setHintTextColor(Color.parseColor("#64748B"));
-		inputAuthIdentifier.setTextColor(Color.WHITE);
-		inputAuthIdentifier.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		inputAuthIdentifier.setSingleLine(true);
-		inputAuthIdentifier.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
-		LinearLayout.LayoutParams idLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (48 * d)
-		);
-		idLp.topMargin = (int) (8 * d);
-		inputAuthIdentifier.setLayoutParams(idLp);
-		authFormCard.addView(inputAuthIdentifier);
-
-		TextView lblPass = new TextView(this);
-		lblPass.setText("Password");
-		lblPass.setTextColor(Color.parseColor("#CBD5E1"));
-		lblPass.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-		lblPass.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams lpLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-		);
-		lpLp.topMargin = (int) (14 * d);
-		lblPass.setLayoutParams(lpLp);
-		authFormCard.addView(lblPass);
-
-		FrameLayout passBox = new FrameLayout(this);
-		LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
-			ViewGroup.LayoutParams.MATCH_PARENT, (int) (48 * d)
-		);
-		pbLp.topMargin = (int) (8 * d);
-		passBox.setLayoutParams(pbLp);
-
-		inputAuthPassword = new EditText(this);
-		inputAuthPassword.setHint("Minimal 6 karakter");
-		inputAuthPassword.setHintTextColor(Color.parseColor("#64748B"));
-		inputAuthPassword.setTextColor(Color.WHITE);
-		inputAuthPassword.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-		inputAuthPassword.setSingleLine(true);
-		inputAuthPassword.setTransformationMethod(PasswordTransformationMethod.getInstance());
-		inputAuthPassword.setPadding((int) (16 * d), 0, (int) (44 * d), 0);
-		inputAuthPassword.setLayoutParams(new FrameLayout.LayoutParams(
+		inputPassword = createField(d, "Kata Sandi", false);
+		inputPassword.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
 		));
-		passBox.addView(inputAuthPassword);
+		inputPassword.setPadding((int) (16 * d), 0, (int) (46 * d), 0);
+		inputPassword.setTransformationMethod(PasswordTransformationMethod.getInstance());
+		passWrap.addView(inputPassword);
 
-		btnTogglePasswordVis = new ImageView(this);
+		btnEyeToggle = new ImageView(this);
 		int eyePx = (int) (20 * d);
 		FrameLayout.LayoutParams eyeLp = new FrameLayout.LayoutParams(eyePx, eyePx, Gravity.END | Gravity.CENTER_VERTICAL);
 		eyeLp.rightMargin = (int) (14 * d);
-		btnTogglePasswordVis.setLayoutParams(eyeLp);
-		btnTogglePasswordVis.setImageResource(android.R.drawable.ic_menu_view);
-		btnTogglePasswordVis.setColorFilter(Color.parseColor("#94A3B8"), PorterDuff.Mode.SRC_IN);
-		btnTogglePasswordVis.setOnClickListener(new View.OnClickListener() {
+		btnEyeToggle.setLayoutParams(eyeLp);
+		btnEyeToggle.setImageResource(android.R.drawable.ic_menu_view);
+		btnEyeToggle.setColorFilter(Color.parseColor("#94A3B8"));
+		btnEyeToggle.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				isPasswordVisible = !isPasswordVisible;
-				int sel = inputAuthPassword.getSelectionStart();
-				inputAuthPassword.setTransformationMethod(
-					isPasswordVisible ? SingleLineTransformationMethod.getInstance() : PasswordTransformationMethod.getInstance()
+				isPassVisible = !isPassVisible;
+				int sel = inputPassword.getSelectionStart();
+				inputPassword.setTransformationMethod(
+					isPassVisible ? SingleLineTransformationMethod.getInstance() : PasswordTransformationMethod.getInstance()
 				);
-				if (sel >= 0 && sel <= inputAuthPassword.getText().length()) {
-					inputAuthPassword.setSelection(sel);
+				if (sel >= 0 && sel <= inputPassword.getText().length()) {
+					inputPassword.setSelection(sel);
 				}
 			}
 		});
-		passBox.addView(btnTogglePasswordVis);
+		passWrap.addView(btnEyeToggle);
 
-		authFormCard.addView(passBox);
+		col.addView(passWrap);
 
-		btnSubmitAuth = new FrameLayout(this);
-		LinearLayout.LayoutParams subBtnLp = new LinearLayout.LayoutParams(
+		// Primary action button (pill biru muda seperti referensi)
+		FrameLayout primaryBtn = new FrameLayout(this);
+		LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.MATCH_PARENT, (int) (50 * d)
 		);
-		subBtnLp.topMargin = (int) (22 * d);
-		btnSubmitAuth.setLayoutParams(subBtnLp);
+		pbLp.topMargin = (int) (20 * d);
+		primaryBtn.setLayoutParams(pbLp);
+		GradientDrawable pbBg = new GradientDrawable();
+		pbBg.setColor(Color.parseColor("#8AB4F8"));
+		pbBg.setCornerRadius(100f);
+		primaryBtn.setBackground(pbBg);
 
-		textSubmitAuth = new TextView(this);
-		textSubmitAuth.setTextColor(Color.WHITE);
-		textSubmitAuth.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
-		textSubmitAuth.setTypeface(null, Typeface.BOLD);
-		textSubmitAuth.setLayoutParams(new FrameLayout.LayoutParams(
+		textActionPrimary = new TextView(this);
+		textActionPrimary.setTextColor(Color.parseColor("#0B1324"));
+		textActionPrimary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+		textActionPrimary.setTypeface(null, Typeface.BOLD);
+		textActionPrimary.setLayoutParams(new FrameLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER
 		));
 
-		progressAuth = new ProgressBar(this);
-		int pbSize = (int) (24 * d);
-		FrameLayout.LayoutParams pSpinnerLp = new FrameLayout.LayoutParams(pbSize, pbSize, Gravity.CENTER);
-		progressAuth.setLayoutParams(pSpinnerLp);
-		progressAuth.setIndeterminate(true);
-		progressAuth.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
-		progressAuth.setVisibility(View.GONE);
+		loadingSpinner = new ProgressBar(this);
+		int spPx = (int) (22 * d);
+		loadingSpinner.setLayoutParams(new FrameLayout.LayoutParams(spPx, spPx, Gravity.CENTER));
+		loadingSpinner.setIndeterminate(true);
+		loadingSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#0B1324")));
+		loadingSpinner.setVisibility(View.GONE);
 
-		btnSubmitAuth.addView(textSubmitAuth);
-		btnSubmitAuth.addView(progressAuth);
-		authFormCard.addView(btnSubmitAuth);
+		primaryBtn.addView(textActionPrimary);
+		primaryBtn.addView(loadingSpinner);
+		primaryBtn.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (!isBusy) {
+					submitAuth();
+				}
+			}
+		});
+		col.addView(primaryBtn);
 
-		page.addView(authFormCard);
-
-		textToggleHint = new TextView(this);
-		textToggleHint.setTextColor(Color.parseColor("#3B82F6"));
-		textToggleHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-		textToggleHint.setTypeface(null, Typeface.BOLD);
-		LinearLayout.LayoutParams thLp = new LinearLayout.LayoutParams(
+		// Switch between Masuk and Daftar
+		textSwitchMode = new TextView(this);
+		textSwitchMode.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+		textSwitchMode.setGravity(Gravity.CENTER);
+		LinearLayout.LayoutParams smLp = new LinearLayout.LayoutParams(
 			ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
 		);
-		thLp.topMargin = (int) (18 * d);
-		thLp.gravity = Gravity.CENTER_HORIZONTAL;
-		textToggleHint.setLayoutParams(thLp);
-		page.addView(textToggleHint);
+		smLp.topMargin = (int) (22 * d);
+		smLp.gravity = Gravity.CENTER_HORIZONTAL;
+		textSwitchMode.setLayoutParams(smLp);
+		textSwitchMode.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (isBusy) return;
+				isRegisterMode = !isRegisterMode;
+				refreshAuthTexts();
+			}
+		});
+		col.addView(textSwitchMode);
 
-		sv.addView(page);
+		// Footer note
+		textLegalNote = new TextView(this);
+		textLegalNote.setTextColor(Color.parseColor("#94A3B8"));
+		textLegalNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+		textLegalNote.setGravity(Gravity.CENTER);
+		textLegalNote.setLineSpacing(2 * d, 1.05f);
+		LinearLayout.LayoutParams lnLp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+		);
+		lnLp.topMargin = (int) (18 * d);
+		textLegalNote.setLayoutParams(lnLp);
+
+		SpannableString legalSpannable = new SpannableString(
+			"Dengan masuk atau mendaftar, kamu menyetujui Ketentuan Layanan, Kebijakan Privasi, dan Catatan Dongflix."
+		);
+		int blue = Color.parseColor("#60A5FA");
+		String fullStr = legalSpannable.toString();
+		String[] targets = new String[]{"Ketentuan Layanan", "Kebijakan Privasi", "Catatan Dongflix"};
+		for (String t : targets) {
+			int idx = fullStr.indexOf(t);
+			if (idx >= 0) {
+				legalSpannable.setSpan(new ForegroundColorSpan(blue), idx, idx + t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+				legalSpannable.setSpan(new UnderlineSpan(), idx, idx + t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+			}
+		}
+		textLegalNote.setText(legalSpannable);
+		col.addView(textLegalNote);
+
+		sv.addView(col);
 		return sv;
 	}
 
-	private void showPage(int index, boolean animate) {
+	private EditText createField(float d, String hint, boolean lowercase) {
+		EditText et = new EditText(this);
+		et.setHint(hint);
+		et.setHintTextColor(Color.parseColor("#94A3B8"));
+		et.setTextColor(Color.WHITE);
+		et.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+		et.setSingleLine(true);
+		et.setPadding((int) (16 * d), 0, (int) (16 * d), 0);
+		if (lowercase) {
+			et.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+		} else {
+			et.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+		}
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+			ViewGroup.LayoutParams.MATCH_PARENT, (int) (50 * d)
+		);
+		et.setLayoutParams(lp);
+		GradientDrawable bg = new GradientDrawable();
+		bg.setColor(Color.parseColor("#2A2F42"));
+		bg.setCornerRadius(16 * d);
+		et.setBackground(bg);
+		return et;
+	}
+
+	private void setCurrentPage(int index, boolean animate) {
 		currentPageIndex = Math.max(0, Math.min(2, index));
 		float targetX = -(currentPageIndex * screenWidthPx);
-
 		if (pagesStrip != null) {
 			if (animate) {
 				pagesStrip.animate().translationX(targetX).setDuration(240L).start();
@@ -712,305 +663,155 @@ public class LoginActivity extends AppCompatActivity {
 				pagesStrip.setTranslationX(targetX);
 			}
 		}
-
-		float d = getResources().getDisplayMetrics().density;
-		for (int i = 0; i < 3; i++) {
-			if (pageDots[i] != null) {
-				GradientDrawable dotBg = new GradientDrawable();
-				dotBg.setCornerRadius(100f);
-				dotBg.setColor(i == currentPageIndex ? Color.parseColor("#3B82F6") : Color.parseColor("#334155"));
-				pageDots[i].setBackground(dotBg);
-				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) pageDots[i].getLayoutParams();
-				lp.width = (int) ((i == currentPageIndex ? 20 : 8) * d);
-				pageDots[i].setLayoutParams(lp);
-			}
-		}
-
-		if (btnNextPage != null) {
-			if (currentPageIndex >= 2) {
-				btnNextPage.setVisibility(View.GONE);
-			} else {
-				btnNextPage.setVisibility(View.VISIBLE);
-				btnNextPage.setText(currentPageIndex == 0 ? "Lanjut  →" : "Ke Halaman Masuk  →");
-			}
-		}
 	}
 
-	private void setupStyle() {
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			Window window = getWindow();
-			window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-			window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-			window.setStatusBarColor(Color.parseColor("#000000"));
-			window.setNavigationBarColor(Color.parseColor("#000000"));
-		}
-
-		float d = getResources().getDisplayMetrics().density;
-
-		if (logoBadgeBox != null) {
-			GradientDrawable logoBg = new GradientDrawable();
-			logoBg.setColor(Color.parseColor("#3B82F6"));
-			logoBg.setCornerRadius(14 * d);
-			logoBadgeBox.setBackground(logoBg);
-		}
-
-		if (tabSwitchContainer != null) {
-			GradientDrawable switchBg = new GradientDrawable();
-			switchBg.setColor(Color.parseColor("#12141A"));
-			switchBg.setCornerRadius(100f);
-			switchBg.setStroke((int) (1 * d), Color.parseColor("#1F2430"));
-			tabSwitchContainer.setBackground(switchBg);
-		}
-
-		if (authFormCard != null) {
-			GradientDrawable cardBg = new GradientDrawable(
-				GradientDrawable.Orientation.TOP_BOTTOM,
-				new int[]{Color.parseColor("#12141A"), Color.parseColor("#0B0D11")}
-			);
-			cardBg.setCornerRadius(20 * d);
-			cardBg.setStroke((int) (1 * d), Color.parseColor("#24FFFFFF"));
-			authFormCard.setBackground(cardBg);
-		}
-
-		EditText[] inputs = {inputRegName, inputRegUsername, inputAuthIdentifier, inputAuthPassword};
-		for (EditText et : inputs) {
-			if (et != null) {
-				GradientDrawable inputBg = new GradientDrawable();
-				inputBg.setColor(Color.parseColor("#181B23"));
-				inputBg.setCornerRadius(12 * d);
-				inputBg.setStroke((int) (1 * d), Color.parseColor("#26FFFFFF"));
-				et.setBackground(inputBg);
-			}
-		}
-
-		if (btnSubmitAuth != null) {
-			GradientDrawable btnBg = new GradientDrawable();
-			btnBg.setColor(Color.parseColor("#3B82F6"));
-			btnBg.setCornerRadius(100f);
-			btnSubmitAuth.setBackground(btnBg);
-		}
-
-		updateModeUI();
-	}
-
-	private void updateModeUI() {
-		GradientDrawable activeTabBg = new GradientDrawable();
-		activeTabBg.setColor(Color.parseColor("#3B82F6"));
-		activeTabBg.setCornerRadius(100f);
-
-		View lblId = authFormCard != null ? authFormCard.findViewWithTag("lbl_identifier") : null;
-
+	private void refreshAuthTexts() {
 		if (isRegisterMode) {
-			if (tabModeRegister != null) {
-				tabModeRegister.setBackground(activeTabBg);
-				tabModeRegister.setTextColor(Color.WHITE);
+			if (registerOnlyBlock != null) registerOnlyBlock.setVisibility(View.VISIBLE);
+			if (inputAccount != null) inputAccount.setHint("Email");
+			if (textPageTitle != null) textPageTitle.setText("Buat akun tontonan\nyang cocok buatmu.");
+			if (textPageDesc != null) textPageDesc.setText("Simpan daftar tontonan, lanjutkan progres, dan ikut diskusi di Dongflix.");
+			if (textActionPrimary != null) textActionPrimary.setText("Daftar");
+
+			SpannableString sw = new SpannableString("Sudah punya akun? Masuk");
+			int idx = sw.toString().indexOf("Masuk");
+			if (idx >= 0) {
+				sw.setSpan(new ForegroundColorSpan(Color.parseColor("#60A5FA")), idx, idx + 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 			}
-			if (tabModeLogin != null) {
-				tabModeLogin.setBackground(null);
-				tabModeLogin.setTextColor(Color.parseColor("#94A3B8"));
-			}
-			if (groupRegisterFields != null) groupRegisterFields.setVisibility(View.VISIBLE);
-			if (lblId instanceof TextView) ((TextView) lblId).setVisibility(View.GONE);
-			if (inputAuthIdentifier != null) inputAuthIdentifier.setHint("nama@gmail.com");
-			if (textAuthHeading != null) textAuthHeading.setText("Buat Akun Dongflix");
-			if (textAuthSub != null) textAuthSub.setText("Isi nama, username, email, dan password untuk menyimpan riwayat & komentar.");
-			if (textSubmitAuth != null) textSubmitAuth.setText("Daftar Sekarang");
-			if (textToggleHint != null) textToggleHint.setText("Sudah punya akun? Masuk di sini");
+			if (textSwitchMode != null) textSwitchMode.setText(sw);
 		} else {
-			if (tabModeLogin != null) {
-				tabModeLogin.setBackground(activeTabBg);
-				tabModeLogin.setTextColor(Color.WHITE);
+			if (registerOnlyBlock != null) registerOnlyBlock.setVisibility(View.GONE);
+			if (inputAccount != null) inputAccount.setHint("Username atau Email");
+			if (textPageTitle != null) textPageTitle.setText("Masuk ke dunia\ntontonanmu.");
+			if (textPageDesc != null) textPageDesc.setText("Lanjutkan donghua dan anime favoritmu dengan pengalaman yang lebih personal.");
+			if (textActionPrimary != null) textActionPrimary.setText("Masuk");
+
+			SpannableString sw = new SpannableString("Belum punya akun? Daftar");
+			int idx = sw.toString().indexOf("Daftar");
+			if (idx >= 0) {
+				sw.setSpan(new ForegroundColorSpan(Color.parseColor("#60A5FA")), idx, idx + 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 			}
-			if (tabModeRegister != null) {
-				tabModeRegister.setBackground(null);
-				tabModeRegister.setTextColor(Color.parseColor("#94A3B8"));
-			}
-			if (groupRegisterFields != null) groupRegisterFields.setVisibility(View.GONE);
-			if (lblId instanceof TextView) ((TextView) lblId).setVisibility(View.VISIBLE);
-			if (inputAuthIdentifier != null) inputAuthIdentifier.setHint("username atau nama@gmail.com");
-			if (textAuthHeading != null) textAuthHeading.setText("Selamat Datang Kembali");
-			if (textAuthSub != null) textAuthSub.setText("Masuk menggunakan username atau email dan password akun Dongflix kamu.");
-			if (textSubmitAuth != null) textSubmitAuth.setText("Masuk Sekarang");
-			if (textToggleHint != null) textToggleHint.setText("Belum punya akun? Daftar di sini");
+			if (textSwitchMode != null) textSwitchMode.setText(sw);
 		}
 	}
 
-	private void setupListeners() {
-		if (tabModeLogin != null) {
-			tabModeLogin.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					if (isProcessing) return;
-					isRegisterMode = false;
-					updateModeUI();
-				}
-			});
-		}
-
-		if (tabModeRegister != null) {
-			tabModeRegister.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					if (isProcessing) return;
-					isRegisterMode = true;
-					updateModeUI();
-				}
-			});
-		}
-
-		if (textToggleHint != null) {
-			textToggleHint.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					if (isProcessing) return;
-					isRegisterMode = !isRegisterMode;
-					updateModeUI();
-				}
-			});
-		}
-
-		if (inputRegUsername != null) {
-			inputRegUsername.addTextChangedListener(new TextWatcher() {
+	private void bindEvents() {
+		if (inputUsername != null) {
+			inputUsername.addTextChangedListener(new TextWatcher() {
 				@Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 				@Override
 				public void onTextChanged(CharSequence s, int start, int before, int count) {
-					scheduleUsernameAvailabilityCheck(s.toString());
+					queueUsernameAvailabilityCheck(s.toString());
 				}
 				@Override public void afterTextChanged(Editable s) {}
 			});
 		}
-
-		if (btnSubmitAuth != null) {
-			btnSubmitAuth.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					if (isProcessing) return;
-					handleAuthSubmit();
-				}
-			});
-		}
 	}
 
-	private String sanitizeUsername(String raw) {
+	private String normalizeUsername(String raw) {
 		if (raw == null) return "";
 		return raw.trim().toLowerCase().replaceFirst("^@", "").replaceAll("[^a-z0-9_]", "");
 	}
 
-	private void scheduleUsernameAvailabilityCheck(String rawText) {
-		if (usernameCheckRunnable != null) {
-			uiHandler.removeCallbacks(usernameCheckRunnable);
+	private void queueUsernameAvailabilityCheck(String rawText) {
+		if (usernameDebounceRunnable != null) {
+			mainHandler.removeCallbacks(usernameDebounceRunnable);
 		}
 
-		final String cleanUname = sanitizeUsername(rawText);
-		isUsernameAvailable = false;
-		lastCheckedUsername = "";
+		final String uname = normalizeUsername(rawText);
+		isUsernameValidAndFree = false;
+		verifiedUsername = "";
 
-		if (textUsernameStatus == null) return;
+		if (textUsernameCheck == null) return;
 
-		if (cleanUname.isEmpty()) {
-			isCheckingUsername = false;
-			textUsernameStatus.setVisibility(View.GONE);
+		if (uname.isEmpty()) {
+			textUsernameCheck.setVisibility(View.GONE);
 			return;
 		}
 
-		if (cleanUname.length() < 3) {
-			isCheckingUsername = false;
-			textUsernameStatus.setVisibility(View.VISIBLE);
-			textUsernameStatus.setText("Username minimal 3 karakter (huruf, angka, _)");
-			textUsernameStatus.setTextColor(Color.parseColor("#FBBF24"));
+		if (uname.length() < 3) {
+			textUsernameCheck.setVisibility(View.VISIBLE);
+			textUsernameCheck.setText("Username minimal 3 karakter (huruf, angka, _)");
+			textUsernameCheck.setTextColor(Color.parseColor("#FBBF24"));
 			return;
 		}
 
-		isCheckingUsername = true;
-		textUsernameStatus.setVisibility(View.VISIBLE);
-		textUsernameStatus.setText("Memeriksa ketersediaan @" + cleanUname + "...");
-		textUsernameStatus.setTextColor(Color.parseColor("#94A3B8"));
+		textUsernameCheck.setVisibility(View.VISIBLE);
+		textUsernameCheck.setText("Mengecek username @" + uname + "...");
+		textUsernameCheck.setTextColor(Color.parseColor("#94A3B8"));
 
-		usernameCheckRunnable = new Runnable() {
+		usernameDebounceRunnable = new Runnable() {
 			@Override
 			public void run() {
-				checkUsernameInFirebase(cleanUname, null);
+				verifyUsernameAvailability(uname, null);
 			}
 		};
-		uiHandler.postDelayed(usernameCheckRunnable, 450L);
+		mainHandler.postDelayed(usernameDebounceRunnable, 400L);
 	}
 
-	private void checkUsernameInFirebase(final String cleanUname, final Runnable onCheckedCallback) {
-		usersRef.orderByChild("username").equalTo(cleanUname)
+	private void verifyUsernameAvailability(final String uname, final Runnable afterCheck) {
+		usersRef.orderByChild("username").equalTo(uname)
 			.addListenerForSingleValueEvent(new ValueEventListener() {
 				@Override
 				public void onDataChange(@NonNull DataSnapshot snapshot) {
 					if (isFinishing() || isDestroyed()) return;
-					boolean taken = snapshot.exists() && snapshot.getChildrenCount() > 0;
-
-					String currentInputClean = inputRegUsername != null
-						? sanitizeUsername(inputRegUsername.getText().toString()) : "";
-
-					if (cleanUname.equals(currentInputClean)) {
-						isCheckingUsername = false;
-						isUsernameAvailable = !taken;
-						lastCheckedUsername = cleanUname;
-
-						if (textUsernameStatus != null) {
-							textUsernameStatus.setVisibility(View.VISIBLE);
-							if (taken) {
-								textUsernameStatus.setText("✕ Username @" + cleanUname + " sudah digunakan");
-								textUsernameStatus.setTextColor(Color.parseColor("#F87171"));
+					boolean exists = snapshot.exists() && snapshot.getChildrenCount() > 0;
+					String cur = inputUsername != null ? normalizeUsername(inputUsername.getText().toString()) : "";
+					if (uname.equals(cur)) {
+						isUsernameValidAndFree = !exists;
+						verifiedUsername = !exists ? uname : "";
+						if (textUsernameCheck != null) {
+							textUsernameCheck.setVisibility(View.VISIBLE);
+							if (exists) {
+								textUsernameCheck.setText("Username @" + uname + " sudah dipakai");
+								textUsernameCheck.setTextColor(Color.parseColor("#F87171"));
 							} else {
-								textUsernameStatus.setText("✓ Username @" + cleanUname + " tersedia");
-								textUsernameStatus.setTextColor(Color.parseColor("#22C55E"));
+								textUsernameCheck.setText("Username @" + uname + " tersedia");
+								textUsernameCheck.setTextColor(Color.parseColor("#34D399"));
 							}
 						}
 					}
-
-					if (onCheckedCallback != null) {
-						onCheckedCallback.run();
-					}
+					if (afterCheck != null) afterCheck.run();
 				}
 
 				@Override
 				public void onCancelled(@NonNull DatabaseError error) {
-					isCheckingUsername = false;
-					if (onCheckedCallback != null) {
-						onCheckedCallback.run();
-					}
+					if (afterCheck != null) afterCheck.run();
 				}
 			});
 	}
 
-	private void setLoadingState(boolean loading) {
-		isProcessing = loading;
-		if (textSubmitAuth != null) textSubmitAuth.setVisibility(loading ? View.GONE : View.VISIBLE);
-		if (progressAuth != null) progressAuth.setVisibility(loading ? View.VISIBLE : View.GONE);
-		if (btnSubmitAuth != null) btnSubmitAuth.setEnabled(!loading);
+	private void setBusy(boolean busy) {
+		isBusy = busy;
+		if (textActionPrimary != null) textActionPrimary.setVisibility(busy ? View.INVISIBLE : View.VISIBLE);
+		if (loadingSpinner != null) loadingSpinner.setVisibility(busy ? View.VISIBLE : View.GONE);
 	}
 
-	private String emailToFirebaseKey(String email) {
+	private String emailToKey(String email) {
 		return email.trim().toLowerCase().replace(".", ",");
 	}
 
-	private void handleAuthSubmit() {
-		final String password = inputAuthPassword != null ? inputAuthPassword.getText().toString() : "";
-
+	private void submitAuth() {
+		final String password = inputPassword != null ? inputPassword.getText().toString() : "";
 		if (password.length() < 6) {
-			Toast.makeText(this, "Password minimal 6 karakter", Toast.LENGTH_SHORT).show();
+			Toast.makeText(this, "Kata sandi minimal 6 karakter", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
 		if (!isRegisterMode) {
-			final String rawId = inputAuthIdentifier != null ? inputAuthIdentifier.getText().toString().trim().toLowerCase() : "";
-			if (rawId.isEmpty()) {
+			final String accountInput = inputAccount != null ? inputAccount.getText().toString().trim().toLowerCase() : "";
+			if (accountInput.isEmpty()) {
 				Toast.makeText(this, "Masukkan username atau email", Toast.LENGTH_SHORT).show();
 				return;
 			}
 
-			setLoadingState(true);
-			if (rawId.contains("@")) {
-				signInWithEmailAndPasswordInternal(rawId, password);
+			setBusy(true);
+			if (accountInput.contains("@")) {
+				performEmailLogin(accountInput, password);
 			} else {
-				final String targetUname = sanitizeUsername(rawId);
+				final String targetUname = normalizeUsername(accountInput);
 				if (targetUname.isEmpty()) {
-					setLoadingState(false);
+					setBusy(false);
 					Toast.makeText(this, "Username tidak valid", Toast.LENGTH_SHORT).show();
 					return;
 				}
@@ -1018,96 +819,96 @@ public class LoginActivity extends AppCompatActivity {
 					.addListenerForSingleValueEvent(new ValueEventListener() {
 						@Override
 						public void onDataChange(@NonNull DataSnapshot snapshot) {
-							String foundEmail = "";
+							String resolvedEmail = "";
 							if (snapshot.exists()) {
 								for (DataSnapshot child : snapshot.getChildren()) {
-									Object emObj = child.child("email").getValue();
-									if (emObj != null && !emObj.toString().trim().isEmpty()) {
-										foundEmail = emObj.toString().trim().toLowerCase();
+									Object em = child.child("email").getValue();
+									if (em != null && !em.toString().trim().isEmpty()) {
+										resolvedEmail = em.toString().trim().toLowerCase();
 										break;
 									}
 								}
 							}
-							if (foundEmail.isEmpty()) {
-								setLoadingState(false);
+							if (resolvedEmail.isEmpty()) {
+								setBusy(false);
 								Toast.makeText(LoginActivity.this, "Username @" + targetUname + " tidak ditemukan", Toast.LENGTH_SHORT).show();
 								return;
 							}
-							signInWithEmailAndPasswordInternal(foundEmail, password);
+							performEmailLogin(resolvedEmail, password);
 						}
 
 						@Override
 						public void onCancelled(@NonNull DatabaseError error) {
-							setLoadingState(false);
-							Toast.makeText(LoginActivity.this, "Gagal mencari username", Toast.LENGTH_SHORT).show();
+							setBusy(false);
+							Toast.makeText(LoginActivity.this, "Gagal memeriksa username", Toast.LENGTH_SHORT).show();
 						}
 					});
 			}
 		} else {
-			final String regName = inputRegName != null ? inputRegName.getText().toString().trim() : "";
-			final String cleanUsername = inputRegUsername != null ? sanitizeUsername(inputRegUsername.getText().toString()) : "";
-			final String email = inputAuthIdentifier != null ? inputAuthIdentifier.getText().toString().trim().toLowerCase() : "";
+			final String nameVal = inputName != null ? inputName.getText().toString().trim() : "";
+			final String unameVal = inputUsername != null ? normalizeUsername(inputUsername.getText().toString()) : "";
+			final String emailVal = inputAccount != null ? inputAccount.getText().toString().trim().toLowerCase() : "";
 
-			if (regName.isEmpty()) {
+			if (nameVal.isEmpty()) {
 				Toast.makeText(this, "Nama tidak boleh kosong", Toast.LENGTH_SHORT).show();
 				return;
 			}
-			if (cleanUsername.length() < 3) {
+			if (unameVal.length() < 3) {
 				Toast.makeText(this, "Username minimal 3 karakter", Toast.LENGTH_SHORT).show();
 				return;
 			}
-			if (email.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-				Toast.makeText(this, "Masukkan alamat email yang valid", Toast.LENGTH_SHORT).show();
+			if (emailVal.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(emailVal).matches()) {
+				Toast.makeText(this, "Alamat email tidak valid", Toast.LENGTH_SHORT).show();
 				return;
 			}
 
-			setLoadingState(true);
-			checkUsernameInFirebase(cleanUsername, new Runnable() {
+			setBusy(true);
+			verifyUsernameAvailability(unameVal, new Runnable() {
 				@Override
 				public void run() {
 					if (isFinishing() || isDestroyed()) return;
-					if (!isUsernameAvailable || !cleanUsername.equals(lastCheckedUsername)) {
-						setLoadingState(false);
-						Toast.makeText(LoginActivity.this, "Username @" + cleanUsername + " sudah dipakai, pilih yang lain", Toast.LENGTH_SHORT).show();
+					if (!isUsernameValidAndFree || !unameVal.equals(verifiedUsername)) {
+						setBusy(false);
+						Toast.makeText(LoginActivity.this, "Username @" + unameVal + " sudah digunakan", Toast.LENGTH_SHORT).show();
 						return;
 					}
-					createAccountInternal(regName, cleanUsername, email, password);
+					performRegister(nameVal, unameVal, emailVal, password);
 				}
 			});
 		}
 	}
 
-	private void signInWithEmailAndPasswordInternal(final String email, final String password) {
+	private void performEmailLogin(final String email, final String password) {
 		mAuth.signInWithEmailAndPassword(email, password)
 			.addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
 				@Override
 				public void onComplete(@NonNull Task<AuthResult> task) {
 					if (!task.isSuccessful()) {
-						setLoadingState(false);
-						String err = task.getException() != null ? task.getException().getMessage() : "Login gagal";
-						Toast.makeText(LoginActivity.this, err, Toast.LENGTH_SHORT).show();
+						setBusy(false);
+						String msg = task.getException() != null ? task.getException().getMessage() : "Gagal masuk";
+						Toast.makeText(LoginActivity.this, msg, Toast.LENGTH_SHORT).show();
 						return;
 					}
 
 					FirebaseUser user = mAuth.getCurrentUser();
-					String userEmail = (user != null && user.getEmail() != null) ? user.getEmail() : email;
-					String userKey = emailToFirebaseKey(userEmail);
+					String activeEmail = (user != null && user.getEmail() != null) ? user.getEmail() : email;
+					String key = emailToKey(activeEmail);
 
-					usersRef.child(userKey).addListenerForSingleValueEvent(new ValueEventListener() {
+					usersRef.child(key).addListenerForSingleValueEvent(new ValueEventListener() {
 						@Override
 						public void onDataChange(@NonNull DataSnapshot snapshot) {
-							String displayName = userEmail.split("@")[0];
+							String showName = activeEmail.split("@")[0];
 							if (snapshot.exists() && snapshot.child("name").getValue() != null) {
-								displayName = snapshot.child("name").getValue().toString();
+								showName = snapshot.child("name").getValue().toString();
 							}
-							setLoadingState(false);
-							Toast.makeText(LoginActivity.this, "Selamat datang, " + displayName + "!", Toast.LENGTH_SHORT).show();
+							setBusy(false);
+							Toast.makeText(LoginActivity.this, "Halo, " + showName, Toast.LENGTH_SHORT).show();
 							goToMainActivity();
 						}
 
 						@Override
 						public void onCancelled(@NonNull DatabaseError error) {
-							setLoadingState(false);
+							setBusy(false);
 							goToMainActivity();
 						}
 					});
@@ -1115,37 +916,36 @@ public class LoginActivity extends AppCompatActivity {
 			});
 	}
 
-	private void createAccountInternal(final String regName, final String cleanUsername, final String email, final String password) {
-		mAuth.createUserWithEmailAndPassword(email, password)
+	private void performRegister(final String nameVal, final String unameVal, final String emailVal, final String password) {
+		mAuth.createUserWithEmailAndPassword(emailVal, password)
 			.addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
 				@Override
 				public void onComplete(@NonNull Task<AuthResult> task) {
 					if (!task.isSuccessful()) {
-						setLoadingState(false);
-						String err = task.getException() != null ? task.getException().getMessage() : "Pendaftaran gagal";
-						Toast.makeText(LoginActivity.this, err, Toast.LENGTH_SHORT).show();
+						setBusy(false);
+						String msg = task.getException() != null ? task.getException().getMessage() : "Gagal mendaftar";
+						Toast.makeText(LoginActivity.this, msg, Toast.LENGTH_SHORT).show();
 						return;
 					}
 
-					String userKey = emailToFirebaseKey(email);
+					String key = emailToKey(emailVal);
+					HashMap<String, Object> data = new HashMap<>();
+					data.put("email", emailVal);
+					data.put("name", nameVal);
+					data.put("username", unameVal);
+					data.put("bio", "Dongflix — Streaming Donghua Sub Indo");
+					data.put("exp", 100);
+					data.put("followersCount", 0);
+					data.put("followingCount", 0);
+					data.put("photoURL", "");
+					data.put("updatedAt", System.currentTimeMillis());
 
-					HashMap<String, Object> profileMap = new HashMap<>();
-					profileMap.put("email", email);
-					profileMap.put("name", regName);
-					profileMap.put("username", cleanUsername);
-					profileMap.put("bio", "Dongflix — Streaming Donghua Sub Indo");
-					profileMap.put("exp", 100);
-					profileMap.put("followersCount", 0);
-					profileMap.put("followingCount", 0);
-					profileMap.put("photoURL", "");
-					profileMap.put("updatedAt", System.currentTimeMillis());
-
-					usersRef.child(userKey).setValue(profileMap)
+					usersRef.child(key).setValue(data)
 						.addOnCompleteListener(new OnCompleteListener<Void>() {
 							@Override
 							public void onComplete(@NonNull Task<Void> dbTask) {
-								setLoadingState(false);
-								Toast.makeText(LoginActivity.this, "Akun berhasil dibuat, selamat datang " + regName + "!", Toast.LENGTH_SHORT).show();
+								setBusy(false);
+								Toast.makeText(LoginActivity.this, "Akun berhasil dibuat, selamat datang " + nameVal, Toast.LENGTH_SHORT).show();
 								goToMainActivity();
 							}
 						});
@@ -1154,28 +954,27 @@ public class LoginActivity extends AppCompatActivity {
 	}
 
 	private void goToMainActivity() {
-		Intent intent = new Intent(LoginActivity.this, MainActivity.class);
-		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-		startActivity(intent);
+		Intent i = new Intent(LoginActivity.this, MainActivity.class);
+		i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+		startActivity(i);
 		finish();
 	}
 
-	private void applyCustomFonts() {
+	private void applyFonts() {
 		try {
 			final Typeface fontReg = Typeface.createFromAsset(getAssets(), "fonts/productsans_reg.ttf");
 			final Typeface fontMed = Typeface.createFromAsset(getAssets(), "fonts/productsans_med.ttf");
 			final Typeface fontBold = Typeface.createFromAsset(getAssets(), "fonts/productsans_bold.ttf");
 
-			Queue<View> viewQueue = new LinkedList<>();
-			viewQueue.add(getWindow().getDecorView().findViewById(android.R.id.content));
+			Queue<View> queue = new LinkedList<>();
+			queue.add(getWindow().getDecorView().findViewById(android.R.id.content));
 
-			while (!viewQueue.isEmpty()) {
-				View currentView = viewQueue.poll();
-				if (currentView instanceof TextView) {
-					TextView tv = (TextView) currentView;
+			while (!queue.isEmpty()) {
+				View v = queue.poll();
+				if (v instanceof TextView) {
+					TextView tv = (TextView) v;
 					Typeface tf = tv.getTypeface();
 					int style = (tf != null) ? tf.getStyle() : Typeface.NORMAL;
-
 					if (style == Typeface.BOLD) {
 						tv.setTypeface(fontBold, Typeface.NORMAL);
 					} else if (style == Typeface.ITALIC) {
@@ -1183,10 +982,10 @@ public class LoginActivity extends AppCompatActivity {
 					} else {
 						tv.setTypeface(fontMed, Typeface.NORMAL);
 					}
-				} else if (currentView instanceof ViewGroup) {
-					ViewGroup group = (ViewGroup) currentView;
-					for (int k = 0; k < group.getChildCount(); k++) {
-						viewQueue.add(group.getChildAt(k));
+				} else if (v instanceof ViewGroup) {
+					ViewGroup vg = (ViewGroup) v;
+					for (int i = 0; i < vg.getChildCount(); i++) {
+						queue.add(vg.getChildAt(i));
 					}
 				}
 			}
@@ -1195,8 +994,8 @@ public class LoginActivity extends AppCompatActivity {
 
 	@Override
 	protected void onDestroy() {
-		if (usernameCheckRunnable != null) {
-			uiHandler.removeCallbacks(usernameCheckRunnable);
+		if (usernameDebounceRunnable != null) {
+			mainHandler.removeCallbacks(usernameDebounceRunnable);
 		}
 		super.onDestroy();
 	}
