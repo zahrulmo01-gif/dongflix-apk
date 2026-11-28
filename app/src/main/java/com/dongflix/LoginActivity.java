@@ -1,6 +1,7 @@
 package com.dongflix;
 
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -60,12 +61,11 @@ public class LoginActivity extends AppCompatActivity {
 	private static final String DB_URL = "https://donghu-91808-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 	private static final int ICON_ARROW_RIGHT = 1;
-	private static final int ICON_ARROW_UP = 2;
-	private static final int ICON_WARNING = 3;
-	private static final int ICON_EYE_OPEN = 4;
-	private static final int ICON_EYE_CLOSED = 5;
-	private static final int ICON_CHECK = 6;
-	private static final int ICON_CROSS = 7;
+	private static final int ICON_WARNING = 2;
+	private static final int ICON_EYE_OPEN = 3;
+	private static final int ICON_EYE_CLOSED = 4;
+	private static final int ICON_CHECK = 5;
+	private static final int ICON_CROSS = 6;
 
 	private FirebaseAuth mAuth;
 	private DatabaseReference usersRef;
@@ -80,6 +80,7 @@ public class LoginActivity extends AppCompatActivity {
 	private int currentPageIndex = 0;
 	private int screenWidthPx = 0;
 
+	// Page 3 (Auth & Register)
 	private LinearLayout registerOnlyBlock;
 	private TextView textPageTitle, textPageDesc, textActionPrimary, textSwitchMode, textUsernameCheck, textLegalNote;
 	private ImageView iconUsernameStatus;
@@ -127,6 +128,16 @@ public class LoginActivity extends AppCompatActivity {
 		refreshAuthTexts();
 	}
 
+	private String resolveVersionLabel() {
+		try {
+			PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+			if (pi != null && pi.versionName != null && !pi.versionName.trim().isEmpty()) {
+				return "v" + pi.versionName.trim();
+			}
+		} catch (Throwable ignored) {}
+		return "v1.0";
+	}
+
 	private Drawable createMonoIcon(final int iconType, final int tintColor, final float strokeDp) {
 		final float d = getResources().getDisplayMetrics().density;
 		return new Drawable() {
@@ -158,11 +169,6 @@ public class LoginActivity extends AppCompatActivity {
 					p.moveTo(b.left + w * 0.56f, b.top + h * 0.24f);
 					p.lineTo(b.right - w * 0.22f, b.top + h * 0.50f);
 					p.lineTo(b.left + w * 0.56f, b.bottom - h * 0.24f);
-					canvas.drawPath(p, strokePaint);
-				} else if (iconType == ICON_ARROW_UP) {
-					p.moveTo(b.left + w * 0.26f, b.top + h * 0.62f);
-					p.lineTo(b.left + w * 0.50f, b.top + h * 0.36f);
-					p.lineTo(b.right - w * 0.26f, b.top + h * 0.62f);
 					canvas.drawPath(p, strokePaint);
 				} else if (iconType == ICON_WARNING) {
 					p.moveTo(b.left + w * 0.50f, b.top + h * 0.14f);
@@ -361,7 +367,7 @@ public class LoginActivity extends AppCompatActivity {
 		tvStep.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
 		TextView verPill = new TextView(this);
-		verPill.setText("v1.0.3");
+		verPill.setText(resolveVersionLabel());
 		verPill.setTextColor(Color.WHITE);
 		verPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
 		verPill.setTypeface(null, Typeface.BOLD);
@@ -440,20 +446,20 @@ public class LoginActivity extends AppCompatActivity {
 		shLp.topMargin = (int) (18 * d);
 		swipeHintRow.setLayoutParams(shLp);
 
-		ImageView upIcon = new ImageView(this);
-		int icPx = (int) (16 * d);
-		LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(icPx, icPx);
-		upLp.rightMargin = (int) (6 * d);
-		upIcon.setLayoutParams(upLp);
-		upIcon.setImageDrawable(createMonoIcon(ICON_ARROW_UP, Color.parseColor("#E4E4E7"), 2f));
-
 		TextView tvSwipeHint = new TextView(this);
 		tvSwipeHint.setText("Geser untuk lanjut");
 		tvSwipeHint.setTextColor(Color.parseColor("#E4E4E7"));
 		tvSwipeHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 
-		swipeHintRow.addView(upIcon);
+		ImageView sideIcon = new ImageView(this);
+		int icPx = (int) (16 * d);
+		LinearLayout.LayoutParams sideLp = new LinearLayout.LayoutParams(icPx, icPx);
+		sideLp.leftMargin = (int) (6 * d);
+		sideIcon.setLayoutParams(sideLp);
+		sideIcon.setImageDrawable(createMonoIcon(ICON_ARROW_RIGHT, Color.parseColor("#E4E4E7"), 2f));
+
 		swipeHintRow.addView(tvSwipeHint);
+		swipeHintRow.addView(sideIcon);
 		swipeHintRow.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -552,20 +558,20 @@ public class LoginActivity extends AppCompatActivity {
 		swipeHintRow.setOrientation(LinearLayout.HORIZONTAL);
 		swipeHintRow.setGravity(Gravity.CENTER);
 
-		ImageView upIcon = new ImageView(this);
-		int icPx = (int) (16 * d);
-		LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(icPx, icPx);
-		upLp.rightMargin = (int) (6 * d);
-		upIcon.setLayoutParams(upLp);
-		upIcon.setImageDrawable(createMonoIcon(ICON_ARROW_UP, Color.parseColor("#E4E4E7"), 2f));
-
 		TextView tvSwipePrompt = new TextView(this);
 		tvSwipePrompt.setText("Geser ke halaman masuk");
 		tvSwipePrompt.setTextColor(Color.parseColor("#E4E4E7"));
 		tvSwipePrompt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
 
-		swipeHintRow.addView(upIcon);
+		ImageView sideIcon = new ImageView(this);
+		int icPx = (int) (16 * d);
+		LinearLayout.LayoutParams sideLp = new LinearLayout.LayoutParams(icPx, icPx);
+		sideLp.leftMargin = (int) (6 * d);
+		sideIcon.setLayoutParams(sideLp);
+		sideIcon.setImageDrawable(createMonoIcon(ICON_ARROW_RIGHT, Color.parseColor("#E4E4E7"), 2f));
+
 		swipeHintRow.addView(tvSwipePrompt);
+		swipeHintRow.addView(sideIcon);
 		swipeHintRow.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
