@@ -105,11 +105,10 @@
 						android:layout_marginTop="3dp"
 						android:clipToOutline="true">
 
-						<View
+						<eightbitlab.com.blurview.BlurView
 							android:id="@+id/top_action_pill_blur_bg"
 							android:layout_width="match_parent"
-							android:layout_height="match_parent"
-							android:visibility="gone" />
+							android:layout_height="match_parent" />
 
 						<LinearLayout
 							android:id="@+id/linear82"
@@ -913,17 +912,45 @@
 		android:clipToPadding="false">
 
 		<FrameLayout
+			android:id="@+id/btn_compact_home"
+			android:layout_width="56dp"
+			android:layout_height="56dp"
+			android:layout_marginRight="10dp"
+			android:clipToOutline="true"
+			android:visibility="gone">
+
+			<eightbitlab.com.blurview.BlurView
+				android:id="@+id/compact_home_blur_bg"
+				android:layout_width="match_parent"
+				android:layout_height="match_parent" />
+
+			<ImageView
+				android:layout_width="22dp"
+				android:layout_height="22dp"
+				android:layout_gravity="center"
+				android:src="@drawable/ic_home"
+				android:scaleType="fitCenter" />
+		</FrameLayout>
+
+		<FrameLayout
+			android:id="@+id/mini_player_inline_slot"
+			android:layout_width="0dp"
+			android:layout_height="56dp"
+			android:layout_weight="1"
+			android:layout_marginRight="10dp"
+			android:visibility="gone" />
+
+		<FrameLayout
 			android:id="@+id/navbar"
 			android:layout_width="0dp"
 			android:layout_height="64dp"
 			android:layout_weight="1"
 			android:clipToOutline="true">
 
-			<View
+			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/navbar_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:visibility="gone" />
+				android:layout_height="match_parent" />
 
 			<LinearLayout
 				android:id="@+id/navbar_tabs_row"
@@ -1061,48 +1088,17 @@
 		</FrameLayout>
 
 		<FrameLayout
-			android:id="@+id/btn_compact_home"
-			android:layout_width="56dp"
-			android:layout_height="56dp"
-			android:clipToOutline="true"
-			android:visibility="gone">
-
-			<View
-				android:id="@+id/compact_home_blur_bg"
-				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:visibility="gone" />
-
-			<ImageView
-				android:layout_width="22dp"
-				android:layout_height="22dp"
-				android:layout_gravity="center"
-				android:src="@drawable/ic_home"
-				android:scaleType="fitCenter" />
-		</FrameLayout>
-
-		<FrameLayout
-			android:id="@+id/mini_player_inline_slot"
-			android:layout_width="0dp"
-			android:layout_height="56dp"
-			android:layout_weight="1"
-			android:layout_marginLeft="8dp"
-			android:layout_marginRight="8dp"
-			android:visibility="gone" />
-
-		<FrameLayout
 			android:id="@+id/btn_circle_search"
-			android:layout_width="56dp"
-			android:layout_height="56dp"
+			android:layout_width="60dp"
+			android:layout_height="60dp"
 			android:layout_marginLeft="10dp"
 			android:clipToOutline="true"
 			android:visibility="gone">
 
-			<View
+			<eightbitlab.com.blurview.BlurView
 				android:id="@+id/search_blur_bg"
 				android:layout_width="match_parent"
-				android:layout_height="match_parent"
-				android:visibility="gone" />
+				android:layout_height="match_parent" />
 
 			<ImageView
 				android:id="@+id/img_search_compact"
