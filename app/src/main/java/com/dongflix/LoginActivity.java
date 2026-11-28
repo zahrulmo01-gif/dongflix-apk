@@ -25,7 +25,6 @@ import android.text.method.SingleLineTransformationMethod;
 import android.text.style.UnderlineSpan;
 import android.util.Patterns;
 import android.util.TypedValue;
-import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -81,7 +80,6 @@ public class LoginActivity extends AppCompatActivity {
 	private int currentPageIndex = 0;
 	private int screenWidthPx = 0;
 
-	// Page 3 (Auth & Register)
 	private LinearLayout registerOnlyBlock;
 	private TextView textPageTitle, textPageDesc, textActionPrimary, textSwitchMode, textUsernameCheck, textLegalNote;
 	private ImageView iconUsernameStatus;
@@ -284,7 +282,7 @@ public class LoginActivity extends AppCompatActivity {
 			FrameLayout tapZone = new FrameLayout(this);
 			tapZone.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));
 			View bar = new View(this);
-			LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams((int) (10 * d), (int) (4 * d));
+			FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams((int) (10 * d), (int) (4 * d));
 			bar.setLayoutParams(barLp);
 			GradientDrawable barBg = new GradientDrawable();
 			barBg.setCornerRadius(100f);
@@ -844,7 +842,7 @@ public class LoginActivity extends AppCompatActivity {
 				bg.setCornerRadius(100f);
 				bg.setColor(active ? Color.WHITE : Color.parseColor("#3F3F46"));
 				indicatorBars[i].setBackground(bg);
-				LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) indicatorBars[i].getLayoutParams();
+				FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) indicatorBars[i].getLayoutParams();
 				lp.width = (int) ((active ? 22 : 8) * d);
 				indicatorBars[i].setLayoutParams(lp);
 			}
